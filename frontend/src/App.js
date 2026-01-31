@@ -245,13 +245,16 @@ const AuthProvider = ({ children }) => {
   
   const logout = async () => {
     try {
+      const token = localStorage.getItem("infinea_token");
       await fetch(`${API}/auth/logout`, {
         method: "POST",
         credentials: "include",
+        headers: token ? { "Authorization": `Bearer ${token}` } : {},
       });
     } catch (e) {
       console.error("Logout error:", e);
     }
+    localStorage.removeItem("infinea_token");
     setUser(null);
   };
 
