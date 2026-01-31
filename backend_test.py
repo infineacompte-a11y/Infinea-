@@ -448,6 +448,23 @@ class InFineaAPITester:
         # Stats
         self.test_get_stats()
         
+        # NEW FEATURES TESTING
+        print("\n🆕 Testing New Features...")
+        
+        # Badges system
+        badges = self.test_get_all_badges()
+        if badges:
+            self.test_get_user_badges()
+        
+        # Notifications preferences
+        prefs = self.test_get_notification_preferences()
+        if prefs:
+            self.test_update_notification_preferences()
+        
+        # B2B Dashboard
+        self.test_create_b2b_company()
+        self.test_get_b2b_dashboard()
+        
         # Payment
         self.test_stripe_checkout()
         
