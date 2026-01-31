@@ -593,11 +593,29 @@ async def complete_session(
             }
         )
         
+        # Check for new badges
+        new_badges = await check_and_award_badges(user["user_id"])
+        
+        # Create notification for new badges
+        for badge in new_badges:
+            notification = {
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": user["user_id"],
+                "type": "badge_earned",
+                "title": f"Nouveau badge : {badge['name']}",
+                "message": f"Félicitations ! Vous avez obtenu le badge {badge['name']}",
+                "icon": badge["icon"],
+                "read": False,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.notifications.insert_one(notification)
+        
         return {
             "message": "Session completed!",
             "time_added": completion.actual_duration,
             "new_streak": new_streak,
-            "total_time": user_doc.get("total_time_invested", 0) + completion.actual_duration
+            "total_time": user_doc.get("total_time_invested", 0) + completion.actual_duration,
+            "new_badges": new_badges
         }
     
     return {"message": "Session recorded"}
