@@ -140,12 +140,36 @@ export default function Dashboard() {
         <span>Bibliothèque</span>
       </Link>
       <Link
+        to="/badges"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <Award className="w-5 h-5" />
+        <span>Badges</span>
+      </Link>
+      <Link
         to="/progress"
         className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
         onClick={() => mobile && setMobileMenuOpen(false)}
       >
         <BarChart3 className="w-5 h-5" />
         <span>Progression</span>
+      </Link>
+      <Link
+        to="/notifications"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <Bell className="w-5 h-5" />
+        <span>Notifications</span>
+      </Link>
+      <Link
+        to="/b2b"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <Building2 className="w-5 h-5" />
+        <span>Entreprise</span>
       </Link>
       <Link
         to="/profile"
