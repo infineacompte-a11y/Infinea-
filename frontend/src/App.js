@@ -76,6 +76,12 @@ const AuthCallback = () => {
         }
 
         const userData = await response.json();
+        
+        // Store session token in localStorage as backup
+        if (userData.token) {
+          localStorage.setItem("infinea_token", userData.token);
+        }
+        
         setUser(userData);
         navigate("/dashboard", { state: { user: userData } });
       } catch (error) {
