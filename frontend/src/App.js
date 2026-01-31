@@ -257,6 +257,10 @@ const AuthProvider = ({ children }) => {
 };
 
 function App() {
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>
