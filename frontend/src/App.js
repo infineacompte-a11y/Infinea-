@@ -113,8 +113,13 @@ const ProtectedRoute = ({ children }) => {
 
     const checkAuth = async () => {
       try {
+        // Try with cookie first, then localStorage token as fallback
+        const token = localStorage.getItem("infinea_token");
+        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+        
         const response = await fetch(`${API}/auth/me`, {
           credentials: "include",
+          headers,
         });
         
         if (!response.ok) throw new Error("Not authenticated");
@@ -123,6 +128,7 @@ const ProtectedRoute = ({ children }) => {
         setUser(userData);
         setIsAuthenticated(true);
       } catch (error) {
+        localStorage.removeItem("infinea_token");
         setIsAuthenticated(false);
         navigate("/login");
       }
