@@ -78,7 +78,7 @@ class InFineaAPITester:
         """Test user registration"""
         timestamp = int(time.time())
         test_user = {
-            "email": f"test_{timestamp}@infinea.test",
+            "email": f"test_{timestamp}@example.com",
             "password": "TestPass123!",
             "name": f"Test User {timestamp}"
         }
@@ -91,7 +91,6 @@ class InFineaAPITester:
             return False
             
         print(f"Registration response status: {response.status_code}")
-        print(f"Registration response text: {response.text}")
         
         if response.status_code == 200:
             data = response.json()
