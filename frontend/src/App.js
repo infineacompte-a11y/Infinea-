@@ -205,6 +205,30 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/badges"
+        element={
+          <ProtectedRoute>
+            <BadgesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <NotificationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/b2b"
+        element={
+          <ProtectedRoute>
+            <B2BDashboard />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 }
