@@ -25,6 +25,9 @@ import {
   Menu,
   X,
   Loader2,
+  Award,
+  Bell,
+  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth } from "@/App";
