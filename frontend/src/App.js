@@ -13,9 +13,24 @@ import ActiveSession from "@/pages/ActiveSession";
 import ProgressStats from "@/pages/ProgressStats";
 import PricingPage from "@/pages/PricingPage";
 import ProfilePage from "@/pages/ProfilePage";
+import BadgesPage from "@/pages/BadgesPage";
+import NotificationsPage from "@/pages/NotificationsPage";
+import B2BDashboard from "@/pages/B2BDashboard";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
+
+// Register Service Worker for PWA
+const registerServiceWorker = async () => {
+  if ("serviceWorker" in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.register("/sw.js");
+      console.log("Service Worker registered:", registration.scope);
+    } catch (error) {
+      console.error("Service Worker registration failed:", error);
+    }
+  }
+};
 
 // Auth Context
 export const AuthContext = React.createContext(null);
