@@ -322,12 +322,16 @@ async def process_oauth_session(request: Request, response: Response):
     
     user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     
+    # Create JWT token for localStorage backup
+    jwt_token = create_token(user_id)
+    
     return {
         "user_id": user_id,
         "email": user["email"],
         "name": user["name"],
         "picture": user.get("picture"),
-        "subscription_tier": user.get("subscription_tier", "free")
+        "subscription_tier": user.get("subscription_tier", "free"),
+        "token": jwt_token
     }
 
 @api_router.get("/auth/me")
