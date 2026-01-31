@@ -1067,6 +1067,516 @@ async def seed_micro_actions():
     
     return {"message": f"Seeded {len(actions)} micro-actions"}
 
+# ============== BADGES & ACHIEVEMENTS ==============
+
+BADGES = [
+    {
+        "badge_id": "first_action",
+        "name": "Premier Pas",
+        "description": "Complétez votre première micro-action",
+        "icon": "rocket",
+        "condition": {"type": "sessions_completed", "value": 1}
+    },
+    {
+        "badge_id": "streak_3",
+        "name": "Régularité",
+        "description": "Maintenez un streak de 3 jours",
+        "icon": "flame",
+        "condition": {"type": "streak_days", "value": 3}
+    },
+    {
+        "badge_id": "streak_7",
+        "name": "Semaine Parfaite",
+        "description": "Maintenez un streak de 7 jours",
+        "icon": "star",
+        "condition": {"type": "streak_days", "value": 7}
+    },
+    {
+        "badge_id": "streak_30",
+        "name": "Mois d'Or",
+        "description": "Maintenez un streak de 30 jours",
+        "icon": "crown",
+        "condition": {"type": "streak_days", "value": 30}
+    },
+    {
+        "badge_id": "time_60",
+        "name": "Première Heure",
+        "description": "Accumulez 60 minutes de micro-actions",
+        "icon": "clock",
+        "condition": {"type": "total_time", "value": 60}
+    },
+    {
+        "badge_id": "time_300",
+        "name": "5 Heures",
+        "description": "Accumulez 5 heures de micro-actions",
+        "icon": "timer",
+        "condition": {"type": "total_time", "value": 300}
+    },
+    {
+        "badge_id": "time_600",
+        "name": "10 Heures",
+        "description": "Accumulez 10 heures de micro-actions",
+        "icon": "trophy",
+        "condition": {"type": "total_time", "value": 600}
+    },
+    {
+        "badge_id": "category_learning",
+        "name": "Apprenant",
+        "description": "Complétez 10 actions d'apprentissage",
+        "icon": "book-open",
+        "condition": {"type": "category_sessions", "category": "learning", "value": 10}
+    },
+    {
+        "badge_id": "category_productivity",
+        "name": "Productif",
+        "description": "Complétez 10 actions de productivité",
+        "icon": "target",
+        "condition": {"type": "category_sessions", "category": "productivity", "value": 10}
+    },
+    {
+        "badge_id": "category_wellbeing",
+        "name": "Zen Master",
+        "description": "Complétez 10 actions de bien-être",
+        "icon": "heart",
+        "condition": {"type": "category_sessions", "category": "well_being", "value": 10}
+    },
+    {
+        "badge_id": "all_categories",
+        "name": "Équilibre",
+        "description": "Complétez au moins 5 actions dans chaque catégorie",
+        "icon": "sparkles",
+        "condition": {"type": "all_categories", "value": 5}
+    },
+    {
+        "badge_id": "premium",
+        "name": "Investisseur",
+        "description": "Passez à Premium",
+        "icon": "gem",
+        "condition": {"type": "subscription", "value": "premium"}
+    }
+]
+
+async def check_and_award_badges(user_id: str) -> List[dict]:
+    """Check user progress and award new badges"""
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user:
+        return []
+    
+    # Get user's current badges
+    user_badges = user.get("badges", [])
+    user_badge_ids = [b["badge_id"] for b in user_badges]
+    
+    # Get session stats
+    total_sessions = await db.user_sessions_history.count_documents(
+        {"user_id": user_id, "completed": True}
+    )
+    
+    # Get category stats
+    pipeline = [
+        {"$match": {"user_id": user_id, "completed": True}},
+        {"$group": {"_id": "$category", "count": {"$sum": 1}}}
+    ]
+    category_stats = await db.user_sessions_history.aggregate(pipeline).to_list(10)
+    category_counts = {stat["_id"]: stat["count"] for stat in category_stats}
+    
+    new_badges = []
+    
+    for badge in BADGES:
+        if badge["badge_id"] in user_badge_ids:
+            continue
+        
+        condition = badge["condition"]
+        earned = False
+        
+        if condition["type"] == "sessions_completed":
+            earned = total_sessions >= condition["value"]
+        elif condition["type"] == "streak_days":
+            earned = user.get("streak_days", 0) >= condition["value"]
+        elif condition["type"] == "total_time":
+            earned = user.get("total_time_invested", 0) >= condition["value"]
+        elif condition["type"] == "category_sessions":
+            earned = category_counts.get(condition["category"], 0) >= condition["value"]
+        elif condition["type"] == "all_categories":
+            earned = all(
+                category_counts.get(cat, 0) >= condition["value"]
+                for cat in ["learning", "productivity", "well_being"]
+            )
+        elif condition["type"] == "subscription":
+            earned = user.get("subscription_tier") == condition["value"]
+        
+        if earned:
+            badge_award = {
+                "badge_id": badge["badge_id"],
+                "name": badge["name"],
+                "icon": badge["icon"],
+                "earned_at": datetime.now(timezone.utc).isoformat()
+            }
+            new_badges.append(badge_award)
+    
+    # Update user with new badges
+    if new_badges:
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$push": {"badges": {"$each": new_badges}}}
+        )
+    
+    return new_badges
+
+@api_router.get("/badges")
+async def get_all_badges():
+    """Get all available badges"""
+    return BADGES
+
+@api_router.get("/badges/user")
+async def get_user_badges(user: dict = Depends(get_current_user)):
+    """Get user's earned badges"""
+    user_badges = user.get("badges", [])
+    
+    # Check for new badges
+    new_badges = await check_and_award_badges(user["user_id"])
+    
+    all_earned = user_badges + new_badges
+    
+    return {
+        "earned": all_earned,
+        "new_badges": new_badges,
+        "total_available": len(BADGES),
+        "total_earned": len(all_earned)
+    }
+
+# ============== NOTIFICATIONS ==============
+
+class NotificationPreferences(BaseModel):
+    daily_reminder: bool = True
+    reminder_time: str = "09:00"  # HH:MM format
+    streak_alerts: bool = True
+    achievement_alerts: bool = True
+    weekly_summary: bool = True
+
+@api_router.get("/notifications/preferences")
+async def get_notification_preferences(user: dict = Depends(get_current_user)):
+    """Get user's notification preferences"""
+    prefs = await db.notification_preferences.find_one(
+        {"user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    
+    if not prefs:
+        # Return defaults
+        return {
+            "user_id": user["user_id"],
+            "daily_reminder": True,
+            "reminder_time": "09:00",
+            "streak_alerts": True,
+            "achievement_alerts": True,
+            "weekly_summary": True
+        }
+    
+    return prefs
+
+@api_router.put("/notifications/preferences")
+async def update_notification_preferences(
+    prefs: NotificationPreferences,
+    user: dict = Depends(get_current_user)
+):
+    """Update user's notification preferences"""
+    prefs_doc = {
+        "user_id": user["user_id"],
+        **prefs.model_dump(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.notification_preferences.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": prefs_doc},
+        upsert=True
+    )
+    
+    return prefs_doc
+
+@api_router.post("/notifications/subscribe")
+async def subscribe_push_notifications(
+    request: Request,
+    user: dict = Depends(get_current_user)
+):
+    """Subscribe to push notifications (store push subscription)"""
+    body = await request.json()
+    subscription = body.get("subscription")
+    
+    if not subscription:
+        raise HTTPException(status_code=400, detail="Subscription data required")
+    
+    await db.push_subscriptions.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "user_id": user["user_id"],
+            "subscription": subscription,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }},
+        upsert=True
+    )
+    
+    return {"message": "Subscribed to push notifications"}
+
+@api_router.get("/notifications")
+async def get_user_notifications(
+    user: dict = Depends(get_current_user),
+    limit: int = 20
+):
+    """Get user's notifications"""
+    notifications = await db.notifications.find(
+        {"user_id": user["user_id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(limit).to_list(limit)
+    
+    return notifications
+
+@api_router.post("/notifications/mark-read")
+async def mark_notifications_read(
+    request: Request,
+    user: dict = Depends(get_current_user)
+):
+    """Mark notifications as read"""
+    body = await request.json()
+    notification_ids = body.get("notification_ids", [])
+    
+    if notification_ids:
+        await db.notifications.update_many(
+            {"user_id": user["user_id"], "notification_id": {"$in": notification_ids}},
+            {"$set": {"read": True}}
+        )
+    else:
+        # Mark all as read
+        await db.notifications.update_many(
+            {"user_id": user["user_id"]},
+            {"$set": {"read": True}}
+        )
+    
+    return {"message": "Notifications marked as read"}
+
+# ============== B2B DASHBOARD ==============
+
+class CompanyCreate(BaseModel):
+    name: str
+    domain: str
+
+class InviteEmployee(BaseModel):
+    email: EmailStr
+
+@api_router.post("/b2b/company")
+async def create_company(
+    company_data: CompanyCreate,
+    user: dict = Depends(get_current_user)
+):
+    """Create a B2B company account"""
+    # Check if user already has a company
+    existing = await db.companies.find_one(
+        {"admin_user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="You already have a company")
+    
+    company_id = f"company_{uuid.uuid4().hex[:12]}"
+    company_doc = {
+        "company_id": company_id,
+        "name": company_data.name,
+        "domain": company_data.domain,
+        "admin_user_id": user["user_id"],
+        "employees": [user["user_id"]],
+        "employee_count": 1,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.companies.insert_one(company_doc)
+    
+    # Update user as company admin
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "company_id": company_id,
+            "is_company_admin": True
+        }}
+    )
+    
+    return {"company_id": company_id, "name": company_data.name}
+
+@api_router.get("/b2b/company")
+async def get_company(user: dict = Depends(get_current_user)):
+    """Get company info for admin"""
+    company_id = user.get("company_id")
+    if not company_id:
+        raise HTTPException(status_code=404, detail="No company found")
+    
+    company = await db.companies.find_one(
+        {"company_id": company_id},
+        {"_id": 0}
+    )
+    
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    return company
+
+@api_router.get("/b2b/dashboard")
+async def get_b2b_dashboard(user: dict = Depends(get_current_user)):
+    """Get B2B analytics dashboard (anonymized QVT data)"""
+    company_id = user.get("company_id")
+    
+    if not company_id or not user.get("is_company_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    company = await db.companies.find_one(
+        {"company_id": company_id},
+        {"_id": 0}
+    )
+    
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    employee_ids = company.get("employees", [])
+    
+    # Aggregate anonymized stats
+    total_sessions = await db.user_sessions_history.count_documents(
+        {"user_id": {"$in": employee_ids}, "completed": True}
+    )
+    
+    total_time_pipeline = [
+        {"$match": {"user_id": {"$in": employee_ids}, "completed": True}},
+        {"$group": {"_id": None, "total": {"$sum": "$actual_duration"}}}
+    ]
+    total_time_result = await db.user_sessions_history.aggregate(total_time_pipeline).to_list(1)
+    total_time = total_time_result[0]["total"] if total_time_result else 0
+    
+    # Category distribution
+    category_pipeline = [
+        {"$match": {"user_id": {"$in": employee_ids}, "completed": True}},
+        {"$group": {"_id": "$category", "count": {"$sum": 1}, "time": {"$sum": "$actual_duration"}}}
+    ]
+    category_stats = await db.user_sessions_history.aggregate(category_pipeline).to_list(10)
+    
+    # Weekly activity (last 4 weeks)
+    four_weeks_ago = (datetime.now(timezone.utc) - timedelta(days=28)).isoformat()
+    weekly_pipeline = [
+        {"$match": {
+            "user_id": {"$in": employee_ids},
+            "completed": True,
+            "completed_at": {"$gte": four_weeks_ago}
+        }},
+        {"$group": {
+            "_id": {"$substr": ["$completed_at", 0, 10]},
+            "sessions": {"$sum": 1},
+            "time": {"$sum": "$actual_duration"}
+        }},
+        {"$sort": {"_id": 1}}
+    ]
+    daily_activity = await db.user_sessions_history.aggregate(weekly_pipeline).to_list(28)
+    
+    # Active employees (used app this week)
+    one_week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    active_employees = await db.user_sessions_history.distinct(
+        "user_id",
+        {
+            "user_id": {"$in": employee_ids},
+            "completed_at": {"$gte": one_week_ago}
+        }
+    )
+    
+    # Average per employee
+    avg_time_per_employee = total_time / len(employee_ids) if employee_ids else 0
+    avg_sessions_per_employee = total_sessions / len(employee_ids) if employee_ids else 0
+    
+    return {
+        "company_name": company["name"],
+        "employee_count": len(employee_ids),
+        "active_employees_this_week": len(active_employees),
+        "engagement_rate": round(len(active_employees) / len(employee_ids) * 100, 1) if employee_ids else 0,
+        "total_sessions": total_sessions,
+        "total_time_minutes": total_time,
+        "avg_time_per_employee": round(avg_time_per_employee, 1),
+        "avg_sessions_per_employee": round(avg_sessions_per_employee, 1),
+        "category_distribution": {
+            stat["_id"]: {"sessions": stat["count"], "time": stat["time"]}
+            for stat in category_stats
+        },
+        "daily_activity": daily_activity,
+        "qvt_score": min(100, round(len(active_employees) / len(employee_ids) * 100 + (total_time / len(employee_ids) / 10) if employee_ids else 0, 1))
+    }
+
+@api_router.post("/b2b/invite")
+async def invite_employee(
+    invite: InviteEmployee,
+    user: dict = Depends(get_current_user)
+):
+    """Invite an employee to the company"""
+    company_id = user.get("company_id")
+    
+    if not company_id or not user.get("is_company_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Check if email domain matches company domain
+    company = await db.companies.find_one(
+        {"company_id": company_id},
+        {"_id": 0}
+    )
+    
+    email_domain = invite.email.split("@")[1]
+    if email_domain != company["domain"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Email must be from {company['domain']} domain"
+        )
+    
+    # Create invitation
+    invite_id = f"invite_{uuid.uuid4().hex[:12]}"
+    invite_doc = {
+        "invite_id": invite_id,
+        "company_id": company_id,
+        "email": invite.email,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+    }
+    
+    await db.company_invites.insert_one(invite_doc)
+    
+    return {"invite_id": invite_id, "email": invite.email, "status": "pending"}
+
+@api_router.get("/b2b/employees")
+async def get_employees(user: dict = Depends(get_current_user)):
+    """Get list of company employees (anonymized for privacy)"""
+    company_id = user.get("company_id")
+    
+    if not company_id or not user.get("is_company_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    company = await db.companies.find_one(
+        {"company_id": company_id},
+        {"_id": 0}
+    )
+    
+    employee_ids = company.get("employees", [])
+    
+    # Get anonymized employee stats
+    employees = []
+    for i, emp_id in enumerate(employee_ids):
+        emp = await db.users.find_one({"user_id": emp_id}, {"_id": 0})
+        if emp:
+            sessions = await db.user_sessions_history.count_documents(
+                {"user_id": emp_id, "completed": True}
+            )
+            employees.append({
+                "employee_number": i + 1,
+                "name": emp.get("name", "Collaborateur"),
+                "total_time": emp.get("total_time_invested", 0),
+                "streak_days": emp.get("streak_days", 0),
+                "total_sessions": sessions,
+                "is_admin": emp_id == user["user_id"]
+            })
+    
+    return {"employees": employees, "total": len(employees)}
+
 # ============== ROOT ROUTE ==============
 
 @api_router.get("/")
