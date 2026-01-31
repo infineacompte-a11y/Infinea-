@@ -275,6 +275,130 @@ class InFineaAPITester:
             self.log_test("Stripe Checkout", False, error=error_msg)
             return False
 
+    def test_get_all_badges(self):
+        """Test getting all available badges"""
+        response = self.make_request('GET', 'badges')
+        if response and response.status_code == 200:
+            data = response.json()
+            self.log_test("Get All Badges", True, f"Found {len(data)} badges")
+            return data
+        else:
+            error_msg = response.json().get('detail', 'Unknown error') if response else 'No response'
+            self.log_test("Get All Badges", False, error=error_msg)
+            return []
+
+    def test_get_user_badges(self):
+        """Test getting user's earned badges"""
+        if not self.session_token:
+            self.log_test("Get User Badges", False, error="No session token")
+            return False
+            
+        response = self.make_request('GET', 'badges/user')
+        if response and response.status_code == 200:
+            data = response.json()
+            earned_count = len(data.get('earned', []))
+            total_available = data.get('total_available', 0)
+            self.log_test("Get User Badges", True, f"Earned {earned_count}/{total_available} badges")
+            return True
+        else:
+            error_msg = response.json().get('detail', 'Unknown error') if response else 'No response'
+            self.log_test("Get User Badges", False, error=error_msg)
+            return False
+
+    def test_get_notification_preferences(self):
+        """Test getting notification preferences"""
+        if not self.session_token:
+            self.log_test("Get Notification Preferences", False, error="No session token")
+            return False
+            
+        response = self.make_request('GET', 'notifications/preferences')
+        if response and response.status_code == 200:
+            data = response.json()
+            self.log_test("Get Notification Preferences", True, f"Daily reminder: {data.get('daily_reminder')}")
+            return data
+        else:
+            error_msg = response.json().get('detail', 'Unknown error') if response else 'No response'
+            self.log_test("Get Notification Preferences", False, error=error_msg)
+            return None
+
+    def test_update_notification_preferences(self):
+        """Test updating notification preferences"""
+        if not self.session_token:
+            self.log_test("Update Notification Preferences", False, error="No session token")
+            return False
+            
+        prefs_data = {
+            "daily_reminder": True,
+            "reminder_time": "09:00",
+            "streak_alerts": True,
+            "achievement_alerts": True,
+            "weekly_summary": False
+        }
+        
+        response = self.make_request('PUT', 'notifications/preferences', prefs_data)
+        if response and response.status_code == 200:
+            data = response.json()
+            self.log_test("Update Notification Preferences", True, "Preferences updated successfully")
+            return True
+        else:
+            error_msg = response.json().get('detail', 'Unknown error') if response else 'No response'
+            self.log_test("Update Notification Preferences", False, error=error_msg)
+            return False
+
+    def test_create_b2b_company(self):
+        """Test creating a B2B company"""
+        if not self.session_token:
+            self.log_test("Create B2B Company", False, error="No session token")
+            return False
+            
+        company_data = {
+            "name": "Test Company Ltd",
+            "domain": "testcompany.com"
+        }
+        
+        response = self.make_request('POST', 'b2b/company', company_data)
+        if response and response.status_code == 200:
+            data = response.json()
+            self.log_test("Create B2B Company", True, f"Company created: {data.get('name')}")
+            return True
+        elif response and response.status_code == 400:
+            # User might already have a company
+            error_msg = response.json().get('detail', '')
+            if "already have a company" in error_msg:
+                self.log_test("Create B2B Company", True, "User already has a company (expected)")
+                return True
+            else:
+                self.log_test("Create B2B Company", False, error=error_msg)
+                return False
+        else:
+            error_msg = response.json().get('detail', 'Unknown error') if response else 'No response'
+            self.log_test("Create B2B Company", False, error=error_msg)
+            return False
+
+    def test_get_b2b_dashboard(self):
+        """Test getting B2B dashboard analytics"""
+        if not self.session_token:
+            self.log_test("Get B2B Dashboard", False, error="No session token")
+            return False
+            
+        response = self.make_request('GET', 'b2b/dashboard')
+        if response and response.status_code == 200:
+            data = response.json()
+            employee_count = data.get('employee_count', 0)
+            qvt_score = data.get('qvt_score', 0)
+            self.log_test("Get B2B Dashboard", True, f"Employees: {employee_count}, QVT Score: {qvt_score}")
+            return True
+        elif response and response.status_code == 403:
+            self.log_test("Get B2B Dashboard", True, "Access denied (expected for non-admin)")
+            return True
+        elif response and response.status_code == 404:
+            self.log_test("Get B2B Dashboard", True, "No company found (expected)")
+            return True
+        else:
+            error_msg = response.json().get('detail', 'Unknown error') if response else 'No response'
+            self.log_test("Get B2B Dashboard", False, error=error_msg)
+            return False
+
     def test_logout(self):
         """Test user logout"""
         if not self.session_token:
