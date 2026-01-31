@@ -83,16 +83,28 @@ class InFineaAPITester:
             "name": f"Test User {timestamp}"
         }
         
+        print(f"Attempting registration with: {test_user}")
         response = self.make_request('POST', 'auth/register', test_user)
-        if response and response.status_code == 200:
+        
+        if response is None:
+            self.log_test("User Registration", False, error="No response received")
+            return False
+            
+        print(f"Registration response status: {response.status_code}")
+        print(f"Registration response text: {response.text}")
+        
+        if response.status_code == 200:
             data = response.json()
             self.session_token = data.get('token')
             self.user_data = data
             self.log_test("User Registration", True, f"User ID: {data.get('user_id')}")
             return True
         else:
-            error_msg = response.json().get('detail', 'Unknown error') if response else 'No response'
-            self.log_test("User Registration", False, error=error_msg)
+            try:
+                error_msg = response.json().get('detail', 'Unknown error')
+            except:
+                error_msg = response.text
+            self.log_test("User Registration", False, error=f"Status {response.status_code}: {error_msg}")
             return False
 
     def test_user_login(self):
