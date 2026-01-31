@@ -49,16 +49,20 @@ class InFineaAPITester:
 
         try:
             if method == 'GET':
-                response = requests.get(url, headers=default_headers)
+                response = requests.get(url, headers=default_headers, timeout=30)
             elif method == 'POST':
-                response = requests.post(url, json=data, headers=default_headers)
+                response = requests.post(url, json=data, headers=default_headers, timeout=30)
             elif method == 'PUT':
-                response = requests.put(url, json=data, headers=default_headers)
+                response = requests.put(url, json=data, headers=default_headers, timeout=30)
             elif method == 'DELETE':
-                response = requests.delete(url, headers=default_headers)
+                response = requests.delete(url, headers=default_headers, timeout=30)
             
             return response
+        except requests.exceptions.RequestException as e:
+            print(f"Request error for {method} {url}: {e}")
+            return None
         except Exception as e:
+            print(f"Unexpected error for {method} {url}: {e}")
             return None
 
     def test_root_endpoint(self):
