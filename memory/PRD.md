@@ -19,7 +19,7 @@ Slogan: "Investissez vos instants perdus"
 
 ## What's Been Implemented (Jan 2026)
 
-### Backend (FastAPI)
+### Phase 1 - MVP Core
 - ✅ Auth système complet (JWT + Google OAuth via Emergent)
 - ✅ CRUD micro-actions (15 actions seedées)
 - ✅ Suggestions IA avec OpenAI GPT-5.2
@@ -28,15 +28,24 @@ Slogan: "Investissez vos instants perdus"
 - ✅ Stripe checkout pour abonnement Premium
 - ✅ MongoDB intégration complète
 
-### Frontend (React)
-- ✅ Landing Page moderne avec hero, features, pricing
+### Phase 2 - New Features (Jan 2026)
+- ✅ **PWA Support** - Service Worker, Manifest, Mode offline
+- ✅ **Système de Badges** - 12 badges (streaks, temps, catégories)
+- ✅ **Notifications** - Préférences configurables (rappels, alertes streak, badges)
+- ✅ **Dashboard B2B** - Création entreprise, analytics QVT anonymisés, invitations
+
+### Frontend Pages
+- ✅ Landing Page avec hero, features, pricing
 - ✅ Pages auth (Login/Register avec Google OAuth)
 - ✅ Dashboard avec slider temps, sélecteur énergie
-- ✅ Bibliothèque d'actions avec filtres par catégorie
+- ✅ Bibliothèque d'actions avec filtres
 - ✅ Session active avec timer et instructions
 - ✅ Page progression avec graphiques (Recharts)
 - ✅ Page pricing avec intégration Stripe
 - ✅ Page profil utilisateur
+- ✅ **Page Badges** - Collection et progression
+- ✅ **Page Notifications** - Préférences et historique
+- ✅ **Dashboard B2B** - Analytics entreprise
 
 ### Design System
 - Font: Outfit (headings) + DM Sans (body)
@@ -51,18 +60,23 @@ Slogan: "Investissez vos instants perdus"
 - [x] Micro-actions CRUD
 - [x] Suggestions IA
 - [x] Paiement Stripe
+- [x] PWA/Offline
+- [x] Badges/Gamification
+- [x] Notifications
+- [x] B2B Dashboard
 
 ### P1 - Important (Next)
-- [ ] Notifications push
-- [ ] Mode hors-ligne
-- [ ] Actions personnalisées utilisateur
-- [ ] Dashboard B2B admin
+- [ ] Push notifications réelles (VAPID keys)
+- [ ] Intégration calendrier (Google Calendar)
+- [ ] Actions personnalisées par utilisateur
+- [ ] Export données CSV/PDF
 
 ### P2 - Nice to have
 - [ ] Intégrations Slack/Teams/Notion
-- [ ] Gamification avancée (badges, niveaux)
+- [ ] Gamification avancée (niveaux, classements)
 - [ ] Partage social des accomplissements
 - [ ] API publique pour partenaires
+- [ ] i18n multi-langues
 
 ## Tech Stack
 - Backend: FastAPI, MongoDB, emergentintegrations
@@ -70,9 +84,10 @@ Slogan: "Investissez vos instants perdus"
 - Auth: JWT + Emergent Google OAuth
 - Payments: Stripe
 - AI: OpenAI GPT-5.2 via Emergent LLM Key
+- PWA: Service Worker + Manifest
 
 ## Next Tasks
-1. Ajouter notifications pour rappels de micro-actions
-2. Implémenter mode offline avec service worker
-3. Créer système de badges/achievements
-4. Dashboard analytics pour admins B2B
+1. Intégrer VAPID keys pour push notifications réels
+2. Ajouter intégration Google Calendar pour planification
+3. Système de niveaux/XP pour gamification avancée
+4. Export des statistiques en PDF
