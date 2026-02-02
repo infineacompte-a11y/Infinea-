@@ -11,7 +11,7 @@ from datetime import datetime
 import time
 
 class InFineaAPITester:
-    def __init__(self, base_url="https://complete-saas-2.preview.emergentagent.com"):
+    def __init__(self, base_url="https://taskmoment.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.session_token = None
@@ -264,7 +264,7 @@ class InFineaAPITester:
             self.log_test("Stripe Checkout", False, error="No session token")
             return False
             
-        checkout_data = {"origin_url": "https://complete-saas-2.preview.emergentagent.com"}
+        checkout_data = {"origin_url": "https://taskmoment.preview.emergentagent.com"}
         response = self.make_request('POST', 'payments/checkout', checkout_data)
         if response and response.status_code == 200:
             data = response.json()
