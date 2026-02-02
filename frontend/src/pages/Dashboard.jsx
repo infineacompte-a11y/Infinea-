@@ -69,6 +69,26 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [nextSlot, setNextSlot] = useState(null);
+
+  useEffect(() => {
+    fetchNextSlot();
+  }, []);
+
+  const fetchNextSlot = async () => {
+    try {
+      const response = await fetch(`${API}/slots/next`, {
+        credentials: "include",
+        headers: { Authorization: `Bearer ${localStorage.getItem("infinea_token")}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setNextSlot(data.slot);
+      }
+    } catch (error) {
+      console.log("No slot available");
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -78,9 +98,13 @@ export default function Dashboard() {
   const getSuggestions = async () => {
     setIsLoading(true);
     try {
+      const token = localStorage.getItem("infinea_token");
       const response = await fetch(`${API}/suggestions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         credentials: "include",
         body: JSON.stringify({
           available_time: availableTime,
