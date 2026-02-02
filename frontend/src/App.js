@@ -242,6 +242,14 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/integrations"
+        element={
+          <ProtectedRoute>
+            <IntegrationsPage />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 }
