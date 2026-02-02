@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
 import {
   Timer,
   Sparkles,
@@ -17,7 +16,6 @@ import {
   Menu,
   Calendar,
   Check,
-  X,
   RefreshCw,
   ExternalLink,
   Settings,
@@ -26,6 +24,14 @@ import {
   AlertCircle,
   CheckCircle2,
   Unplug,
+  Brain,
+  FileText,
+  ListTodo,
+  MessageSquare,
+  Plug,
+  ChevronRight,
+  Lock,
+  Award,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth } from "@/App";
@@ -39,12 +45,58 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+
+// Available integrations - easily extendable
+const AVAILABLE_INTEGRATIONS = [
+  {
+    id: "google_calendar",
+    provider: "google_calendar",
+    name: "Google Calendar",
+    description: "Détecte automatiquement vos créneaux libres entre les réunions",
+    icon: Calendar,
+    color: "blue",
+    category: "calendrier",
+    status: "available", // available, coming_soon, premium
+  },
+  {
+    id: "notion",
+    provider: "notion",
+    name: "Notion",
+    description: "Synchronisez vos tâches et notes pour des suggestions contextuelles",
+    icon: FileText,
+    color: "gray",
+    category: "notes",
+    status: "coming_soon",
+  },
+  {
+    id: "todoist",
+    provider: "todoist",
+    name: "Todoist",
+    description: "Connectez vos tâches pour prioriser vos micro-actions",
+    icon: ListTodo,
+    color: "red",
+    category: "tâches",
+    status: "coming_soon",
+  },
+  {
+    id: "slack",
+    provider: "slack",
+    name: "Slack",
+    description: "Recevez des rappels de micro-actions directement dans Slack",
+    icon: MessageSquare,
+    color: "purple",
+    category: "communication",
+    status: "coming_soon",
+  },
+];
+
+const colorClasses = {
+  blue: { bg: "bg-blue-500/10", text: "text-blue-500", border: "border-blue-500/30" },
+  gray: { bg: "bg-zinc-500/10", text: "text-zinc-400", border: "border-zinc-500/30" },
+  red: { bg: "bg-red-500/10", text: "text-red-500", border: "border-red-500/30" },
+  purple: { bg: "bg-purple-500/10", text: "text-purple-500", border: "border-purple-500/30" },
+  green: { bg: "bg-emerald-500/10", text: "text-emerald-500", border: "border-emerald-500/30" },
+};
 
 export default function IntegrationsPage() {
   const { user, logout } = useAuth();
@@ -56,6 +108,7 @@ export default function IntegrationsPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [selectedIntegration, setSelectedIntegration] = useState(null);
 
   useEffect(() => {
     // Check for OAuth callback results
@@ -81,15 +134,12 @@ export default function IntegrationsPage() {
 
   const fetchData = async () => {
     try {
+      const token = localStorage.getItem("infinea_token");
+      const headers = { Authorization: `Bearer ${token}` };
+
       const [intRes, settingsRes] = await Promise.all([
-        fetch(`${API}/integrations`, {
-          credentials: "include",
-          headers: { Authorization: `Bearer ${localStorage.getItem("infinea_token")}` },
-        }),
-        fetch(`${API}/slots/settings`, {
-          credentials: "include",
-          headers: { Authorization: `Bearer ${localStorage.getItem("infinea_token")}` },
-        }),
+        fetch(`${API}/integrations`, { credentials: "include", headers }),
+        fetch(`${API}/slots/settings`, { credentials: "include", headers }),
       ]);
 
       if (intRes.ok) setIntegrations(await intRes.json());
@@ -136,6 +186,7 @@ export default function IntegrationsPage() {
       if (!response.ok) throw new Error("Erreur");
 
       toast.success("Intégration déconnectée");
+      setSelectedIntegration(null);
       fetchData();
     } catch (error) {
       toast.error("Erreur lors de la déconnexion");
@@ -189,8 +240,14 @@ export default function IntegrationsPage() {
     navigate("/login");
   };
 
-  const googleIntegration = integrations.integrations.find((i) => i.provider === "google_calendar");
-  const googleAvailable = integrations.available?.find((a) => a.provider === "google_calendar");
+  const getConnectedIntegration = (provider) => {
+    return integrations.integrations.find((i) => i.provider === provider);
+  };
+
+  const isIntegrationAvailable = (provider) => {
+    const available = integrations.available?.find((a) => a.provider === provider);
+    return available?.available !== false;
+  };
 
   const NavLinks = ({ mobile = false }) => (
     <>
@@ -203,12 +260,36 @@ export default function IntegrationsPage() {
         <span>Dashboard</span>
       </Link>
       <Link
+        to="/actions"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <Sparkles className="w-5 h-5" />
+        <span>Bibliothèque</span>
+      </Link>
+      <Link
+        to="/journal"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <Brain className="w-5 h-5" />
+        <span>Journal</span>
+      </Link>
+      <Link
         to="/integrations"
         className="nav-item active flex items-center gap-3 px-4 py-3 rounded-xl"
         onClick={() => mobile && setMobileMenuOpen(false)}
       >
-        <Calendar className="w-5 h-5" />
+        <Plug className="w-5 h-5" />
         <span>Intégrations</span>
+      </Link>
+      <Link
+        to="/badges"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <Award className="w-5 h-5" />
+        <span>Badges</span>
       </Link>
       <Link
         to="/progress"
@@ -228,6 +309,13 @@ export default function IntegrationsPage() {
       </Link>
     </>
   );
+
+  // Group integrations by category
+  const groupedIntegrations = AVAILABLE_INTEGRATIONS.reduce((acc, int) => {
+    if (!acc[int.category]) acc[int.category] = [];
+    acc[int.category].push(int);
+    return acc;
+  }, {});
 
   return (
     <div className="min-h-screen bg-background">
@@ -282,15 +370,22 @@ export default function IntegrationsPage() {
 
       {/* Main Content */}
       <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="integrations-title">
-              Intégrations
-            </h1>
-            <p className="text-muted-foreground">
-              Connectez vos outils pour des suggestions plus intelligentes
-            </p>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Plug className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h1 className="font-heading text-3xl font-semibold" data-testid="integrations-title">
+                  Hub d'Intégrations
+                </h1>
+                <p className="text-muted-foreground">
+                  Connectez vos outils pour des suggestions plus intelligentes
+                </p>
+              </div>
+            </div>
           </div>
 
           {isLoading ? (
@@ -298,133 +393,167 @@ export default function IntegrationsPage() {
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
           ) : (
-            <>
-              {/* Google Calendar Integration */}
-              <Card className="mb-6">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                        <Calendar className="w-6 h-6 text-blue-500" />
-                      </div>
-                      <div>
-                        <CardTitle className="font-heading text-xl">Google Calendar</CardTitle>
-                        <CardDescription>
-                          Détecte automatiquement vos créneaux libres entre les réunions
-                        </CardDescription>
-                      </div>
-                    </div>
-                    {googleIntegration ? (
-                      <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/30">
-                        <CheckCircle2 className="w-3 h-3 mr-1" />
-                        Connecté
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary">Non connecté</Badge>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {googleIntegration ? (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Dernière synchronisation</p>
-                          <p className="font-medium">
-                            {googleIntegration.last_sync_at
-                              ? new Date(googleIntegration.last_sync_at).toLocaleString("fr-FR")
-                              : "Jamais"}
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleSync(googleIntegration.integration_id)}
-                          disabled={isSyncing}
-                          data-testid="sync-btn"
-                        >
-                          {isSyncing ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="w-4 h-4 mr-2" />
-                          )}
-                          Synchroniser
-                        </Button>
-                      </div>
+            <div className="space-y-8">
+              {/* Connected Integrations */}
+              {integrations.integrations.length > 0 && (
+                <div>
+                  <h2 className="text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    Connectés ({integrations.integrations.length})
+                  </h2>
+                  <div className="grid gap-4">
+                    {integrations.integrations.map((int) => {
+                      const config = AVAILABLE_INTEGRATIONS.find((a) => a.provider === int.provider);
+                      if (!config) return null;
+                      const Icon = config.icon;
+                      const colors = colorClasses[config.color];
 
-                      <div className="flex gap-3">
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() => setShowSettings(true)}
-                        >
-                          <Settings className="w-4 h-4 mr-2" />
-                          Paramètres
-                        </Button>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="outline" className="text-destructive hover:text-destructive">
-                              <Unplug className="w-4 h-4 mr-2" />
-                              Déconnecter
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Déconnecter Google Calendar ?</DialogTitle>
-                              <DialogDescription>
-                                Vous ne recevrez plus de suggestions basées sur votre calendrier.
-                              </DialogDescription>
-                            </DialogHeader>
-                            <DialogFooter>
-                              <Button
-                                variant="destructive"
-                                onClick={() => handleDisconnect(googleIntegration.integration_id)}
-                              >
-                                Déconnecter
-                              </Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {!googleAvailable?.available ? (
-                        <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                          <AlertCircle className="w-5 h-5 text-amber-500" />
-                          <p className="text-sm text-amber-500">
-                            L'intégration Google Calendar n'est pas configurée sur ce serveur.
-                          </p>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-sm text-muted-foreground">
-                            Connectez votre Google Calendar pour que InFinea détecte automatiquement
-                            vos créneaux libres et vous suggère des micro-actions adaptées.
-                          </p>
-                          <Button
-                            onClick={() => handleConnect("google")}
-                            className="w-full"
-                            data-testid="connect-google-btn"
+                      return (
+                        <Card key={int.integration_id} className={`${colors.border} border`}>
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <div className={`w-12 h-12 rounded-xl ${colors.bg} flex items-center justify-center`}>
+                                  <Icon className={`w-6 h-6 ${colors.text}`} />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h3 className="font-heading font-semibold">{config.name}</h3>
+                                    <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/30">
+                                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                                      Connecté
+                                    </Badge>
+                                  </div>
+                                  <p className="text-sm text-muted-foreground">
+                                    Dernière sync: {int.last_sync_at ? new Date(int.last_sync_at).toLocaleString("fr-FR") : "Jamais"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleSync(int.integration_id)}
+                                  disabled={isSyncing}
+                                  data-testid="sync-btn"
+                                >
+                                  {isSyncing ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <RefreshCw className="w-4 h-4" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setSelectedIntegration(int)}
+                                >
+                                  <Settings className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Available Integrations by Category */}
+              {Object.entries(groupedIntegrations).map(([category, ints]) => {
+                // Filter out already connected integrations
+                const availableInts = ints.filter(
+                  (int) => !integrations.integrations.some((c) => c.provider === int.provider)
+                );
+                
+                if (availableInts.length === 0) return null;
+
+                return (
+                  <div key={category}>
+                    <h2 className="text-sm font-medium text-muted-foreground mb-4 capitalize">
+                      {category}
+                    </h2>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {availableInts.map((int) => {
+                        const Icon = int.icon;
+                        const colors = colorClasses[int.color];
+                        const isAvailable = int.status === "available" && isIntegrationAvailable(int.provider);
+
+                        return (
+                          <Card
+                            key={int.id}
+                            className={`transition-all ${
+                              int.status === "coming_soon" ? "opacity-60" : "hover:border-primary/50"
+                            }`}
+                            data-testid={`integration-${int.id}`}
                           >
-                            <Calendar className="w-4 h-4 mr-2" />
-                            Connecter Google Calendar
-                          </Button>
-                        </>
-                      )}
+                            <CardContent className="p-4">
+                              <div className="flex items-start gap-4">
+                                <div className={`w-12 h-12 rounded-xl ${colors.bg} flex items-center justify-center shrink-0`}>
+                                  <Icon className={`w-6 h-6 ${colors.text}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h3 className="font-heading font-semibold">{int.name}</h3>
+                                    {int.status === "coming_soon" && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        Bientôt
+                                      </Badge>
+                                    )}
+                                    {int.status === "premium" && (
+                                      <Badge className="bg-amber-500/20 text-amber-500 text-xs">
+                                        Premium
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-muted-foreground mb-3">
+                                    {int.description}
+                                  </p>
+                                  {int.status === "available" ? (
+                                    isAvailable ? (
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleConnect(int.provider)}
+                                        data-testid={`connect-${int.id}-btn`}
+                                      >
+                                        Connecter
+                                        <ChevronRight className="w-4 h-4 ml-1" />
+                                      </Button>
+                                    ) : (
+                                      <div className="flex items-center gap-2 text-amber-500 text-sm">
+                                        <AlertCircle className="w-4 h-4" />
+                                        <span>Non configuré sur ce serveur</span>
+                                      </div>
+                                    )
+                                  ) : (
+                                    <Button size="sm" variant="secondary" disabled>
+                                      <Lock className="w-4 h-4 mr-2" />
+                                      Bientôt disponible
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
                     </div>
-                  )}
-                </CardContent>
-              </Card>
+                  </div>
+                );
+              })}
 
               {/* Slot Detection Settings */}
-              {slotSettings && (
+              {slotSettings && integrations.integrations.some((i) => i.provider === "google_calendar") && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="font-heading text-lg flex items-center gap-2">
                       <Clock className="w-5 h-5" />
                       Détection des créneaux
                     </CardTitle>
+                    <CardDescription>
+                      Configurez comment InFinea détecte vos moments libres
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="flex items-center justify-between">
@@ -531,10 +660,63 @@ export default function IntegrationsPage() {
                   </CardContent>
                 </Card>
               )}
-            </>
+            </div>
           )}
         </div>
       </main>
+
+      {/* Integration Settings Dialog */}
+      <Dialog open={!!selectedIntegration} onOpenChange={() => setSelectedIntegration(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Paramètres de l'intégration</DialogTitle>
+            <DialogDescription>
+              {selectedIntegration?.provider === "google_calendar" && "Google Calendar"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {selectedIntegration && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Dernière synchronisation</p>
+                    <p className="font-medium">
+                      {selectedIntegration.last_sync_at
+                        ? new Date(selectedIntegration.last_sync_at).toLocaleString("fr-FR")
+                        : "Jamais"}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSync(selectedIntegration.integration_id)}
+                    disabled={isSyncing}
+                  >
+                    {isSyncing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                    )}
+                    Synchroniser
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedIntegration(null)}>
+              Fermer
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => handleDisconnect(selectedIntegration?.integration_id)}
+            >
+              <Unplug className="w-4 h-4 mr-2" />
+              Déconnecter
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
