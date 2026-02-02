@@ -387,7 +387,7 @@ export default function LandingPage() {
               <span>© 2024 InFinea</span>
               <a href="#" className="hover:text-foreground transition-colors">Confidentialité</a>
               <a href="#" className="hover:text-foreground transition-colors">CGU</a>
-              <a href="mailto:contact@infinea.app" className="hover:text-foreground transition-colors">Contact</a>
+              <a href="mailto:Infinea.compte@gmail.com" className="hover:text-foreground transition-colors">Contact</a>
             </div>
           </div>
         </div>

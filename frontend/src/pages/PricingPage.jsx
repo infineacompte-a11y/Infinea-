@@ -295,8 +295,8 @@ export default function PricingPage() {
             </p>
             <p className="text-xs text-muted-foreground">
               Des questions ? Contactez-nous à{" "}
-              <a href="mailto:contact@infinea.app" className="text-primary hover:underline">
-                contact@infinea.app
+              <a href="mailto:Infinea.compte@gmail.com" className="text-primary hover:underline">
+                Infinea.compte@gmail.com
               </a>
             </p>
           </div>
