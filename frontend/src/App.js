@@ -16,6 +16,7 @@ import ProfilePage from "@/pages/ProfilePage";
 import BadgesPage from "@/pages/BadgesPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import B2BDashboard from "@/pages/B2BDashboard";
+import IntegrationsPage from "@/pages/IntegrationsPage";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
