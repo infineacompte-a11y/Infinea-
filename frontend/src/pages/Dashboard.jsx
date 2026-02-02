@@ -166,6 +166,14 @@ export default function Dashboard() {
         <span>Bibliothèque</span>
       </Link>
       <Link
+        to="/integrations"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <Calendar className="w-5 h-5" />
+        <span>Intégrations</span>
+      </Link>
+      <Link
         to="/badges"
         className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
         onClick={() => mobile && setMobileMenuOpen(false)}
