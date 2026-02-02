@@ -28,6 +28,7 @@ import {
   Award,
   Bell,
   Building2,
+  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth } from "@/App";
@@ -39,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import SlotCard from "@/components/SlotCard";
 
 const categoryIcons = {
   learning: BookOpen,
