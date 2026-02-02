@@ -29,6 +29,7 @@ import {
   Bell,
   Building2,
   Calendar,
+  Brain,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth } from "@/App";
