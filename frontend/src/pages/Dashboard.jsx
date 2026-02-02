@@ -290,6 +290,20 @@ export default function Dashboard() {
             </p>
           </div>
 
+          {/* Next Slot Card */}
+          {nextSlot && (
+            <div className="mb-8">
+              <h2 className="text-sm font-medium text-muted-foreground mb-3">
+                📅 Prochain créneau libre détecté
+              </h2>
+              <SlotCard 
+                slot={nextSlot} 
+                onDismiss={() => setNextSlot(null)} 
+                onRefresh={fetchNextSlot} 
+              />
+            </div>
+          )}
+
           {/* Stats Overview */}
           <div className="grid grid-cols-3 gap-4 mb-8">
             <Card className="stat-card">
