@@ -251,6 +251,14 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/journal"
+        element={
+          <ProtectedRoute>
+            <JournalPage />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 }
