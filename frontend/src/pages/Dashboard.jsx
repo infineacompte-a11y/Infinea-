@@ -175,6 +175,14 @@ export default function Dashboard() {
         <span>Intégrations</span>
       </Link>
       <Link
+        to="/journal"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <Brain className="w-5 h-5" />
+        <span>Journal</span>
+      </Link>
+      <Link
         to="/badges"
         className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
         onClick={() => mobile && setMobileMenuOpen(false)}
