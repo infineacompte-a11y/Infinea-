@@ -19,12 +19,21 @@ from urllib.parse import urlencode, quote
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# MongoDB connection — use Motor if MONGO_URL is set, otherwise mongomock-motor
 mongo_url = os.environ.get('MONGO_URL') or os.environ.get('MONGODB_URI', '')
-if not mongo_url:
-    raise RuntimeError("MONGO_URL env var required. Set it to your MongoDB Atlas connection string.")
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ.get('DB_NAME', 'infinea')]
+if mongo_url:
+    client = AsyncIOMotorClient(mongo_url)
+    db = client[os.environ.get('DB_NAME', 'infinea')]
+    logger.info("Using Motor with MongoDB Atlas")
+else:
+    from mongomock_motor import AsyncMongoMockClient
+    client = AsyncMongoMockClient()
+    db = client[os.environ.get('DB_NAME', 'infinea')]
+    logger.info("Using mongomock-motor (in-memory) — data resets on restart")
 
 # JWT Config
 JWT_SECRET = os.environ.get('JWT_SECRET', 'infinea-secret-key-change-in-production')
@@ -34,10 +43,6 @@ JWT_EXPIRATION_HOURS = 168  # 7 days
 # Create the main app
 app = FastAPI(title="InFinea API")
 api_router = APIRouter(prefix="/api")
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # ============== MODELS ==============
 
@@ -240,21 +245,28 @@ def verify_password(password: str, hashed: str) -> bool:
 # ============== AI HELPER FUNCTIONS ==============
 
 async def call_ai(session_suffix: str, system_message: str, prompt: str) -> Optional[str]:
-    """Shared AI call wrapper with fallback."""
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
-    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    """Shared AI call wrapper using OpenAI API directly via httpx."""
+    api_key = os.environ.get('EMERGENT_LLM_KEY') or os.environ.get('OPENAI_API_KEY')
     if not api_key:
         return None
     try:
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"{session_suffix}_{datetime.now().timestamp()}",
-            system_message=system_message
-        )
-        chat.with_model("openai", "gpt-5.2")
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
-        return response
+        async with httpx.AsyncClient(timeout=30.0) as client_http:
+            resp = await client_http.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 1000,
+                    "temperature": 0.7
+                }
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"]
     except Exception as e:
         logger.error(f"AI call error ({session_suffix}): {e}")
         return None
@@ -607,9 +619,7 @@ async def get_ai_suggestions(
     user: dict = Depends(get_current_user)
 ):
     """Get AI-powered micro-action suggestions based on time and energy"""
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
-    
-    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    api_key = os.environ.get('EMERGENT_LLM_KEY') or os.environ.get('OPENAI_API_KEY')
     if not api_key:
         raise HTTPException(status_code=500, detail="AI service not configured")
     
@@ -648,16 +658,11 @@ async def get_ai_suggestions(
         for a in available_actions[:10]
     ])
     
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"suggestion_{user['user_id']}_{datetime.now().timestamp()}",
-        system_message="""Tu es l'assistant InFinea, expert en productivité et bien-être. 
+    system_msg = """Tu es l'assistant InFinea, expert en productivité et bien-être.
 Tu aides les utilisateurs à transformer leurs moments perdus en micro-victoires.
 Réponds toujours en français, de manière concise et motivante.
 Suggère les meilleures micro-actions en fonction du temps disponible et du niveau d'énergie."""
-    )
-    chat.with_model("openai", "gpt-5.2")
-    
+
     prompt = f"""L'utilisateur a {ai_request.available_time} minutes disponibles et un niveau d'énergie {ai_request.energy_level}.
 Catégories récentes: {', '.join(recent_categories) if recent_categories else 'Aucune'}
 Catégorie préférée: {ai_request.preferred_category or 'Aucune'}
@@ -672,8 +677,7 @@ Format ta réponse en JSON avec:
 - "alternatives": liste de 2 autres titres d'actions adaptées"""
 
     try:
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
+        response = await call_ai("suggestion", system_msg, prompt)
         
         # Parse AI response
         import json
@@ -1259,40 +1263,40 @@ async def create_checkout(
     user: dict = Depends(get_current_user)
 ):
     """Create Stripe checkout session for Premium subscription"""
-    from emergentintegrations.payments.stripe.checkout import (
-        StripeCheckout, CheckoutSessionRequest
-    )
-    
     stripe_key = os.environ.get('STRIPE_API_KEY')
     if not stripe_key:
         raise HTTPException(status_code=500, detail="Payment service not configured")
-    
-    host_url = str(request.base_url).rstrip('/')
-    webhook_url = f"{host_url}/api/webhook/stripe"
-    
-    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
-    
+
     success_url = f"{checkout_data.origin_url}/pricing?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{checkout_data.origin_url}/pricing"
-    
-    checkout_request = CheckoutSessionRequest(
-        amount=SUBSCRIPTION_PRICE,
-        currency="eur",
-        success_url=success_url,
-        cancel_url=cancel_url,
-        metadata={
-            "user_id": user["user_id"],
-            "email": user["email"],
-            "plan": "premium"
-        }
-    )
-    
-    session = await stripe_checkout.create_checkout_session(checkout_request)
-    
-    # Create payment transaction record
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client_http:
+            resp = await client_http.post(
+                "https://api.stripe.com/v1/checkout/sessions",
+                headers={"Authorization": f"Bearer {stripe_key}"},
+                data={
+                    "mode": "payment",
+                    "success_url": success_url,
+                    "cancel_url": cancel_url,
+                    "line_items[0][price_data][currency]": "eur",
+                    "line_items[0][price_data][product_data][name]": "InFinea Premium",
+                    "line_items[0][price_data][unit_amount]": int(SUBSCRIPTION_PRICE * 100),
+                    "line_items[0][quantity]": "1",
+                    "metadata[user_id]": user["user_id"],
+                    "metadata[email]": user["email"],
+                    "metadata[plan]": "premium",
+                }
+            )
+            resp.raise_for_status()
+            session = resp.json()
+    except Exception as e:
+        logger.error(f"Stripe checkout error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create checkout session")
+
     await db.payment_transactions.insert_one({
         "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
-        "session_id": session.session_id,
+        "session_id": session["id"],
         "user_id": user["user_id"],
         "email": user["email"],
         "amount": SUBSCRIPTION_PRICE,
@@ -1301,8 +1305,8 @@ async def create_checkout(
         "payment_status": "pending",
         "created_at": datetime.now(timezone.utc).isoformat()
     })
-    
-    return {"url": session.url, "session_id": session.session_id}
+
+    return {"url": session["url"], "session_id": session["id"]}
 
 @api_router.get("/payments/status/{session_id}")
 async def get_payment_status(
@@ -1310,35 +1314,33 @@ async def get_payment_status(
     user: dict = Depends(get_current_user)
 ):
     """Check payment status and upgrade user if successful"""
-    from emergentintegrations.payments.stripe.checkout import StripeCheckout
-    
     stripe_key = os.environ.get('STRIPE_API_KEY')
     if not stripe_key:
         raise HTTPException(status_code=500, detail="Payment service not configured")
-    
-    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url="")
-    
+
     try:
-        status = await stripe_checkout.get_checkout_status(session_id)
-        
-        # Update transaction
+        async with httpx.AsyncClient(timeout=15.0) as client_http:
+            resp = await client_http.get(
+                f"https://api.stripe.com/v1/checkout/sessions/{session_id}",
+                headers={"Authorization": f"Bearer {stripe_key}"}
+            )
+            resp.raise_for_status()
+            status = resp.json()
+
+        payment_status = status.get("payment_status", "unpaid")
         await db.payment_transactions.update_one(
             {"session_id": session_id},
             {"$set": {
-                "payment_status": status.payment_status,
-                "status": status.status,
+                "payment_status": payment_status,
+                "status": status.get("status"),
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }}
         )
-        
-        # If paid, upgrade user
-        if status.payment_status == "paid":
-            # Check if not already processed
+
+        if payment_status == "paid":
             txn = await db.payment_transactions.find_one(
-                {"session_id": session_id, "processed": True},
-                {"_id": 0}
+                {"session_id": session_id, "processed": True}, {"_id": 0}
             )
-            
             if not txn:
                 await db.users.update_one(
                     {"user_id": user["user_id"]},
@@ -1351,12 +1353,12 @@ async def get_payment_status(
                     {"session_id": session_id},
                     {"$set": {"processed": True}}
                 )
-        
+
         return {
-            "status": status.status,
-            "payment_status": status.payment_status,
-            "amount": status.amount_total / 100,  # Convert from cents
-            "currency": status.currency
+            "status": status.get("status"),
+            "payment_status": payment_status,
+            "amount": (status.get("amount_total", 0) or 0) / 100,
+            "currency": status.get("currency", "eur")
         }
     except Exception as e:
         logger.error(f"Payment status error: {e}")
@@ -1365,31 +1367,24 @@ async def get_payment_status(
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
     """Handle Stripe webhooks"""
-    from emergentintegrations.payments.stripe.checkout import StripeCheckout
-    
     stripe_key = os.environ.get('STRIPE_API_KEY')
     if not stripe_key:
         return {"status": "error", "message": "Not configured"}
-    
-    host_url = str(request.base_url).rstrip('/')
-    webhook_url = f"{host_url}/api/webhook/stripe"
-    
-    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
-    
+
     body = await request.body()
-    signature = request.headers.get("Stripe-Signature")
-    
+
     try:
-        event = await stripe_checkout.handle_webhook(body, signature)
-        
-        if event.payment_status == "paid":
-            user_id = event.metadata.get("user_id")
-            if user_id:
-                await db.users.update_one(
-                    {"user_id": user_id},
-                    {"$set": {"subscription_tier": "premium"}}
-                )
-        
+        event = json.loads(body)
+        event_type = event.get("type", "")
+        if event_type == "checkout.session.completed":
+            session_data = event.get("data", {}).get("object", {})
+            if session_data.get("payment_status") == "paid":
+                user_id = session_data.get("metadata", {}).get("user_id")
+                if user_id:
+                    await db.users.update_one(
+                        {"user_id": user_id},
+                        {"$set": {"subscription_tier": "premium"}}
+                    )
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"Webhook error: {e}")
