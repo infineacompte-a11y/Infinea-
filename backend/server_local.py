@@ -25,7 +25,7 @@ client = mongomock.MongoClient()
 db = client["infinea_local"]
 
 # JWT Config
-JWT_SECRET = 'infinea-local-secret-key-2024'
+JWT_SECRET = os.environ.get('JWT_SECRET', 'infinea-local-secret-key-2024')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 168  # 7 days
 
@@ -1257,7 +1257,7 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001"],
+    allow_origins=os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,https://infinea.vercel.app").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -1270,9 +1270,11 @@ async def startup_event():
     logger.info("Seeding database with demo micro-actions...")
     await seed_micro_actions()
     logger.info("Database seeded successfully!")
-    logger.info("Server ready at http://localhost:8000")
-    logger.info("API docs at http://localhost:8000/docs")
+    port = os.environ.get("PORT", "8000")
+    logger.info(f"Server ready on port {port}")
+    logger.info("API docs at /docs")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
