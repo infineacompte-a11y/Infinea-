@@ -17,6 +17,10 @@ import {
   Flame,
   Clock,
   Loader2,
+  Brain,
+  CheckCircle,
+  AlertCircle,
+  Lightbulb,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
@@ -52,10 +56,24 @@ export default function ProgressStats() {
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [analysis, setAnalysis] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
 
   useEffect(() => {
     fetchStats();
   }, []);
+
+  // Fetch AI analysis after stats load
+  useEffect(() => {
+    if (stats && stats.total_sessions > 1) {
+      setAnalysisLoading(true);
+      authFetch(`${API}/ai/weekly-analysis`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => { if (data) setAnalysis(data); })
+        .catch(() => {})
+        .finally(() => setAnalysisLoading(false));
+    }
+  }, [stats]);
 
   const fetchStats = async () => {
     try {
@@ -273,6 +291,77 @@ export default function ProgressStats() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* AI Analysis Card */}
+              {(analysisLoading || analysis) && (
+                <Card className="mb-8 border-primary/20">
+                  <CardHeader>
+                    <CardTitle className="font-heading text-lg flex items-center gap-2">
+                      <Brain className="w-5 h-5 text-primary" />
+                      Analyse IA de vos progrès
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {analysisLoading ? (
+                      <div className="space-y-3">
+                        <div className="h-4 bg-muted rounded w-full animate-pulse" />
+                        <div className="h-4 bg-muted rounded w-3/4 animate-pulse" />
+                        <div className="h-4 bg-muted rounded w-1/2 animate-pulse" />
+                      </div>
+                    ) : analysis && (
+                      <div className="space-y-4">
+                        <p className="text-sm">{analysis.summary}</p>
+
+                        {analysis.strengths?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-emerald-500 mb-2">Points forts</p>
+                            <div className="space-y-1">
+                              {analysis.strengths.map((s, i) => (
+                                <div key={i} className="flex items-start gap-2 text-sm">
+                                  <CheckCircle className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                                  <span>{s}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {analysis.improvement_areas?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-amber-500 mb-2">Axes d'amélioration</p>
+                            <div className="space-y-1">
+                              {analysis.improvement_areas.map((s, i) => (
+                                <div key={i} className="flex items-start gap-2 text-sm">
+                                  <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                                  <span>{s}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {analysis.trends && (
+                          <p className="text-sm text-muted-foreground">{analysis.trends}</p>
+                        )}
+
+                        {analysis.personalized_tips?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-primary mb-2">Conseils personnalisés</p>
+                            <div className="space-y-1">
+                              {analysis.personalized_tips.map((tip, i) => (
+                                <div key={i} className="flex items-start gap-2 text-sm">
+                                  <Lightbulb className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                                  <span>{tip}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Charts */}
               <div className="grid lg:grid-cols-2 gap-6 mb-8">

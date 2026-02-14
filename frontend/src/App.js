@@ -16,6 +16,7 @@ import ProfilePage from "@/pages/ProfilePage";
 import BadgesPage from "@/pages/BadgesPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import B2BDashboard from "@/pages/B2BDashboard";
+import OnboardingPage from "@/pages/OnboardingPage";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
 export const API = `${BACKEND_URL}/api`;
@@ -194,6 +195,12 @@ const ProtectedRoute = ({ children }) => {
     return null;
   }
 
+  // Redirect to onboarding if not completed (except if already on onboarding page)
+  if (user && user.onboarding_completed === false && !location.pathname.startsWith("/onboarding")) {
+    navigate("/onboarding", { replace: true });
+    return null;
+  }
+
   return children;
 };
 
@@ -212,6 +219,14 @@ function AppRouter() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/pricing" element={<PricingPage />} />
+      <Route
+        path="/onboarding"
+        element={
+          <ProtectedRoute>
+            <OnboardingPage />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/dashboard"
         element={

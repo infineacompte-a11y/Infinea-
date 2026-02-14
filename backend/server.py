@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 import jwt
 import bcrypt
 import httpx
+import json
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -105,6 +106,26 @@ class ProgressStats(BaseModel):
     sessions_by_category: Dict[str, int]
     recent_sessions: List[Dict[str, Any]]
 
+class OnboardingProfile(BaseModel):
+    goals: List[str]  # ["learning", "productivity", "well_being"]
+    availability_slots: List[str]  # ["morning", "lunch", "evening"]
+    daily_minutes: int  # 5, 10, or 15
+    energy_high: str  # "morning", "afternoon", "evening"
+    energy_low: str  # "morning", "afternoon", "evening"
+    interests: Dict[str, List[str]]  # {"learning": ["langues", "coding"], ...}
+
+class CustomActionRequest(BaseModel):
+    description: str
+    preferred_category: Optional[str] = None
+    preferred_duration: Optional[int] = None
+
+class DebriefRequest(BaseModel):
+    session_id: str
+    action_title: str
+    action_category: str
+    actual_duration: int
+    notes: Optional[str] = None
+
 # ============== HELPER FUNCTIONS ==============
 
 def create_token(user_id: str) -> str:
@@ -176,6 +197,66 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
+# ============== AI HELPER FUNCTIONS ==============
+
+async def call_ai(session_suffix: str, system_message: str, prompt: str) -> Optional[str]:
+    """Shared AI call wrapper with fallback."""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    if not api_key:
+        return None
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"{session_suffix}_{datetime.now().timestamp()}",
+            system_message=system_message
+        )
+        chat.with_model("openai", "gpt-5.2")
+        user_message = UserMessage(text=prompt)
+        response = await chat.send_message(user_message)
+        return response
+    except Exception as e:
+        logger.error(f"AI call error ({session_suffix}): {e}")
+        return None
+
+def parse_ai_json(response: Optional[str]) -> Optional[dict]:
+    """Extract JSON from AI response."""
+    if not response:
+        return None
+    try:
+        json_start = response.find('{')
+        json_end = response.rfind('}') + 1
+        if json_start != -1 and json_end > json_start:
+            return json.loads(response[json_start:json_end])
+    except Exception:
+        pass
+    return None
+
+async def build_user_context(user: dict) -> str:
+    """Build a context string from user profile for AI prompts."""
+    profile = user.get("user_profile")
+    if not profile:
+        return f"Utilisateur: {user.get('name', 'Inconnu')}, streak: {user.get('streak_days', 0)} jours, temps total: {user.get('total_time_invested', 0)} min"
+
+    goals_map = {"learning": "apprentissage", "productivity": "productivité", "well_being": "bien-être"}
+    goals = ", ".join([goals_map.get(g, g) for g in profile.get("goals", [])])
+
+    return f"""Profil utilisateur:
+- Nom: {user.get('name', 'Inconnu')}
+- Objectifs: {goals}
+- Disponibilité: {', '.join(profile.get('availability_slots', []))} ({profile.get('daily_minutes', 10)} min/jour)
+- Énergie haute: {profile.get('energy_high', 'matin')}
+- Énergie basse: {profile.get('energy_low', 'après-midi')}
+- Intérêts: {json.dumps(profile.get('interests', {}), ensure_ascii=False)}
+- Streak actuel: {user.get('streak_days', 0)} jours
+- Temps total investi: {user.get('total_time_invested', 0)} minutes
+- Abonnement: {user.get('subscription_tier', 'free')}"""
+
+AI_SYSTEM_MESSAGE = """Tu es le coach IA InFinea, expert en productivité, apprentissage et bien-être.
+Tu aides les utilisateurs à transformer leurs moments perdus en micro-victoires.
+Réponds toujours en français, de manière concise, chaleureuse et motivante.
+Tes réponses doivent toujours être au format JSON quand demandé."""
+
 # ============== AUTH ROUTES ==============
 
 @api_router.post("/auth/register")
@@ -196,11 +277,13 @@ async def register(user_data: UserCreate, response: Response):
         "total_time_invested": 0,
         "streak_days": 0,
         "last_session_date": None,
+        "onboarding_completed": False,
+        "user_profile": None,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
-    
+
     await db.users.insert_one(user_doc)
-    
+
     token = create_token(user_id)
     response.set_cookie(
         key="session_token",
@@ -211,12 +294,13 @@ async def register(user_data: UserCreate, response: Response):
         path="/",
         max_age=JWT_EXPIRATION_HOURS * 3600
     )
-    
+
     return {
         "user_id": user_id,
         "email": user_data.email,
         "name": user_data.name,
         "subscription_tier": "free",
+        "onboarding_completed": False,
         "token": token
     }
 
@@ -249,6 +333,7 @@ async def login(user_data: UserLogin, response: Response):
         "name": user["name"],
         "picture": user.get("picture"),
         "subscription_tier": user.get("subscription_tier", "free"),
+        "onboarding_completed": user.get("onboarding_completed", True),
         "token": token
     }
 
@@ -297,6 +382,8 @@ async def process_oauth_session(request: Request, response: Response):
             "total_time_invested": 0,
             "streak_days": 0,
             "last_session_date": None,
+            "onboarding_completed": False,
+            "user_profile": None,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.users.insert_one(user_doc)
@@ -333,6 +420,7 @@ async def process_oauth_session(request: Request, response: Response):
         "name": user["name"],
         "picture": user.get("picture"),
         "subscription_tier": user.get("subscription_tier", "free"),
+        "onboarding_completed": user.get("onboarding_completed", True),
         "token": jwt_token
     }
 
@@ -345,7 +433,8 @@ async def get_me(user: dict = Depends(get_current_user)):
         "picture": user.get("picture"),
         "subscription_tier": user.get("subscription_tier", "free"),
         "total_time_invested": user.get("total_time_invested", 0),
-        "streak_days": user.get("streak_days", 0)
+        "streak_days": user.get("streak_days", 0),
+        "onboarding_completed": user.get("onboarding_completed", True)
     }
 
 @api_router.post("/auth/refresh")
@@ -380,6 +469,67 @@ async def logout(request: Request, response: Response):
     
     response.delete_cookie(key="session_token", path="/", samesite="none", secure=True)
     return {"message": "Logged out successfully"}
+
+# ============== ONBOARDING ROUTES ==============
+
+@api_router.post("/onboarding/profile")
+async def save_onboarding_profile(
+    profile: OnboardingProfile,
+    user: dict = Depends(get_current_user)
+):
+    """Save user onboarding profile and generate AI welcome message"""
+    profile_dict = profile.model_dump()
+
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "user_profile": profile_dict,
+            "onboarding_completed": True
+        }}
+    )
+
+    # Update user dict for AI context
+    user["user_profile"] = profile_dict
+    user_context = await build_user_context(user)
+
+    goals_map = {"learning": "apprentissage", "productivity": "productivité", "well_being": "bien-être"}
+    goals_fr = ", ".join([goals_map.get(g, g) for g in profile.goals])
+
+    prompt = f"""{user_context}
+
+L'utilisateur vient de créer son compte et de compléter son profil.
+Ses objectifs principaux sont : {goals_fr}.
+
+Génère un message d'accueil personnalisé et chaleureux, puis recommande une première micro-action adaptée à son profil.
+Réponds en JSON:
+{{
+    "welcome_message": "Message d'accueil personnalisé (2-3 phrases)",
+    "first_recommendation": "Description de la première action recommandée (1-2 phrases)"
+}}"""
+
+    ai_response = await call_ai(
+        f"onboarding_{user['user_id']}",
+        AI_SYSTEM_MESSAGE,
+        prompt
+    )
+    ai_result = parse_ai_json(ai_response)
+
+    welcome = ai_result.get("welcome_message", f"Bienvenue sur InFinea, {user.get('name', '')} ! Prêt(e) à transformer vos moments perdus en micro-victoires ?") if ai_result else f"Bienvenue sur InFinea, {user.get('name', '')} ! Prêt(e) à transformer vos moments perdus en micro-victoires ?"
+    recommendation = ai_result.get("first_recommendation", "Commencez par une session de respiration de 2 minutes pour vous recentrer.") if ai_result else "Commencez par une session de respiration de 2 minutes pour vous recentrer."
+
+    return {
+        "welcome_message": welcome,
+        "first_recommendation": recommendation,
+        "user_profile": profile_dict
+    }
+
+@api_router.get("/onboarding/profile")
+async def get_onboarding_profile(user: dict = Depends(get_current_user)):
+    """Get user's onboarding profile"""
+    profile = user.get("user_profile")
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return profile
 
 # ============== MICRO-ACTIONS ROUTES ==============
 
@@ -528,6 +678,339 @@ Format ta réponse en JSON avec:
             "recommended_actions": available_actions[:3]
         }
 
+# ============== AI COACH ROUTE ==============
+
+@api_router.get("/ai/coach")
+async def get_ai_coach(user: dict = Depends(get_current_user)):
+    """Get personalized AI coach message for dashboard"""
+    user_context = await build_user_context(user)
+
+    # Get recent sessions
+    recent_sessions = await db.user_sessions_history.find(
+        {"user_id": user["user_id"], "completed": True},
+        {"_id": 0}
+    ).sort("started_at", -1).limit(5).to_list(5)
+
+    recent_info = ""
+    if recent_sessions:
+        recent_titles = [s.get("action_title", "action") for s in recent_sessions[:3]]
+        recent_info = f"\nSessions récentes: {', '.join(recent_titles)}"
+
+    # Determine time of day
+    from datetime import datetime as dt
+    hour = dt.now().hour
+    time_of_day = "matin" if hour < 12 else "après-midi" if hour < 18 else "soir"
+    day_names = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+    day_of_week = day_names[dt.now().weekday()]
+
+    prompt = f"""{user_context}{recent_info}
+
+Il est actuellement le {time_of_day} ({day_of_week}).
+Le streak actuel est de {user.get('streak_days', 0)} jours.
+
+Génère un message de coach personnalisé pour l'accueillir sur son dashboard.
+Propose proactivement une action adaptée au moment de la journée et à son profil.
+Réponds en JSON:
+{{
+    "greeting": "Message d'accueil personnalisé (1-2 phrases)",
+    "suggestion": "Suggestion d'action concrète (1 phrase)",
+    "context_note": "Note contextuelle courte liée au moment/streak (1 phrase)"
+}}"""
+
+    ai_response = await call_ai(f"coach_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt)
+    ai_result = parse_ai_json(ai_response)
+
+    # Get a suggested action
+    profile = user.get("user_profile", {}) or {}
+    goals = profile.get("goals", [])
+    query = {}
+    if goals:
+        query["category"] = {"$in": goals}
+    if user.get("subscription_tier") == "free":
+        query["is_premium"] = False
+    actions = await db.micro_actions.find(query, {"_id": 0}).to_list(5)
+    suggested_action_id = actions[0]["action_id"] if actions else None
+
+    if ai_result:
+        return {
+            "greeting": ai_result.get("greeting", f"Bonjour {user.get('name', '')} !"),
+            "suggestion": ai_result.get("suggestion", "Commencez une micro-action pour avancer."),
+            "suggested_action_id": suggested_action_id,
+            "context_note": ai_result.get("context_note", f"C'est le {time_of_day}, bon moment pour progresser.")
+        }
+
+    return {
+        "greeting": f"Bonjour {user.get('name', '').split(' ')[0]} ! Prêt(e) pour une micro-victoire ?",
+        "suggestion": "Profitez de quelques minutes pour progresser vers vos objectifs.",
+        "suggested_action_id": suggested_action_id,
+        "context_note": f"C'est le {time_of_day}, idéal pour une micro-action."
+    }
+
+# ============== AI DEBRIEF ROUTE ==============
+
+@api_router.post("/ai/debrief")
+async def get_ai_debrief(
+    debrief_req: DebriefRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Get AI debrief after completing a session"""
+    user_context = await build_user_context(user)
+
+    notes_info = f"\nNotes de l'utilisateur: {debrief_req.notes}" if debrief_req.notes else ""
+
+    prompt = f"""{user_context}
+
+L'utilisateur vient de terminer une session:
+- Action: {debrief_req.action_title} (catégorie: {debrief_req.action_category})
+- Durée réelle: {debrief_req.actual_duration} minutes{notes_info}
+
+Génère un débrief personnalisé et motivant. Suggère aussi une prochaine action.
+Réponds en JSON:
+{{
+    "feedback": "Feedback personnalisé sur la session (1-2 phrases)",
+    "encouragement": "Message de motivation (1 phrase)",
+    "next_suggestion": "Suggestion pour la prochaine action (1 phrase)"
+}}"""
+
+    ai_response = await call_ai(f"debrief_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt)
+    ai_result = parse_ai_json(ai_response)
+
+    # Get a next action suggestion
+    query = {"action_id": {"$ne": f"action_{debrief_req.action_category}"}}
+    if user.get("subscription_tier") == "free":
+        query["is_premium"] = False
+    next_actions = await db.micro_actions.find(query, {"_id": 0}).to_list(5)
+    next_action_id = next_actions[0]["action_id"] if next_actions else None
+
+    if ai_result:
+        return {
+            "feedback": ai_result.get("feedback", "Bravo pour cette session !"),
+            "encouragement": ai_result.get("encouragement", "Chaque minute compte."),
+            "next_suggestion": ai_result.get("next_suggestion", "Continuez sur cette lancée !"),
+            "next_action_id": next_action_id
+        }
+
+    return {
+        "feedback": f"Excellente session de {debrief_req.actual_duration} min sur {debrief_req.action_title} !",
+        "encouragement": "Chaque micro-action vous rapproche de vos objectifs.",
+        "next_suggestion": "Prenez une pause et revenez quand vous êtes prêt(e) pour la suite.",
+        "next_action_id": next_action_id
+    }
+
+# ============== AI WEEKLY ANALYSIS ROUTE ==============
+
+@api_router.get("/ai/weekly-analysis")
+async def get_weekly_analysis(user: dict = Depends(get_current_user)):
+    """Get AI-powered weekly progress analysis"""
+    user_context = await build_user_context(user)
+
+    # Get all completed sessions for this user
+    all_sessions = await db.user_sessions_history.find(
+        {"user_id": user["user_id"], "completed": True},
+        {"_id": 0}
+    ).sort("started_at", -1).to_list(100)
+
+    if len(all_sessions) < 2:
+        return {
+            "summary": "Pas encore assez de données pour une analyse complète. Continuez vos micro-actions !",
+            "strengths": [],
+            "improvement_areas": [],
+            "trends": "Commencez à accumuler des sessions pour voir vos tendances.",
+            "personalized_tips": ["Essayez de faire au moins une micro-action par jour pour créer une habitude."]
+        }
+
+    # Compute stats
+    category_counts = {}
+    total_duration = 0
+    for s in all_sessions:
+        cat = s.get("category", "unknown")
+        category_counts[cat] = category_counts.get(cat, 0) + 1
+        total_duration += s.get("actual_duration", 0)
+
+    categories_fr = {"learning": "apprentissage", "productivity": "productivité", "well_being": "bien-être"}
+    cat_summary = ", ".join([f"{categories_fr.get(k, k)}: {v} sessions" for k, v in category_counts.items()])
+
+    prompt = f"""{user_context}
+
+Statistiques de l'utilisateur:
+- Total sessions: {len(all_sessions)}
+- Temps total: {total_duration} minutes
+- Répartition: {cat_summary}
+- Streak: {user.get('streak_days', 0)} jours
+
+Analyse les progrès et génère un bilan personnalisé.
+Réponds en JSON:
+{{
+    "summary": "Résumé global (2-3 phrases)",
+    "strengths": ["Point fort 1", "Point fort 2"],
+    "improvement_areas": ["Axe d'amélioration 1"],
+    "trends": "Description des tendances (1-2 phrases)",
+    "personalized_tips": ["Conseil personnalisé 1", "Conseil personnalisé 2"]
+}}"""
+
+    ai_response = await call_ai(f"analysis_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt)
+    ai_result = parse_ai_json(ai_response)
+
+    if ai_result:
+        return {
+            "summary": ai_result.get("summary", "Bonne progression globale."),
+            "strengths": ai_result.get("strengths", []),
+            "improvement_areas": ai_result.get("improvement_areas", []),
+            "trends": ai_result.get("trends", ""),
+            "personalized_tips": ai_result.get("personalized_tips", [])
+        }
+
+    return {
+        "summary": f"Vous avez complété {len(all_sessions)} sessions pour un total de {total_duration} minutes. Continuez ainsi !",
+        "strengths": [f"Régularité avec {user.get('streak_days', 0)} jours de streak"],
+        "improvement_areas": ["Diversifiez vos catégories d'actions"],
+        "trends": f"Vous investissez en moyenne {total_duration // max(len(all_sessions), 1)} min par session.",
+        "personalized_tips": ["Essayez une nouvelle catégorie cette semaine."]
+    }
+
+# ============== AI STREAK CHECK ROUTE ==============
+
+@api_router.post("/ai/streak-check")
+async def check_streak_risk(user: dict = Depends(get_current_user)):
+    """Check if user's streak is at risk and send AI notification"""
+    streak = user.get("streak_days", 0)
+    if streak == 0:
+        return {"at_risk": False, "notification_sent": False, "message": None}
+
+    last_session_date = user.get("last_session_date")
+    today = datetime.now(timezone.utc).date()
+
+    if last_session_date:
+        if isinstance(last_session_date, str):
+            last_date = datetime.fromisoformat(last_session_date).date()
+        else:
+            last_date = last_session_date.date() if hasattr(last_session_date, 'date') else last_session_date
+
+        if last_date == today:
+            return {"at_risk": False, "notification_sent": False, "message": None}
+
+        if last_date == today - timedelta(days=1):
+            # Streak at risk - no session today
+            user_context = await build_user_context(user)
+            prompt = f"""{user_context}
+
+Le streak de {streak} jours de l'utilisateur est en danger ! Il n'a pas encore fait de session aujourd'hui.
+Génère un message d'alerte motivant et court pour l'encourager à maintenir son streak.
+Réponds en JSON: {{"title": "Titre court", "message": "Message motivant (1-2 phrases)"}}"""
+
+            ai_response = await call_ai(f"streak_alert_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt)
+            ai_result = parse_ai_json(ai_response)
+
+            title = ai_result.get("title", f"Streak de {streak}j en danger !") if ai_result else f"Streak de {streak}j en danger !"
+            message = ai_result.get("message", f"Faites une micro-action de 2 minutes pour maintenir votre streak de {streak} jours !") if ai_result else f"Faites une micro-action de 2 minutes pour maintenir votre streak de {streak} jours !"
+
+            # Check if we already sent a streak alert today
+            existing = await db.notifications.find_one({
+                "user_id": user["user_id"],
+                "type": "streak_alert",
+                "created_at": {"$gte": datetime.combine(today, datetime.min.time()).isoformat()}
+            })
+
+            if not existing:
+                notification = {
+                    "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                    "user_id": user["user_id"],
+                    "type": "streak_alert",
+                    "title": title,
+                    "message": message,
+                    "icon": "flame",
+                    "read": False,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.notifications.insert_one(notification)
+                return {"at_risk": True, "notification_sent": True, "message": message}
+
+            return {"at_risk": True, "notification_sent": False, "message": message}
+
+    return {"at_risk": False, "notification_sent": False, "message": None}
+
+# ============== AI CUSTOM ACTION ROUTES ==============
+
+@api_router.post("/ai/create-action")
+async def create_custom_action(
+    action_req: CustomActionRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Create a custom micro-action using AI"""
+    user_context = await build_user_context(user)
+
+    cat_hint = f"\nCatégorie préférée: {action_req.preferred_category}" if action_req.preferred_category else ""
+    dur_hint = f"\nDurée souhaitée: {action_req.preferred_duration} minutes" if action_req.preferred_duration else ""
+
+    prompt = f"""{user_context}
+
+L'utilisateur souhaite créer une micro-action personnalisée.
+Sa description: "{action_req.description}"{cat_hint}{dur_hint}
+
+Génère une micro-action complète et structurée.
+Réponds en JSON:
+{{
+    "title": "Titre court et accrocheur",
+    "description": "Description en 1-2 phrases",
+    "category": "learning|productivity|well_being",
+    "duration_min": 2,
+    "duration_max": 10,
+    "energy_level": "low|medium|high",
+    "instructions": ["Étape 1", "Étape 2", "Étape 3", "Étape 4"],
+    "icon": "sparkles"
+}}"""
+
+    ai_response = await call_ai(f"create_action_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt)
+    ai_result = parse_ai_json(ai_response)
+
+    action_id = f"custom_{uuid.uuid4().hex[:12]}"
+
+    if ai_result:
+        action = {
+            "action_id": action_id,
+            "title": ai_result.get("title", action_req.description[:50]),
+            "description": ai_result.get("description", action_req.description),
+            "category": ai_result.get("category", action_req.preferred_category or "productivity"),
+            "duration_min": ai_result.get("duration_min", 2),
+            "duration_max": ai_result.get("duration_max", action_req.preferred_duration or 10),
+            "energy_level": ai_result.get("energy_level", "medium"),
+            "instructions": ai_result.get("instructions", [action_req.description]),
+            "icon": ai_result.get("icon", "sparkles"),
+            "is_premium": False,
+            "is_custom": True,
+            "created_by": user["user_id"],
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+    else:
+        action = {
+            "action_id": action_id,
+            "title": action_req.description[:50],
+            "description": action_req.description,
+            "category": action_req.preferred_category or "productivity",
+            "duration_min": 2,
+            "duration_max": action_req.preferred_duration or 10,
+            "energy_level": "medium",
+            "instructions": [action_req.description],
+            "icon": "sparkles",
+            "is_premium": False,
+            "is_custom": True,
+            "created_by": user["user_id"],
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+
+    await db.user_custom_actions.insert_one({**action, "_id": None})
+    action.pop("_id", None)
+    return {"action": action}
+
+@api_router.get("/actions/custom")
+async def get_custom_actions(user: dict = Depends(get_current_user)):
+    """Get user's custom AI-generated actions"""
+    actions = await db.user_custom_actions.find(
+        {"created_by": user["user_id"]},
+        {"_id": 0}
+    ).to_list(50)
+    return actions
+
 # ============== SESSION TRACKING ROUTES ==============
 
 @api_router.post("/sessions/start")
@@ -537,6 +1020,12 @@ async def start_session(
 ):
     """Start a micro-action session"""
     action = await db.micro_actions.find_one({"action_id": session_data.action_id}, {"_id": 0})
+    if not action:
+        # Check custom actions
+        action = await db.user_custom_actions.find_one(
+            {"action_id": session_data.action_id, "created_by": user["user_id"]},
+            {"_id": 0}
+        )
     if not action:
         raise HTTPException(status_code=404, detail="Action not found")
     
@@ -639,7 +1128,28 @@ async def complete_session(
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
             await db.notifications.insert_one(notification)
-        
+
+        # Generate AI streak motivation notification
+        if new_streak > 1:
+            try:
+                streak_prompt = f"L'utilisateur {user_doc.get('name', '')} vient de compléter une session et a maintenant un streak de {new_streak} jours. Génère un message de motivation court en français. Réponds en JSON: {{\"title\": \"Titre court\", \"message\": \"Message motivant (1-2 phrases)\"}}"
+                ai_resp = await call_ai(f"streak_{user['user_id']}", AI_SYSTEM_MESSAGE, streak_prompt)
+                streak_msg = parse_ai_json(ai_resp)
+                if streak_msg:
+                    streak_notif = {
+                        "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                        "user_id": user["user_id"],
+                        "type": "streak_motivation",
+                        "title": streak_msg.get("title", f"Streak de {new_streak} jours !"),
+                        "message": streak_msg.get("message", f"Bravo pour votre streak de {new_streak} jours !"),
+                        "icon": "flame",
+                        "read": False,
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    await db.notifications.insert_one(streak_notif)
+            except Exception as e:
+                logger.error(f"Streak motivation error: {e}")
+
         return {
             "message": "Session completed!",
             "time_added": completion.actual_duration,

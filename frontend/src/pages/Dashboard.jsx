@@ -67,6 +67,35 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [coachMessage, setCoachMessage] = useState(null);
+  const [coachLoading, setCoachLoading] = useState(true);
+
+  // AI Coach - auto-fetch on load
+  useEffect(() => {
+    const fetchCoach = async () => {
+      try {
+        const response = await authFetch(`${API}/ai/coach`);
+        if (response.ok) {
+          const data = await response.json();
+          setCoachMessage(data);
+        }
+      } catch (e) { /* silent */ }
+      finally { setCoachLoading(false); }
+    };
+    if (user) fetchCoach();
+  }, [user]);
+
+  // Streak check
+  useEffect(() => {
+    const checkStreak = async () => {
+      if (user?.streak_days > 0) {
+        try {
+          await authFetch(`${API}/ai/streak-check`, { method: "POST" });
+        } catch (e) { /* silent */ }
+      }
+    };
+    if (user) checkStreak();
+  }, [user]);
 
   const handleLogout = async () => {
     await logout();
@@ -253,6 +282,46 @@ export default function Dashboard() {
               Que pouvez-vous accomplir maintenant ?
             </p>
           </div>
+
+          {/* AI Coach Card */}
+          {(coachLoading || coachMessage) && (
+            <Card className="mb-8 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+              <CardContent className="p-5">
+                {coachLoading ? (
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-muted rounded w-3/4 animate-pulse" />
+                      <div className="h-3 bg-muted rounded w-1/2 animate-pulse" />
+                    </div>
+                  </div>
+                ) : coachMessage && (
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Sparkles className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium mb-1">{coachMessage.greeting}</p>
+                      <p className="text-sm text-muted-foreground mb-2">{coachMessage.suggestion}</p>
+                      <p className="text-xs text-muted-foreground/70">{coachMessage.context_note}</p>
+                      {coachMessage.suggested_action_id && (
+                        <Button
+                          size="sm"
+                          className="mt-3 rounded-lg"
+                          onClick={() => startSession(coachMessage.suggested_action_id)}
+                        >
+                          <Zap className="w-4 h-4 mr-1" />
+                          Commencer
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Stats Overview */}
           <div className="grid grid-cols-3 gap-4 mb-8">

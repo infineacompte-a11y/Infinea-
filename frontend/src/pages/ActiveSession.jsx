@@ -45,6 +45,8 @@ export default function ActiveSession() {
   const [isCompleting, setIsCompleting] = useState(false);
   const [showCompletion, setShowCompletion] = useState(false);
   const [completionData, setCompletionData] = useState(null);
+  const [debrief, setDebrief] = useState(null);
+  const [debriefLoading, setDebriefLoading] = useState(false);
 
   // Timer effect
   useEffect(() => {
@@ -93,6 +95,26 @@ export default function ActiveSession() {
       
       if (completed) {
         toast.success("Bravo ! Session terminée avec succès !");
+        // Fetch AI debrief
+        setDebriefLoading(true);
+        try {
+          const debriefResp = await authFetch(`${API}/ai/debrief`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              session_id: sessionId,
+              action_title: session.action.title,
+              action_category: session.action.category,
+              actual_duration: Math.ceil(elapsedTime / 60),
+              notes: notes || null,
+            }),
+          });
+          if (debriefResp.ok) {
+            const debriefData = await debriefResp.json();
+            setDebrief(debriefData);
+          }
+        } catch (e) { /* silent, use default */ }
+        finally { setDebriefLoading(false); }
       }
     } catch (error) {
       toast.error("Erreur lors de la sauvegarde");
@@ -133,11 +155,28 @@ export default function ActiveSession() {
             <Trophy className="w-12 h-12 text-emerald-500" />
           </div>
           <h1 className="font-heading text-3xl font-bold mb-2" data-testid="completion-title">
-            Félicitations ! 🎉
+            {debrief ? debrief.feedback : "Félicitations !"}
           </h1>
-          <p className="text-muted-foreground mb-8">
-            Vous avez transformé {Math.ceil(elapsedTime / 60)} minutes en progrès !
+          <p className="text-muted-foreground mb-4">
+            {debrief ? debrief.encouragement : `Vous avez transformé ${Math.ceil(elapsedTime / 60)} minutes en progrès !`}
           </p>
+
+          {/* AI Debrief - Next suggestion */}
+          {debriefLoading ? (
+            <div className="mb-6 p-4 rounded-xl bg-primary/5 border border-primary/20">
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+                <div className="h-3 bg-muted rounded w-2/3 animate-pulse" />
+              </div>
+            </div>
+          ) : debrief?.next_suggestion ? (
+            <Card className="mb-6 border-primary/20 bg-primary/5">
+              <CardContent className="p-4 flex items-start gap-3">
+                <Sparkles className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-left">{debrief.next_suggestion}</p>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <div className="grid grid-cols-2 gap-4 mb-8">
             <Card className="stat-card">

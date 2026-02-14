@@ -19,10 +19,14 @@ import {
   ArrowLeft,
   Lock,
   Loader2,
+  Plus,
+  Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 const categoryIcons = {
   learning: BookOpen,
@@ -49,10 +53,46 @@ export default function ActionsLibrary() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("all");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createDescription, setCreateDescription] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     fetchActions();
+    fetchCustomActions();
   }, []);
+
+  const fetchCustomActions = async () => {
+    try {
+      const response = await authFetch(`${API}/actions/custom`);
+      if (response.ok) {
+        const data = await response.json();
+        setActions((prev) => [...prev, ...data]);
+      }
+    } catch (e) { /* silent */ }
+  };
+
+  const handleCreateAction = async () => {
+    if (!createDescription.trim()) return;
+    setIsCreating(true);
+    try {
+      const response = await authFetch(`${API}/ai/create-action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: createDescription }),
+      });
+      if (!response.ok) throw new Error("Erreur");
+      const data = await response.json();
+      setActions((prev) => [...prev, data.action]);
+      setShowCreateDialog(false);
+      setCreateDescription("");
+      toast.success(`Action "${data.action.title}" créée !`);
+    } catch (error) {
+      toast.error("Erreur lors de la création de l'action");
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   const fetchActions = async () => {
     try {
@@ -202,14 +242,66 @@ export default function ActionsLibrary() {
       <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
         <div className="max-w-5xl mx-auto">
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="library-title">
-              Bibliothèque d'actions
-            </h1>
-            <p className="text-muted-foreground">
-              Explorez toutes les micro-actions disponibles
-            </p>
+          <div className="mb-8 flex items-start justify-between">
+            <div>
+              <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="library-title">
+                Bibliothèque d'actions
+              </h1>
+              <p className="text-muted-foreground">
+                Explorez toutes les micro-actions disponibles
+              </p>
+            </div>
+            <Button
+              onClick={() => setShowCreateDialog(true)}
+              variant="outline"
+              className="rounded-xl flex-shrink-0"
+            >
+              <Wand2 className="w-4 h-4 mr-2" />
+              Créer avec l'IA
+            </Button>
           </div>
+
+          {/* AI Create Action Dialog */}
+          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Wand2 className="w-5 h-5 text-primary" />
+                  Créer une action personnalisée
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Décrivez ce sur quoi vous aimeriez travailler et l'IA créera une micro-action sur mesure.
+                  </p>
+                  <Textarea
+                    placeholder="Ex: Je veux améliorer mon anglais en apprenant du vocabulaire professionnel..."
+                    value={createDescription}
+                    onChange={(e) => setCreateDescription(e.target.value)}
+                    className="min-h-24 resize-none"
+                  />
+                </div>
+                <Button
+                  onClick={handleCreateAction}
+                  disabled={isCreating || !createDescription.trim()}
+                  className="w-full rounded-xl"
+                >
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Génération en cours...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Générer l'action
+                    </>
+                  )}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* Category Tabs */}
           <Tabs value={activeCategory} onValueChange={setActiveCategory} className="mb-8">
@@ -257,6 +349,12 @@ export default function ActionsLibrary() {
                           <div>
                             <div className="flex items-center gap-2 mb-1">
                               <h3 className="font-medium">{action.title}</h3>
+                              {action.is_custom && (
+                                <Badge variant="secondary" className="text-xs bg-primary/10 text-primary">
+                                  <Wand2 className="w-3 h-3 mr-1" />
+                                  Personnalisé
+                                </Badge>
+                              )}
                               {action.is_premium && (
                                 <Badge variant="secondary" className="text-xs flex items-center gap-1">
                                   {isPremiumLocked && <Lock className="w-3 h-3" />}

@@ -63,7 +63,7 @@ export default function RegisterPage() {
 
       setUser(data);
       toast.success("Compte créé avec succès !");
-      navigate("/dashboard", { state: { user: data } });
+      navigate("/onboarding", { state: { user: data } });
     } catch (error) {
       toast.error(error.message);
     } finally {
