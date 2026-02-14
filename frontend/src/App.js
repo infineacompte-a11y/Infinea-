@@ -17,6 +17,7 @@ import BadgesPage from "@/pages/BadgesPage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import B2BDashboard from "@/pages/B2BDashboard";
 import OnboardingPage from "@/pages/OnboardingPage";
+import IntegrationsPage from "@/pages/IntegrationsPage";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
 export const API = `${BACKEND_URL}/api`;
@@ -280,6 +281,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <NotificationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/integrations"
+        element={
+          <ProtectedRoute>
+            <IntegrationsPage />
           </ProtectedRoute>
         }
       />

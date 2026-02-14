@@ -18,6 +18,7 @@ import {
   ChevronRight,
   Settings,
   CreditCard,
+  Plug,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth } from "@/App";
@@ -250,6 +251,15 @@ export default function ProfilePage() {
               <CardTitle className="font-heading text-lg">Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
+              <Link to="/integrations">
+                <button className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Plug className="w-5 h-5 text-primary" />
+                    <span>Hub d'Intégrations</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                </button>
+              </Link>
               <Link to="/progress">
                 <button className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors">
                   <div className="flex items-center gap-3">

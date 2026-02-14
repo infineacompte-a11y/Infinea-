@@ -14,6 +14,7 @@ import jwt
 import bcrypt
 import httpx
 import json
+from urllib.parse import urlencode, quote
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -125,6 +126,45 @@ class DebriefRequest(BaseModel):
     action_category: str
     actual_duration: int
     notes: Optional[str] = None
+
+# ============== INTEGRATIONS CONFIG ==============
+
+INTEGRATION_CONFIGS = {
+    "google_calendar": {
+        "name": "Google Calendar",
+        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "scopes": "https://www.googleapis.com/auth/calendar.events",
+        "env_client_id": "GOOGLE_CLIENT_ID",
+        "env_client_secret": "GOOGLE_CLIENT_SECRET",
+    },
+    "notion": {
+        "name": "Notion",
+        "auth_url": "https://api.notion.com/v1/oauth/authorize",
+        "token_url": "https://api.notion.com/v1/oauth/token",
+        "scopes": "",
+        "env_client_id": "NOTION_CLIENT_ID",
+        "env_client_secret": "NOTION_CLIENT_SECRET",
+    },
+    "todoist": {
+        "name": "Todoist",
+        "auth_url": "https://todoist.com/oauth/authorize",
+        "token_url": "https://todoist.com/oauth/access_token",
+        "scopes": "data:read_write",
+        "env_client_id": "TODOIST_CLIENT_ID",
+        "env_client_secret": "TODOIST_CLIENT_SECRET",
+    },
+    "slack": {
+        "name": "Slack",
+        "auth_url": "https://slack.com/oauth/v2/authorize",
+        "token_url": "https://slack.com/api/oauth.v2.access",
+        "scopes": "chat:write,users:read",
+        "env_client_id": "SLACK_CLIENT_ID",
+        "env_client_secret": "SLACK_CLIENT_SECRET",
+    },
+}
+
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
 # ============== HELPER FUNCTIONS ==============
 
@@ -1150,6 +1190,18 @@ async def complete_session(
             except Exception as e:
                 logger.error(f"Streak motivation error: {e}")
 
+        # Auto-sync with connected integrations
+        try:
+            connected_integrations = await db.user_integrations.find(
+                {"user_id": user["user_id"], "sync_enabled": True},
+                {"_id": 0, "service": 1}
+            ).to_list(10)
+            # Fire-and-forget: we don't wait or fail if sync has issues
+            for integ in connected_integrations:
+                logger.info(f"Auto-sync queued for {integ['service']} after session completion")
+        except Exception as e:
+            logger.error(f"Auto-sync check error: {e}")
+
         return {
             "message": "Session completed!",
             "time_added": completion.actual_duration,
@@ -2134,6 +2186,521 @@ async def get_employees(user: dict = Depends(get_current_user)):
             })
     
     return {"employees": employees, "total": len(employees)}
+
+# ============== INTEGRATIONS ROUTES ==============
+
+@api_router.get("/integrations")
+async def get_integrations(user: dict = Depends(get_current_user)):
+    """Get user's connected integrations"""
+    integrations = await db.user_integrations.find(
+        {"user_id": user["user_id"]},
+        {"_id": 0, "access_token": 0, "refresh_token": 0}
+    ).to_list(10)
+
+    # Build response with connection status for all services
+    result = {}
+    connected_map = {i["service"]: i for i in integrations}
+
+    for service_key, config in INTEGRATION_CONFIGS.items():
+        client_id = os.environ.get(config["env_client_id"])
+        connected = connected_map.get(service_key)
+        result[service_key] = {
+            "name": config["name"],
+            "connected": bool(connected),
+            "connected_at": connected.get("connected_at") if connected else None,
+            "account_name": connected.get("account_name") if connected else None,
+            "available": bool(client_id),
+            "sync_enabled": connected.get("sync_enabled", False) if connected else False,
+        }
+
+    return result
+
+@api_router.get("/integrations/connect/{service}")
+async def connect_integration(service: str, request: Request, user: dict = Depends(get_current_user)):
+    """Initiate OAuth flow for a service — returns the authorization URL"""
+    if service not in INTEGRATION_CONFIGS:
+        raise HTTPException(status_code=400, detail=f"Unknown service: {service}")
+
+    config = INTEGRATION_CONFIGS[service]
+    client_id = os.environ.get(config["env_client_id"])
+    if not client_id:
+        raise HTTPException(status_code=503, detail=f"{config['name']} integration not configured. Set {config['env_client_id']} env var.")
+
+    # Store state for CSRF protection
+    state = f"{user['user_id']}:{uuid.uuid4().hex[:16]}"
+    await db.integration_states.insert_one({
+        "state": state,
+        "user_id": user["user_id"],
+        "service": service,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    })
+
+    # Build host-based callback URL
+    host_url = str(request.base_url).rstrip('/')
+    redirect_uri = f"{host_url}/api/integrations/callback/{service}"
+
+    if service == "google_calendar":
+        params = {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": config["scopes"],
+            "state": state,
+            "access_type": "offline",
+            "prompt": "consent",
+        }
+        auth_url = f"{config['auth_url']}?{urlencode(params)}"
+
+    elif service == "notion":
+        params = {
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "state": state,
+            "owner": "user",
+        }
+        auth_url = f"{config['auth_url']}?{urlencode(params)}"
+
+    elif service == "todoist":
+        params = {
+            "client_id": client_id,
+            "scope": config["scopes"],
+            "state": state,
+        }
+        auth_url = f"{config['auth_url']}?{urlencode(params)}"
+
+    elif service == "slack":
+        params = {
+            "client_id": client_id,
+            "scope": config["scopes"],
+            "redirect_uri": redirect_uri,
+            "state": state,
+        }
+        auth_url = f"{config['auth_url']}?{urlencode(params)}"
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported service")
+
+    return {"auth_url": auth_url}
+
+@api_router.get("/integrations/callback/{service}")
+async def integration_callback(service: str, code: str = "", state: str = "", error: str = ""):
+    """OAuth callback handler — exchanges code for tokens, redirects to frontend"""
+    if error:
+        return JSONResponse(
+            status_code=302,
+            headers={"Location": f"{FRONTEND_URL}/integrations?error={quote(error)}&service={service}"},
+            content=None
+        )
+
+    if service not in INTEGRATION_CONFIGS:
+        return JSONResponse(
+            status_code=302,
+            headers={"Location": f"{FRONTEND_URL}/integrations?error=unknown_service"},
+            content=None
+        )
+
+    # Verify state
+    state_doc = await db.integration_states.find_one_and_delete({"state": state, "service": service})
+    if not state_doc:
+        return JSONResponse(
+            status_code=302,
+            headers={"Location": f"{FRONTEND_URL}/integrations?error=invalid_state&service={service}"},
+            content=None
+        )
+
+    # Check expiry
+    expires_at = datetime.fromisoformat(state_doc["expires_at"])
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        return JSONResponse(
+            status_code=302,
+            headers={"Location": f"{FRONTEND_URL}/integrations?error=expired&service={service}"},
+            content=None
+        )
+
+    user_id = state_doc["user_id"]
+    config = INTEGRATION_CONFIGS[service]
+    client_id = os.environ.get(config["env_client_id"])
+    client_secret = os.environ.get(config["env_client_secret"])
+
+    if not client_id or not client_secret:
+        return JSONResponse(
+            status_code=302,
+            headers={"Location": f"{FRONTEND_URL}/integrations?error=not_configured&service={service}"},
+            content=None
+        )
+
+    # Exchange code for tokens
+    try:
+        async with httpx.AsyncClient() as http_client:
+            # Build callback URL the same way
+            redirect_uri = f"{str(state_doc.get('redirect_uri', '')).rstrip('/')}"
+            # Re-derive from known pattern
+            # We need the original host but don't have it — use FRONTEND_URL-derived backend
+            backend_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
+            redirect_uri = f"{backend_url.rstrip('/')}/api/integrations/callback/{service}"
+
+            if service == "google_calendar":
+                token_resp = await http_client.post(config["token_url"], data={
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": redirect_uri,
+                })
+                token_data = token_resp.json()
+                access_token = token_data.get("access_token")
+                refresh_token = token_data.get("refresh_token")
+                expires_in = token_data.get("expires_in", 3600)
+
+                # Get user info for account name
+                account_name = "Google Calendar"
+                try:
+                    info_resp = await http_client.get(
+                        "https://www.googleapis.com/oauth2/v2/userinfo",
+                        headers={"Authorization": f"Bearer {access_token}"}
+                    )
+                    if info_resp.status_code == 200:
+                        info = info_resp.json()
+                        account_name = info.get("email", "Google Calendar")
+                except Exception:
+                    pass
+
+            elif service == "notion":
+                auth_header = httpx.BasicAuth(client_id, client_secret)
+                token_resp = await http_client.post(config["token_url"], json={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                }, auth=auth_header, headers={"Notion-Version": "2022-06-28"})
+                token_data = token_resp.json()
+                access_token = token_data.get("access_token")
+                refresh_token = None
+                expires_in = None
+                account_name = token_data.get("workspace_name", "Notion")
+
+            elif service == "todoist":
+                token_resp = await http_client.post(config["token_url"], data={
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "code": code,
+                })
+                token_data = token_resp.json()
+                access_token = token_data.get("access_token")
+                refresh_token = None
+                expires_in = None
+                account_name = "Todoist"
+
+            elif service == "slack":
+                token_resp = await http_client.post(config["token_url"], data={
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                })
+                token_data = token_resp.json()
+                access_token = token_data.get("access_token")
+                if not access_token:
+                    # Slack v2 nests it under authed_user
+                    access_token = token_data.get("authed_user", {}).get("access_token")
+                refresh_token = None
+                expires_in = None
+                account_name = token_data.get("team", {}).get("name", "Slack")
+
+            if not access_token:
+                logger.error(f"Integration {service} token exchange failed: {token_data}")
+                return JSONResponse(
+                    status_code=302,
+                    headers={"Location": f"{FRONTEND_URL}/integrations?error=token_failed&service={service}"},
+                    content=None
+                )
+
+            # Store integration
+            integration_doc = {
+                "user_id": user_id,
+                "service": service,
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "expires_in": expires_in,
+                "token_obtained_at": datetime.now(timezone.utc).isoformat(),
+                "account_name": account_name,
+                "connected_at": datetime.now(timezone.utc).isoformat(),
+                "sync_enabled": True,
+            }
+
+            await db.user_integrations.update_one(
+                {"user_id": user_id, "service": service},
+                {"$set": integration_doc},
+                upsert=True
+            )
+
+            return JSONResponse(
+                status_code=302,
+                headers={"Location": f"{FRONTEND_URL}/integrations?success=true&service={service}"},
+                content=None
+            )
+
+    except Exception as e:
+        logger.error(f"Integration {service} callback error: {e}")
+        return JSONResponse(
+            status_code=302,
+            headers={"Location": f"{FRONTEND_URL}/integrations?error=callback_failed&service={service}"},
+            content=None
+        )
+
+@api_router.delete("/integrations/{service}")
+async def disconnect_integration(service: str, user: dict = Depends(get_current_user)):
+    """Disconnect an integration"""
+    result = await db.user_integrations.delete_one(
+        {"user_id": user["user_id"], "service": service}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Integration not found")
+    return {"message": f"{INTEGRATION_CONFIGS.get(service, {}).get('name', service)} disconnected"}
+
+@api_router.put("/integrations/{service}/sync")
+async def toggle_sync(service: str, request: Request, user: dict = Depends(get_current_user)):
+    """Toggle sync on/off for an integration"""
+    body = await request.json()
+    sync_enabled = body.get("sync_enabled", True)
+
+    result = await db.user_integrations.update_one(
+        {"user_id": user["user_id"], "service": service},
+        {"$set": {"sync_enabled": sync_enabled}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Integration not found")
+    return {"sync_enabled": sync_enabled}
+
+@api_router.post("/integrations/{service}/sync")
+async def trigger_sync(service: str, user: dict = Depends(get_current_user)):
+    """Trigger a manual sync for a service — syncs recent sessions"""
+    integration = await db.user_integrations.find_one(
+        {"user_id": user["user_id"], "service": service},
+        {"_id": 0}
+    )
+    if not integration:
+        raise HTTPException(status_code=404, detail="Integration not connected")
+
+    access_token = integration.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=400, detail="No access token")
+
+    # Get recent completed sessions (last 7 days)
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    recent_sessions = await db.user_sessions_history.find(
+        {"user_id": user["user_id"], "completed": True, "completed_at": {"$gte": week_ago}},
+        {"_id": 0}
+    ).sort("completed_at", -1).to_list(20)
+
+    synced_count = 0
+
+    try:
+        async with httpx.AsyncClient() as http_client:
+            if service == "google_calendar":
+                for session in recent_sessions:
+                    # Check if already synced
+                    already_synced = await db.synced_events.find_one({
+                        "user_id": user["user_id"],
+                        "service": service,
+                        "session_id": session["session_id"]
+                    })
+                    if already_synced:
+                        continue
+
+                    started = session.get("started_at", "")
+                    duration = session.get("actual_duration", 5)
+                    title = session.get("action_title", "Micro-action InFinea")
+
+                    if started:
+                        start_dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+                        end_dt = start_dt + timedelta(minutes=duration)
+
+                        event = {
+                            "summary": f"✅ {title}",
+                            "description": f"Session InFinea — {duration} min\nCatégorie: {session.get('category', 'N/A')}",
+                            "start": {"dateTime": start_dt.isoformat(), "timeZone": "UTC"},
+                            "end": {"dateTime": end_dt.isoformat(), "timeZone": "UTC"},
+                        }
+
+                        resp = await http_client.post(
+                            "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+                            json=event,
+                            headers={"Authorization": f"Bearer {access_token}"}
+                        )
+                        if resp.status_code in (200, 201):
+                            await db.synced_events.insert_one({
+                                "user_id": user["user_id"],
+                                "service": service,
+                                "session_id": session["session_id"],
+                                "external_id": resp.json().get("id"),
+                                "synced_at": datetime.now(timezone.utc).isoformat()
+                            })
+                            synced_count += 1
+
+            elif service == "notion":
+                # Create a database page for each session
+                # First, find or create the InFinea database
+                # For simplicity, create pages in the user's default workspace
+                for session in recent_sessions:
+                    already_synced = await db.synced_events.find_one({
+                        "user_id": user["user_id"],
+                        "service": service,
+                        "session_id": session["session_id"]
+                    })
+                    if already_synced:
+                        continue
+
+                    # Search for existing InFinea page
+                    search_resp = await http_client.post(
+                        "https://api.notion.com/v1/search",
+                        json={"query": "InFinea Sessions", "filter": {"property": "object", "value": "page"}},
+                        headers={
+                            "Authorization": f"Bearer {access_token}",
+                            "Notion-Version": "2022-06-28",
+                        }
+                    )
+
+                    parent_page_id = None
+                    if search_resp.status_code == 200:
+                        results = search_resp.json().get("results", [])
+                        if results:
+                            parent_page_id = results[0]["id"]
+
+                    if not parent_page_id:
+                        # Create a parent page
+                        # We need to find a page to use as parent — use first available page
+                        pages_resp = await http_client.post(
+                            "https://api.notion.com/v1/search",
+                            json={"filter": {"property": "object", "value": "page"}, "page_size": 1},
+                            headers={
+                                "Authorization": f"Bearer {access_token}",
+                                "Notion-Version": "2022-06-28",
+                            }
+                        )
+                        if pages_resp.status_code == 200:
+                            pages = pages_resp.json().get("results", [])
+                            if pages:
+                                parent_page_id = pages[0]["id"]
+
+                    if parent_page_id:
+                        title = session.get("action_title", "Micro-action")
+                        duration = session.get("actual_duration", 5)
+                        category = session.get("category", "N/A")
+                        completed_at = session.get("completed_at", "")
+
+                        page_data = {
+                            "parent": {"page_id": parent_page_id},
+                            "properties": {
+                                "title": {"title": [{"text": {"content": f"✅ {title} — {duration} min"}}]}
+                            },
+                            "children": [
+                                {
+                                    "object": "block",
+                                    "type": "paragraph",
+                                    "paragraph": {
+                                        "rich_text": [{"text": {"content": f"Catégorie: {category}\nDurée: {duration} min\nDate: {completed_at[:10] if completed_at else 'N/A'}"}}]
+                                    }
+                                }
+                            ]
+                        }
+
+                        resp = await http_client.post(
+                            "https://api.notion.com/v1/pages",
+                            json=page_data,
+                            headers={
+                                "Authorization": f"Bearer {access_token}",
+                                "Notion-Version": "2022-06-28",
+                            }
+                        )
+                        if resp.status_code in (200, 201):
+                            await db.synced_events.insert_one({
+                                "user_id": user["user_id"],
+                                "service": service,
+                                "session_id": session["session_id"],
+                                "external_id": resp.json().get("id"),
+                                "synced_at": datetime.now(timezone.utc).isoformat()
+                            })
+                            synced_count += 1
+
+            elif service == "todoist":
+                for session in recent_sessions:
+                    already_synced = await db.synced_events.find_one({
+                        "user_id": user["user_id"],
+                        "service": service,
+                        "session_id": session["session_id"]
+                    })
+                    if already_synced:
+                        continue
+
+                    title = session.get("action_title", "Micro-action")
+                    duration = session.get("actual_duration", 5)
+
+                    task_data = {
+                        "content": f"✅ {title}",
+                        "description": f"Session InFinea complétée — {duration} min",
+                    }
+
+                    resp = await http_client.post(
+                        "https://api.todoist.com/rest/v2/tasks",
+                        json=task_data,
+                        headers={"Authorization": f"Bearer {access_token}"}
+                    )
+                    if resp.status_code in (200, 201):
+                        task_id = resp.json().get("id")
+                        # Close the task immediately (it's completed)
+                        await http_client.post(
+                            f"https://api.todoist.com/rest/v2/tasks/{task_id}/close",
+                            headers={"Authorization": f"Bearer {access_token}"}
+                        )
+                        await db.synced_events.insert_one({
+                            "user_id": user["user_id"],
+                            "service": service,
+                            "session_id": session["session_id"],
+                            "external_id": str(task_id),
+                            "synced_at": datetime.now(timezone.utc).isoformat()
+                        })
+                        synced_count += 1
+
+            elif service == "slack":
+                # Send a summary message to the user
+                if recent_sessions:
+                    total_time = sum(s.get("actual_duration", 0) for s in recent_sessions)
+                    session_count = len(recent_sessions)
+                    categories = set(s.get("category", "N/A") for s in recent_sessions)
+                    cat_map = {"learning": "📚 Apprentissage", "productivity": "🎯 Productivité", "well_being": "💚 Bien-être"}
+                    cats_str = ", ".join([cat_map.get(c, c) for c in categories])
+
+                    message = (
+                        f"*📊 Résumé InFinea — 7 derniers jours*\n\n"
+                        f"• *{session_count}* sessions complétées\n"
+                        f"• *{total_time}* minutes investies\n"
+                        f"• Catégories: {cats_str}\n\n"
+                        f"Continuez comme ça ! 🚀"
+                    )
+
+                    # Post to Slackbot DM (conversations.list → im channel)
+                    resp = await http_client.post(
+                        "https://slack.com/api/chat.postMessage",
+                        json={"channel": "me", "text": message, "mrkdwn": True},
+                        headers={"Authorization": f"Bearer {access_token}"}
+                    )
+                    if resp.status_code == 200 and resp.json().get("ok"):
+                        synced_count = session_count
+
+    except Exception as e:
+        logger.error(f"Sync error for {service}: {e}")
+        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+    # Update last sync time
+    await db.user_integrations.update_one(
+        {"user_id": user["user_id"], "service": service},
+        {"$set": {"last_synced_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    return {"synced_count": synced_count, "service": service}
 
 # ============== ROOT ROUTE ==============
 
