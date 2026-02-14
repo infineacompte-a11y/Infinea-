@@ -33,7 +33,7 @@ import {
   Zap,
 } from "lucide-react";
 import { toast } from "sonner";
-import { API, useAuth } from "@/App";
+import { API, useAuth, authFetch } from "@/App";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Dialog,
@@ -85,12 +85,9 @@ export default function JournalPage() {
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem("infinea_token");
-      const headers = { Authorization: `Bearer ${token}` };
-
       const [refRes, sumRes] = await Promise.all([
-        fetch(`${API}/reflections?limit=30`, { credentials: "include", headers }),
-        fetch(`${API}/reflections/summaries?limit=1`, { credentials: "include", headers }),
+        authFetch(`${API}/reflections?limit=30`),
+        authFetch(`${API}/reflections/summaries?limit=1`),
       ]);
 
       if (refRes.ok) {
@@ -118,14 +115,11 @@ export default function JournalPage() {
     }
 
     try {
-      const token = localStorage.getItem("infinea_token");
-      const response = await fetch(`${API}/reflections`, {
+      const response = await authFetch(`${API}/reflections`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
-        credentials: "include",
         body: JSON.stringify({
           content: newReflection.content,
           mood: newReflection.mood,
@@ -146,11 +140,8 @@ export default function JournalPage() {
 
   const handleDeleteReflection = async (reflectionId) => {
     try {
-      const token = localStorage.getItem("infinea_token");
-      const response = await fetch(`${API}/reflections/${reflectionId}`, {
+      const response = await authFetch(`${API}/reflections/${reflectionId}`, {
         method: "DELETE",
-        credentials: "include",
-        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!response.ok) throw new Error("Erreur");
@@ -165,11 +156,7 @@ export default function JournalPage() {
   const handleGenerateSummary = async () => {
     setIsGeneratingSummary(true);
     try {
-      const token = localStorage.getItem("infinea_token");
-      const response = await fetch(`${API}/reflections/summary`, {
-        credentials: "include",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authFetch(`${API}/reflections/summary`);
 
       if (!response.ok) throw new Error("Erreur");
 

@@ -13,7 +13,7 @@ import {
   Shield,
 } from "lucide-react";
 import { toast } from "sonner";
-import { API, useAuth } from "@/App";
+import { API, useAuth, authFetch } from "@/App";
 
 export default function PricingPage() {
   const { user } = useAuth();
@@ -37,9 +37,7 @@ export default function PricingPage() {
     }
 
     try {
-      const response = await fetch(`${API}/payments/status/${sessionId}`, {
-        credentials: "include",
-      });
+      const response = await authFetch(`${API}/payments/status/${sessionId}`);
 
       if (!response.ok) throw new Error("Error");
 
@@ -71,10 +69,9 @@ export default function PricingPage() {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${API}/payments/checkout`, {
+      const response = await authFetch(`${API}/payments/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           origin_url: window.location.origin,
         }),

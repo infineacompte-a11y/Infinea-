@@ -24,7 +24,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { API, useAuth } from "@/App";
+import { API, useAuth, authFetch } from "@/App";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 export default function NotificationsPage() {
@@ -59,8 +59,8 @@ export default function NotificationsPage() {
   const fetchData = async () => {
     try {
       const [notifRes, prefRes] = await Promise.all([
-        fetch(`${API}/notifications`, { credentials: "include" }),
-        fetch(`${API}/notifications/preferences`, { credentials: "include" }),
+        authFetch(`${API}/notifications`),
+        authFetch(`${API}/notifications/preferences`),
       ]);
 
       if (notifRes.ok) setNotifications(await notifRes.json());
@@ -103,10 +103,9 @@ export default function NotificationsPage() {
         });
 
         // Send subscription to server
-        await fetch(`${API}/notifications/subscribe`, {
+        await authFetch(`${API}/notifications/subscribe`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          credentials: "include",
           body: JSON.stringify({ subscription: subscription.toJSON() }),
         });
 
@@ -124,10 +123,9 @@ export default function NotificationsPage() {
     setPreferences(newPrefs);
 
     try {
-      await fetch(`${API}/notifications/preferences`, {
+      await authFetch(`${API}/notifications/preferences`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify(newPrefs),
       });
       toast.success("Préférences mises à jour");
@@ -138,10 +136,9 @@ export default function NotificationsPage() {
 
   const handleMarkAllRead = async () => {
     try {
-      await fetch(`${API}/notifications/mark-read`, {
+      await authFetch(`${API}/notifications/mark-read`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ notification_ids: [] }),
       });
       setNotifications(notifications.map((n) => ({ ...n, read: true })));

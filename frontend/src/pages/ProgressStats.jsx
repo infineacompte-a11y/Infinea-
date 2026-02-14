@@ -19,7 +19,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { API, useAuth } from "@/App";
+import { API, useAuth, authFetch } from "@/App";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   BarChart,
@@ -59,9 +59,7 @@ export default function ProgressStats() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch(`${API}/stats`, {
-        credentials: "include",
-      });
+      const response = await authFetch(`${API}/stats`);
       if (!response.ok) throw new Error("Erreur");
       const data = await response.json();
       setStats(data);

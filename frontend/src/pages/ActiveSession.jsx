@@ -18,7 +18,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { toast } from "sonner";
-import { API } from "@/App";
+import { API, authFetch } from "@/App";
 
 const categoryIcons = {
   learning: BookOpen,
@@ -73,10 +73,9 @@ export default function ActiveSession() {
   const handleComplete = async (completed = true) => {
     setIsCompleting(true);
     try {
-      const response = await fetch(`${API}/sessions/complete`, {
+      const response = await authFetch(`${API}/sessions/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           session_id: sessionId,
           actual_duration: Math.ceil(elapsedTime / 60),

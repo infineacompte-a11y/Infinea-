@@ -41,7 +41,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
-import { API, useAuth } from "@/App";
+import { API, useAuth, authFetch } from "@/App";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Dialog,
@@ -108,23 +108,17 @@ export default function B2BDashboard() {
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem("infinea_token");
-      const headers = { Authorization: `Bearer ${token}` };
-
       // Check if user has a company
-      const companyRes = await fetch(`${API}/b2b/company`, { 
-        credentials: "include",
-        headers 
-      });
-      
+      const companyRes = await authFetch(`${API}/b2b/company`);
+
       if (companyRes.ok) {
         const companyData = await companyRes.json();
         setCompany(companyData);
 
         // Fetch dashboard and employees
         const [dashRes, empRes] = await Promise.all([
-          fetch(`${API}/b2b/dashboard`, { credentials: "include", headers }),
-          fetch(`${API}/b2b/employees`, { credentials: "include", headers }),
+          authFetch(`${API}/b2b/dashboard`),
+          authFetch(`${API}/b2b/employees`),
         ]);
 
         if (dashRes.ok) setDashboard(await dashRes.json());
@@ -145,14 +139,11 @@ export default function B2BDashboard() {
   const handleCreateCompany = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem("infinea_token");
-      const res = await fetch(`${API}/b2b/company`, {
+      const res = await authFetch(`${API}/b2b/company`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}` 
         },
-        credentials: "include",
         body: JSON.stringify(companyForm),
       });
 
@@ -170,14 +161,11 @@ export default function B2BDashboard() {
   const handleInvite = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem("infinea_token");
-      const res = await fetch(`${API}/b2b/invite`, {
+      const res = await authFetch(`${API}/b2b/invite`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}` 
         },
-        credentials: "include",
         body: JSON.stringify({ email: inviteEmail }),
       });
 

@@ -18,9 +18,9 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.environ.get('MONGO_URL') or os.environ.get('MONGODB_URI', '')
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ.get('DB_NAME', 'infinea')]
 
 # JWT Config
 JWT_SECRET = os.environ.get('JWT_SECRET', 'infinea-secret-key-change-in-production')
@@ -2196,13 +2196,24 @@ async def root():
 # Include router and add middleware
 app.include_router(api_router)
 
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Auto-seed the database if empty"""
+    count = await db.micro_actions.count_documents({})
+    if count == 0:
+        logger.info("Database empty, seeding micro-actions...")
+        await seed_micro_actions()
+        logger.info("Database seeded successfully!")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
