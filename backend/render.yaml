@@ -13,3 +13,11 @@ services:
         sync: false  # You'll set this manually
       - key: ALLOWED_ORIGINS
         sync: false  # Set to your Vercel frontend URL
+      - key: EMERGENT_LLM_KEY
+        sync: false  # Your EmergentIntegrations API key
+      - key: STRIPE_API_KEY
+        sync: false
+      - key: FRONTEND_URL
+        value: https://infinea.vercel.app
+      - key: BACKEND_URL
+        sync: false  # Set to your Render service URL
