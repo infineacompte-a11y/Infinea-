@@ -54,10 +54,14 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleLogin = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + "/dashboard";
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+  const handleGoogleLogin = async () => {
+    try {
+      const response = await fetch(`${API}/auth/google`);
+      const data = await response.json();
+      window.location.href = data.auth_url;
+    } catch (error) {
+      toast.error("Erreur lors de la connexion avec Google");
+    }
   };
 
   return (
