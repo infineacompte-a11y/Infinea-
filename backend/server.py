@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+import urllib.parse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -250,88 +251,156 @@ async def login(user_data: UserLogin, response: Response):
         "token": token
     }
 
-@api_router.post("/auth/session")
-async def process_oauth_session(request: Request, response: Response):
-    """Process Google OAuth session_id and create user session"""
-    body = await request.json()
-    session_id = body.get("session_id")
-    
-    if not session_id:
-        raise HTTPException(status_code=400, detail="session_id required")
-    
-    # REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    async with httpx.AsyncClient() as client_http:
-        resp = await client_http.get(
-            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": session_id}
+@api_router.get("/auth/google")
+async def google_oauth_start():
+    """Retourne l'URL de redirection Google OAuth"""
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    if not client_id:
+        raise HTTPException(status_code=500, detail="Google OAuth non configuré (GOOGLE_CLIENT_ID manquant)")
+
+    backend_url = os.environ.get("BACKEND_URL", "http://localhost:8001")
+    redirect_uri = f"{backend_url}/api/auth/google/callback"
+
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "online",
+    }
+    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
+    return {"auth_url": auth_url}
+
+
+@api_router.get("/auth/google/callback")
+async def google_oauth_callback(request: Request, response: Response, code: str = None, error: str = None):
+    """Reçoit le code Google OAuth, échange contre les tokens et crée la session"""
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+    if error or not code:
+        return RedirectResponse(url=f"{frontend_url}/login?error=oauth_annulé")
+
+    backend_url = os.environ.get("BACKEND_URL", "http://localhost:8001")
+    redirect_uri = f"{backend_url}/api/auth/google/callback"
+
+    async with httpx.AsyncClient() as http_client:
+        # Échange du code contre les tokens
+        token_resp = await http_client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": os.environ.get("GOOGLE_CLIENT_ID"),
+                "client_secret": os.environ.get("GOOGLE_CLIENT_SECRET"),
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            },
         )
-        
-        if resp.status_code != 200:
-            raise HTTPException(status_code=401, detail="Invalid session")
-        
-        data = resp.json()
-    
-    # Check if user exists
-    existing_user = await db.users.find_one({"email": data["email"]}, {"_id": 0})
-    
+        if token_resp.status_code != 200:
+            logger.error(f"Google token exchange failed: {token_resp.text}")
+            return RedirectResponse(url=f"{frontend_url}/login?error=auth_échouée")
+
+        tokens = token_resp.json()
+
+        # Récupération des infos utilisateur
+        userinfo_resp = await http_client.get(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {tokens['access_token']}"},
+        )
+        if userinfo_resp.status_code != 200:
+            return RedirectResponse(url=f"{frontend_url}/login?error=profil_inaccessible")
+
+        user_info = userinfo_resp.json()
+
+    email = user_info.get("email")
+    name = user_info.get("name", email)
+    picture = user_info.get("picture")
+
+    # Création ou mise à jour de l'utilisateur
+    existing_user = await db.users.find_one({"email": email}, {"_id": 0})
     if existing_user:
         user_id = existing_user["user_id"]
-        # Update user data
         await db.users.update_one(
             {"user_id": user_id},
-            {"$set": {
-                "name": data["name"],
-                "picture": data.get("picture")
-            }}
+            {"$set": {"name": name, "picture": picture}},
         )
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         user_doc = {
             "user_id": user_id,
-            "email": data["email"],
-            "name": data["name"],
-            "picture": data.get("picture"),
+            "email": email,
+            "name": name,
+            "picture": picture,
             "subscription_tier": "free",
             "total_time_invested": 0,
             "streak_days": 0,
             "last_session_date": None,
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(user_doc)
-    
-    # Create session
-    session_token = data.get("session_token", f"session_{uuid.uuid4().hex}")
+
+    # Création de la session locale
+    session_token = f"session_{uuid.uuid4().hex}"
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
-    
     await db.user_sessions.insert_one({
         "user_id": user_id,
         "session_token": session_token,
         "expires_at": expires_at.isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    
+
+    # Redirection vers le frontend avec le session_id dans le hash (compatible AuthCallback)
+    return RedirectResponse(url=f"{frontend_url}/auth/callback#session_id={session_token}")
+
+
+@api_router.post("/auth/session")
+async def process_oauth_session(request: Request, response: Response):
+    """Valide un session_id local (créé par /auth/google/callback) et retourne l'utilisateur"""
+    body = await request.json()
+    session_id = body.get("session_id")
+
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id requis")
+
+    # Recherche de la session dans la base locale
+    session_doc = await db.user_sessions.find_one({"session_token": session_id}, {"_id": 0})
+    if not session_doc:
+        raise HTTPException(status_code=401, detail="Session invalide")
+
+    # Vérification de l'expiration
+    expires_at = session_doc.get("expires_at")
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Session expirée")
+
+    user = await db.users.find_one({"user_id": session_doc["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    user_id = user["user_id"]
+
     response.set_cookie(
         key="session_token",
-        value=session_token,
+        value=session_id,
         httponly=True,
         secure=True,
         samesite="none",
         path="/",
-        max_age=7 * 24 * 3600
+        max_age=7 * 24 * 3600,
     )
-    
-    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
-    
-    # Create JWT token for localStorage backup
+
+    # JWT en backup pour localStorage
     jwt_token = create_token(user_id)
-    
+
     return {
         "user_id": user_id,
         "email": user["email"],
         "name": user["name"],
         "picture": user.get("picture"),
         "subscription_tier": user.get("subscription_tier", "free"),
-        "token": jwt_token
+        "token": jwt_token,
     }
 
 @api_router.get("/auth/me")
