@@ -31,6 +31,8 @@ dist/
 dist
 
 # Environment files (comprehensive coverage)
+# Les fichiers .example sont des templates sans secrets → autorisés
+!*.env.example
 
 *token.json*
 *credentials.json*
@@ -112,3 +114,6 @@ frontend/node_modules/.cache/default-development/8.pack
 # Environment files
 *.env
 *.env.*
+
+# Exception : les fichiers .example sont des templates sans secrets
+!*.env.example
