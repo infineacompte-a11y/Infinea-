@@ -34,7 +34,7 @@ import {
   Award,
 } from "lucide-react";
 import { toast } from "sonner";
-import { API, useAuth } from "@/App";
+import { API, useAuth, authFetch } from "@/App";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Dialog,
@@ -134,12 +134,9 @@ export default function IntegrationsPage() {
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem("infinea_token");
-      const headers = { Authorization: `Bearer ${token}` };
-
       const [intRes, settingsRes] = await Promise.all([
-        fetch(`${API}/integrations`, { credentials: "include", headers }),
-        fetch(`${API}/slots/settings`, { credentials: "include", headers }),
+        authFetch(`${API}/integrations`),
+        authFetch(`${API}/slots/settings`),
       ]);
 
       if (intRes.ok) setIntegrations(await intRes.json());
@@ -153,13 +150,11 @@ export default function IntegrationsPage() {
 
   const handleConnect = async (provider) => {
     try {
-      const response = await fetch(`${API}/integrations/${provider}/connect`, {
+      const response = await authFetch(`${API}/integrations/${provider}/connect`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("infinea_token")}`,
         },
-        credentials: "include",
         body: JSON.stringify({ origin_url: window.location.origin }),
       });
 
@@ -177,10 +172,8 @@ export default function IntegrationsPage() {
 
   const handleDisconnect = async (integrationId) => {
     try {
-      const response = await fetch(`${API}/integrations/${integrationId}`, {
+      const response = await authFetch(`${API}/integrations/${integrationId}`, {
         method: "DELETE",
-        credentials: "include",
-        headers: { Authorization: `Bearer ${localStorage.getItem("infinea_token")}` },
       });
 
       if (!response.ok) throw new Error("Erreur");
@@ -196,10 +189,8 @@ export default function IntegrationsPage() {
   const handleSync = async (integrationId) => {
     setIsSyncing(true);
     try {
-      const response = await fetch(`${API}/integrations/${integrationId}/sync`, {
+      const response = await authFetch(`${API}/integrations/${integrationId}/sync`, {
         method: "POST",
-        credentials: "include",
-        headers: { Authorization: `Bearer ${localStorage.getItem("infinea_token")}` },
       });
 
       if (!response.ok) throw new Error("Erreur");
@@ -216,13 +207,11 @@ export default function IntegrationsPage() {
 
   const handleUpdateSettings = async (newSettings) => {
     try {
-      const response = await fetch(`${API}/slots/settings`, {
+      const response = await authFetch(`${API}/slots/settings`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("infinea_token")}`,
         },
-        credentials: "include",
         body: JSON.stringify(newSettings),
       });
 

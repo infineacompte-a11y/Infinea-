@@ -32,7 +32,7 @@ import {
   Brain,
 } from "lucide-react";
 import { toast } from "sonner";
-import { API, useAuth } from "@/App";
+import { API, useAuth, authFetch } from "@/App";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,10 +78,7 @@ export default function Dashboard() {
 
   const fetchNextSlot = async () => {
     try {
-      const response = await fetch(`${API}/slots/next`, {
-        credentials: "include",
-        headers: { Authorization: `Bearer ${localStorage.getItem("infinea_token")}` },
-      });
+      const response = await authFetch(`${API}/slots/next`);
       if (response.ok) {
         const data = await response.json();
         setNextSlot(data.slot);
@@ -99,14 +96,11 @@ export default function Dashboard() {
   const getSuggestions = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem("infinea_token");
-      const response = await fetch(`${API}/suggestions`, {
+      const response = await authFetch(`${API}/suggestions`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
-        credentials: "include",
         body: JSON.stringify({
           available_time: availableTime,
           energy_level: energyLevel,
@@ -127,10 +121,9 @@ export default function Dashboard() {
 
   const startSession = async (actionId) => {
     try {
-      const response = await fetch(`${API}/sessions/start`, {
+      const response = await authFetch(`${API}/sessions/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ action_id: actionId }),
       });
 

@@ -21,7 +21,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { API, useAuth } from "@/App";
+import { API, useAuth, authFetch } from "@/App";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const categoryIcons = {
@@ -56,9 +56,7 @@ export default function ActionsLibrary() {
 
   const fetchActions = async () => {
     try {
-      const response = await fetch(`${API}/actions`, {
-        credentials: "include",
-      });
+      const response = await authFetch(`${API}/actions`);
       if (!response.ok) throw new Error("Erreur");
       const data = await response.json();
       setActions(data);
@@ -71,10 +69,9 @@ export default function ActionsLibrary() {
 
   const startSession = async (actionId) => {
     try {
-      const response = await fetch(`${API}/sessions/start`, {
+      const response = await authFetch(`${API}/sessions/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ action_id: actionId }),
       });
 

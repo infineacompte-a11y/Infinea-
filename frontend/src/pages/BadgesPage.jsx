@@ -26,7 +26,7 @@ import {
   Lock,
 } from "lucide-react";
 import { toast } from "sonner";
-import { API, useAuth } from "@/App";
+import { API, useAuth, authFetch } from "@/App";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const badgeIcons = {
@@ -59,8 +59,8 @@ export default function BadgesPage() {
   const fetchBadges = async () => {
     try {
       const [allRes, userRes] = await Promise.all([
-        fetch(`${API}/badges`, { credentials: "include" }),
-        fetch(`${API}/badges/user`, { credentials: "include" }),
+        authFetch(`${API}/badges`),
+        authFetch(`${API}/badges/user`),
       ]);
 
       if (allRes.ok && userRes.ok) {

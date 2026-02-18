@@ -19,8 +19,24 @@ import B2BDashboard from "@/pages/B2BDashboard";
 import IntegrationsPage from "@/pages/IntegrationsPage";
 import JournalPage from "@/pages/JournalPage";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
 export const API = `${BACKEND_URL}/api`;
+
+// Helper fetch that always includes auth token from localStorage
+export const authFetch = (url, options = {}) => {
+  const token = localStorage.getItem("infinea_token");
+  const headers = {
+    ...options.headers,
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return fetch(url, {
+    ...options,
+    credentials: "include",
+    headers,
+  });
+};
 
 // Register Service Worker for PWA
 const registerServiceWorker = async () => {
@@ -78,12 +94,12 @@ const AuthCallback = () => {
         }
 
         const userData = await response.json();
-        
-        // Store session token in localStorage as backup
+
+        // Store token in localStorage
         if (userData.token) {
           localStorage.setItem("infinea_token", userData.token);
         }
-        
+
         setUser(userData);
         navigate("/dashboard", { state: { user: userData } });
       } catch (error) {
@@ -105,51 +121,70 @@ const AuthCallback = () => {
   );
 };
 
-// Protected Route
+// Protected Route — robust version handling React 19 StrictMode double-mount
 const ProtectedRoute = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, setUser } = useAuth();
-  const [isAuthenticated, setIsAuthenticated] = useState(location.state?.user ? true : null);
+  const [authState, setAuthState] = useState("checking"); // "checking" | "authenticated" | "unauthenticated"
 
   useEffect(() => {
-    if (location.state?.user) {
-      setUser(location.state.user);
-      setIsAuthenticated(true);
+    let cancelled = false;
+
+    // 1. User already in context (set by LoginPage/RegisterPage before navigate)
+    if (user) {
+      setAuthState("authenticated");
       return;
     }
 
-    const checkAuth = async () => {
+    // 2. User data passed via navigation state (from login/register navigate)
+    if (location.state?.user) {
+      setUser(location.state.user);
+      setAuthState("authenticated");
+      return;
+    }
+
+    // 3. Check localStorage token → verify with backend
+    const token = localStorage.getItem("infinea_token");
+    if (!token) {
+      if (!cancelled) {
+        setAuthState("unauthenticated");
+        navigate("/login", { replace: true });
+      }
+      return;
+    }
+
+    // Token exists, verify it with backend
+    const verifyToken = async () => {
       try {
-        // Try with cookie first, then localStorage token as fallback
-        const token = localStorage.getItem("infinea_token");
-        const headers = token ? { "Authorization": `Bearer ${token}` } : {};
-        
         const response = await fetch(`${API}/auth/me`, {
           credentials: "include",
-          headers,
+          headers: { "Authorization": `Bearer ${token}` },
         });
-        
-        if (!response.ok) throw new Error("Not authenticated");
-        
+
+        if (!response.ok) throw new Error("Token invalid");
+
         const userData = await response.json();
-        setUser(userData);
-        setIsAuthenticated(true);
+        if (!cancelled) {
+          setUser(userData);
+          setAuthState("authenticated");
+        }
       } catch (error) {
+        console.error("Auth verification failed:", error);
         localStorage.removeItem("infinea_token");
-        setIsAuthenticated(false);
-        navigate("/login");
+        if (!cancelled) {
+          setAuthState("unauthenticated");
+          navigate("/login", { replace: true });
+        }
       }
     };
 
-    if (!user) {
-      checkAuth();
-    } else {
-      setIsAuthenticated(true);
-    }
-  }, [location.state, navigate, setUser, user]);
+    verifyToken();
 
-  if (isAuthenticated === null) {
+    return () => { cancelled = true; };
+  }, [user, location.state, navigate, setUser]);
+
+  if (authState === "checking") {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
@@ -157,7 +192,7 @@ const ProtectedRoute = ({ children }) => {
     );
   }
 
-  if (isAuthenticated === false) {
+  if (authState === "unauthenticated") {
     return null;
   }
 
@@ -167,7 +202,7 @@ const ProtectedRoute = ({ children }) => {
 // App Router
 function AppRouter() {
   const location = useLocation();
-  
+
   // Check for session_id in URL hash (Google OAuth callback)
   if (location.hash?.includes("session_id=")) {
     return <AuthCallback />;
@@ -266,7 +301,7 @@ function AppRouter() {
 // Auth Provider
 const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  
+
   const logout = async () => {
     try {
       const token = localStorage.getItem("infinea_token");
