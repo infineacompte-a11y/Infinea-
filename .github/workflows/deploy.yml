@@ -1,0 +1,68 @@
+name: Deploy InFinea (Backend Render + Frontend Vercel)
+
+on:
+  push:
+    branches:
+      - infineacompte-a11y/Infinea-
+      - main
+
+jobs:
+  # ─── BACKEND : Configure les env vars sur Render et déclenche le déploiement ───
+  deploy-backend:
+    name: Deploy Backend to Render
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trouver le service Render infinea-api
+        id: find_service
+        run: |
+          SERVICE_ID=$(curl -s "https://api.render.com/v1/services?name=infinea-api&limit=1" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            | python3 -c "import sys,json; s=json.load(sys.stdin); print(s[0]['service']['id'] if s else '')")
+          echo "service_id=$SERVICE_ID" >> $GITHUB_OUTPUT
+          echo "Service trouvé : $SERVICE_ID"
+
+      - name: Configurer les variables d'environnement sur Render
+        run: |
+          SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
+          curl -s -X PUT "https://api.render.com/v1/services/$SERVICE_ID/env-vars" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '[
+              {"key":"GOOGLE_CLIENT_ID","value":"${{ secrets.GOOGLE_CLIENT_ID }}"},
+              {"key":"GOOGLE_CLIENT_SECRET","value":"${{ secrets.GOOGLE_CLIENT_SECRET }}"},
+              {"key":"BACKEND_URL","value":"${{ secrets.BACKEND_URL }}"},
+              {"key":"FRONTEND_URL","value":"${{ secrets.FRONTEND_URL }}"}
+            ]'
+          echo "Variables configurées"
+
+      - name: Déclencher le déploiement Render
+        run: |
+          SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
+          curl -s -X POST "https://api.render.com/v1/services/$SERVICE_ID/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}'
+          echo "Déploiement Render déclenché"
+
+  # ─── FRONTEND : Build et déploie sur Vercel ───────────────────────────────────
+  deploy-frontend:
+    name: Deploy Frontend to Vercel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Deploy to Vercel (Production)
+        run: |
+          cd frontend
+          vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
