@@ -391,25 +391,23 @@ async def get_ai_suggestions(
     user: dict = Depends(get_current_user)
 ):
     """Get AI-powered micro-action suggestions based on time and energy"""
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
-    
-    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    api_key = os.environ.get('ANTHROPIC_API_KEY')
     if not api_key:
         raise HTTPException(status_code=500, detail="AI service not configured")
-    
+
     # Get matching actions from database
     query = {"duration_min": {"$lte": ai_request.available_time}}
     if ai_request.preferred_category:
         query["category"] = ai_request.preferred_category
     if ai_request.energy_level:
         query["energy_level"] = ai_request.energy_level
-    
+
     # Filter premium actions for free users
     if user.get("subscription_tier") == "free":
         query["is_premium"] = False
-    
+
     available_actions = await db.micro_actions.find(query, {"_id": 0}).to_list(50)
-    
+
     if not available_actions:
         # Return default suggestion if no actions match
         return {
@@ -417,31 +415,26 @@ async def get_ai_suggestions(
             "reasoning": "Aucune micro-action ne correspond exactement à vos critères. Profitez de ce moment pour vous recentrer.",
             "recommended_actions": []
         }
-    
+
     # Get user's recent activity for personalization
     recent_sessions = await db.user_sessions_history.find(
         {"user_id": user["user_id"]},
         {"_id": 0}
     ).sort("started_at", -1).limit(5).to_list(5)
-    
+
     recent_categories = [s.get("category", "") for s in recent_sessions]
-    
+
     # Build context for AI
     actions_text = "\n".join([
         f"- {a['title']} ({a['category']}, {a['duration_min']}-{a['duration_max']}min, énergie: {a['energy_level']}): {a['description']}"
         for a in available_actions[:10]
     ])
-    
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"suggestion_{user['user_id']}_{datetime.now().timestamp()}",
-        system_message="""Tu es l'assistant InFinea, expert en productivité et bien-être. 
+
+    system_message = """Tu es l'assistant InFinea, expert en productivité et bien-être.
 Tu aides les utilisateurs à transformer leurs moments perdus en micro-victoires.
 Réponds toujours en français, de manière concise et motivante.
 Suggère les meilleures micro-actions en fonction du temps disponible et du niveau d'énergie."""
-    )
-    chat.with_model("openai", "gpt-5.2")
-    
+
     prompt = f"""L'utilisateur a {ai_request.available_time} minutes disponibles et un niveau d'énergie {ai_request.energy_level}.
 Catégories récentes: {', '.join(recent_categories) if recent_categories else 'Aucune'}
 Catégorie préférée: {ai_request.preferred_category or 'Aucune'}
@@ -456,8 +449,23 @@ Format ta réponse en JSON avec:
 - "alternatives": liste de 2 autres titres d'actions adaptées"""
 
     try:
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
+        async with httpx.AsyncClient(timeout=30.0) as client_http:
+            resp = await client_http.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "claude-haiku-4-5",
+                    "max_tokens": 1000,
+                    "system": system_message,
+                    "messages": [{"role": "user", "content": prompt}]
+                }
+            )
+            resp.raise_for_status()
+            response = resp.json()["content"][0]["text"]
         
         # Parse AI response
         import json
@@ -2054,39 +2062,37 @@ async def delete_reflection(
 @api_router.get("/reflections/summary")
 async def get_reflections_summary(user: dict = Depends(get_current_user)):
     """Generate AI-powered weekly summary of reflections"""
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
-    
-    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    api_key = os.environ.get('ANTHROPIC_API_KEY')
     if not api_key:
         raise HTTPException(status_code=500, detail="AI service not configured")
-    
+
     # Get reflections from the last 4 weeks
     month_ago = (datetime.now(timezone.utc) - timedelta(days=28)).isoformat()
-    
+
     reflections = await db.reflections.find(
         {"user_id": user["user_id"], "created_at": {"$gte": month_ago}},
         {"_id": 0}
     ).sort("created_at", 1).to_list(200)
-    
+
     if not reflections:
         return {
             "summary": None,
             "message": "Pas encore assez de réflexions pour générer un résumé. Commencez à noter vos pensées!",
             "reflection_count": 0
         }
-    
+
     # Get sessions data for context
     sessions = await db.user_sessions_history.find(
         {"user_id": user["user_id"], "completed": True, "started_at": {"$gte": month_ago}},
         {"_id": 0}
     ).to_list(100)
-    
+
     # Build reflection context
     reflections_text = "\n".join([
         f"[{r['created_at'][:10]}] {r.get('mood', 'neutre')}: {r['content']}"
         for r in reflections[-30:]  # Last 30 reflections
     ])
-    
+
     # Session stats
     category_counts = {}
     total_time = 0
@@ -2094,17 +2100,12 @@ async def get_reflections_summary(user: dict = Depends(get_current_user)):
         cat = s.get("category", "autre")
         category_counts[cat] = category_counts.get(cat, 0) + 1
         total_time += s.get("actual_duration", 0)
-    
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"summary_{user['user_id']}_{datetime.now().timestamp()}",
-        system_message="""Tu es le compagnon cognitif InFinea. Ton rôle est d'analyser les réflexions 
+
+    system_message = """Tu es le compagnon cognitif InFinea. Ton rôle est d'analyser les réflexions
 de l'utilisateur et de fournir un résumé personnalisé, bienveillant et perspicace.
 Tu dois identifier les patterns, les progrès et suggérer des axes d'amélioration.
 Réponds toujours en français, de manière empathique et constructive."""
-    )
-    chat.with_model("openai", "gpt-5.2")
-    
+
     prompt = f"""Analyse les réflexions suivantes de l'utilisateur sur les 4 dernières semaines:
 
 {reflections_text}
@@ -2118,13 +2119,28 @@ Génère un résumé structuré en JSON avec:
 - "weekly_insight": Une observation clé sur les tendances de la semaine (2-3 phrases max)
 - "patterns_identified": Liste de 2-3 patterns comportementaux observés
 - "strengths": Ce qui fonctionne bien (1-2 points)
-- "areas_for_growth": Suggestions d'amélioration bienveillantes (1-2 points)  
+- "areas_for_growth": Suggestions d'amélioration bienveillantes (1-2 points)
 - "personalized_tip": Un conseil personnalisé basé sur les réflexions
 - "mood_trend": Tendance générale de l'humeur (positive, stable, en progression, à surveiller)"""
 
     try:
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
+        async with httpx.AsyncClient(timeout=30.0) as client_http:
+            resp = await client_http.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "claude-haiku-4-5",
+                    "max_tokens": 1000,
+                    "system": system_message,
+                    "messages": [{"role": "user", "content": prompt}]
+                }
+            )
+            resp.raise_for_status()
+            response = resp.json()["content"][0]["text"]
         
         import json
         try:
