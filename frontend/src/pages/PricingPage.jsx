@@ -28,6 +28,7 @@ export default function PricingPage() {
     if (sessionId) {
       pollPaymentStatus(sessionId);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   const pollPaymentStatus = async (sessionId, attempts = 0) => {
