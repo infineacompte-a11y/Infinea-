@@ -3,7 +3,7 @@ InFinea Local Server - Version autonome avec MongoDB en memoire (mongomock)
 Pas besoin de MongoDB installe !
 """
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.cors import CORSMiddleware
 import mongomock
 import os
@@ -17,6 +17,7 @@ import jwt
 import bcrypt
 import json
 import re
+import urllib.parse
 
 ROOT_DIR = Path(__file__).parent
 
@@ -271,64 +272,106 @@ async def login(user_data: UserLogin, response: Response):
         "token": token
     }
 
-@api_router.post("/auth/session")
-async def process_oauth_session(request: Request, response: Response):
-    """Process Google OAuth - simplified for local dev"""
-    body = await request.json()
-    session_id = body.get("session_id")
+@api_router.get("/auth/google")
+async def google_auth():
+    """Return Google OAuth authorization URL"""
+    GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+    BACKEND_URL = os.environ.get("BACKEND_URL", "https://infinea-api.onrender.com")
 
-    if not session_id:
-        raise HTTPException(status_code=400, detail="session_id required")
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Google OAuth non configuré")
 
-    # For local dev, try the real endpoint first, fallback to mock
-    try:
-        import httpx
-        async with httpx.AsyncClient() as client_http:
-            resp = await client_http.get(
-                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-                headers={"X-Session-ID": session_id},
-                timeout=5.0
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-            else:
-                raise Exception("OAuth failed")
-    except Exception:
-        # Fallback: create a demo user for local testing
-        data = {
-            "email": "demo@infinea.local",
-            "name": "Utilisateur Demo",
-            "picture": None,
-            "session_token": f"session_{uuid.uuid4().hex}"
-        }
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": f"{BACKEND_URL}/api/auth/google/callback",
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "select_account",
+    }
+    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
+    return {"auth_url": auth_url}
 
-    existing_user = db.users.find_one({"email": data["email"]}, {"_id": 0})
 
+@api_router.get("/auth/google/callback")
+async def google_oauth_callback(code: str, request: Request, response: Response):
+    """Exchange Google auth code for user session"""
+    import httpx
+
+    GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+    BACKEND_URL = os.environ.get("BACKEND_URL", "https://infinea-api.onrender.com")
+    FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://infinea.vercel.app")
+
+    # Exchange code for tokens
+    token_resp = httpx.post(
+        "https://oauth2.googleapis.com/token",
+        data={
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": f"{BACKEND_URL}/api/auth/google/callback",
+            "grant_type": "authorization_code",
+        },
+        timeout=10.0,
+    )
+
+    if token_resp.status_code != 200:
+        return RedirectResponse(f"{FRONTEND_URL}?error=google_auth_failed")
+
+    access_token = token_resp.json().get("access_token")
+
+    # Get user info from Google
+    userinfo_resp = httpx.get(
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=10.0,
+    )
+
+    if userinfo_resp.status_code != 200:
+        return RedirectResponse(f"{FRONTEND_URL}?error=google_userinfo_failed")
+
+    userinfo = userinfo_resp.json()
+    email = userinfo.get("email")
+    name = userinfo.get("name", email)
+    picture = userinfo.get("picture")
+
+    # Find or create user
+    existing_user = db.users.find_one({"email": email}, {"_id": 0})
     if existing_user:
         user_id = existing_user["user_id"]
         db.users.update_one(
             {"user_id": user_id},
-            {"$set": {"name": data["name"], "picture": data.get("picture")}}
+            {"$set": {"name": name, "picture": picture}}
         )
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
-        user_doc = {
+        db.users.insert_one({
             "user_id": user_id,
-            "email": data["email"],
-            "name": data["name"],
-            "picture": data.get("picture"),
+            "email": email,
+            "name": name,
+            "picture": picture,
             "subscription_tier": "free",
             "total_time_invested": 0,
             "streak_days": 0,
             "last_session_date": None,
             "badges": [],
             "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        db.users.insert_one(user_doc)
+        })
+        db.notifications.insert_one({
+            "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+            "user_id": user_id,
+            "type": "welcome",
+            "title": "Bienvenue sur InFinea !",
+            "message": "Commencez par explorer nos micro-actions et investissez vos instants perdus.",
+            "icon": "sparkles",
+            "read": False,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
 
-    session_token = data.get("session_token", f"session_{uuid.uuid4().hex}")
+    # Create session
+    session_token = f"session_{uuid.uuid4().hex}"
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
-
     db.user_sessions.insert_one({
         "user_id": user_id,
         "session_token": session_token,
@@ -336,18 +379,48 @@ async def process_oauth_session(request: Request, response: Response):
         "created_at": datetime.now(timezone.utc).isoformat()
     })
 
+    # Redirect to frontend with session token in hash
+    redirect_url = f"{FRONTEND_URL}/auth/callback#" + urllib.parse.urlencode({"session_id": session_token})
+    return RedirectResponse(redirect_url)
+
+
+@api_router.post("/auth/session")
+async def process_oauth_session(request: Request, response: Response):
+    """Validate Google OAuth session and return user data"""
+    body = await request.json()
+    session_id = body.get("session_id")
+
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+
+    # Look up the session created by /auth/google/callback
+    session_doc = db.user_sessions.find_one({"session_token": session_id}, {"_id": 0})
+    if not session_doc:
+        raise HTTPException(status_code=401, detail="Session invalide ou expirée")
+
+    expires_at = session_doc.get("expires_at")
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+    if expires_at and hasattr(expires_at, 'tzinfo') and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at and expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Session expirée")
+
+    user_id = session_doc["user_id"]
+    user = db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+
+    jwt_token = create_token(user_id)
     response.set_cookie(
         key="session_token",
-        value=session_token,
+        value=session_id,
         httponly=True,
-        secure=False,
+        secure=True,
         samesite="lax",
         path="/",
         max_age=7 * 24 * 3600
     )
-
-    user = db.users.find_one({"user_id": user_id}, {"_id": 0})
-    jwt_token = create_token(user_id)
 
     return {
         "user_id": user_id,
