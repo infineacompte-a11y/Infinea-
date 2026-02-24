@@ -18,6 +18,9 @@ import bcrypt
 import json
 import re
 import urllib.parse
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 ROOT_DIR = Path(__file__).parent
 
@@ -33,6 +36,18 @@ JWT_EXPIRATION_HOURS = 168  # 7 days
 # Create the main app
 app = FastAPI(title="InFinea API - Local")
 api_router = APIRouter(prefix="/api")
+
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Too many requests. Please try again later."},
+        headers={"Retry-After": str(exc.detail)},
+    )
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -187,7 +202,8 @@ def verify_password(password: str, hashed: str) -> bool:
 # ============== AUTH ROUTES ==============
 
 @api_router.post("/auth/register")
-async def register(user_data: UserCreate, response: Response):
+@limiter.limit("3/minute")
+async def register(request: Request, user_data: UserCreate, response: Response):
     existing = db.users.find_one({"email": user_data.email}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -241,7 +257,8 @@ async def register(user_data: UserCreate, response: Response):
     }
 
 @api_router.post("/auth/login")
-async def login(user_data: UserLogin, response: Response):
+@limiter.limit("5/minute")
+async def login(request: Request, user_data: UserLogin, response: Response):
     user = db.users.find_one({"email": user_data.email}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -484,6 +501,7 @@ async def get_action(action_id: str):
 # ============== AI SUGGESTIONS ROUTE ==============
 
 @api_router.post("/suggestions")
+@limiter.limit("30/minute")
 async def get_ai_suggestions(ai_request: AIRequest, request: Request):
     """Get AI-powered micro-action suggestions - local fallback version"""
     user = get_current_user_sync(request)
