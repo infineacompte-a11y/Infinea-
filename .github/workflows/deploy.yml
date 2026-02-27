@@ -34,8 +34,10 @@ jobs:
               "branch": "main",
               "autoDeploy": "yes",
               "serviceDetails": {
-                "buildCommand": "pip install -r requirements-deploy.txt",
-                "startCommand": "uvicorn server:app --host 0.0.0.0 --port $PORT"
+                "envSpecificDetails": {
+                  "buildCommand": "pip install -r requirements-deploy.txt",
+                  "startCommand": "uvicorn server:app --host 0.0.0.0 --port $PORT"
+                }
               }
             }')
           echo "Config mise à jour"
