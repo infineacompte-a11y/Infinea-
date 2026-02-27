@@ -11,16 +11,16 @@ jobs:
     name: Deploy Backend to Render
     runs-on: ubuntu-latest
     steps:
-      - name: Trouver le service Render infinea-api
+      - name: Trouver le service Render
         id: find_service
         run: |
-          RESPONSE=$(curl -s "https://api.render.com/v1/services?name=infinea-api&limit=1" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}")
-          SERVICE_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; s=json.load(sys.stdin); print(s[0]['service']['id'] if s else '')")
+          SERVICE_ID=$(curl -s "https://api.render.com/v1/services?name=infinea-api&limit=1" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            | python3 -c "import sys,json; s=json.load(sys.stdin); print(s[0]['service']['id'] if s else '')")
           echo "service_id=$SERVICE_ID" >> $GITHUB_OUTPUT
-          echo "Service trouvé : $SERVICE_ID"
+          echo "Service: $SERVICE_ID"
 
-      - name: Configurer le service Render
+      - name: Configurer le service (branche + commandes)
         run: |
           SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
           curl -s -X PATCH "https://api.render.com/v1/services/$SERVICE_ID" \
@@ -35,11 +35,32 @@ jobs:
                   "startCommand": "uvicorn server:app --host 0.0.0.0 --port $PORT"
                 }
               }
-            }' | python3 -c "
-          import sys,json; d=json.load(sys.stdin)
-          sd=d.get('serviceDetails',{}).get('envSpecificDetails',{})
-          print(f'branch={d.get(\"branch\")} build={sd.get(\"buildCommand\")} start={sd.get(\"startCommand\")}')
-          " 2>/dev/null
+            }' > /dev/null
+
+      - name: Configurer les env vars (ajout individuel, sans écraser)
+        run: |
+          SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
+          set_env() {
+            local key=$1 value=$2
+            if [ -n "$value" ] && [ "$value" != "" ]; then
+              curl -s -X PUT "https://api.render.com/v1/services/$SERVICE_ID/env-vars/$key" \
+                -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+                -H "Content-Type: application/json" \
+                -d "{\"value\":\"$value\"}" > /dev/null
+              echo "  ✓ $key"
+            else
+              echo "  ⏭ $key (non défini dans les secrets)"
+            fi
+          }
+          echo "Mise à jour des env vars..."
+          set_env "GOOGLE_CLIENT_ID" "${{ secrets.GOOGLE_CLIENT_ID }}"
+          set_env "GOOGLE_CLIENT_SECRET" "${{ secrets.GOOGLE_CLIENT_SECRET }}"
+          set_env "BACKEND_URL" "${{ secrets.BACKEND_URL }}"
+          set_env "FRONTEND_URL" "${{ secrets.FRONTEND_URL }}"
+          set_env "MONGO_URL" "${{ secrets.MONGO_URL }}"
+          set_env "JWT_SECRET" "${{ secrets.JWT_SECRET }}"
+          set_env "OPENAI_API_KEY" "${{ secrets.OPENAI_API_KEY }}"
+          set_env "ALLOWED_ORIGINS" "https://infinea.vercel.app,http://localhost:3000"
 
       - name: Déclencher le déploiement
         id: deploy
@@ -52,42 +73,27 @@ jobs:
             -d '{"clearCache":"do_not_clear"}')
           DEPLOY_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
           echo "deploy_id=$DEPLOY_ID" >> $GITHUB_OUTPUT
-          echo "Deploy ID: $DEPLOY_ID"
-          echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'commit={d.get(\"commit\",{}).get(\"id\",\"?\")[:7]} status={d.get(\"status\")}')" 2>/dev/null
+          echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Deploy {d[\"id\"]} commit={d[\"commit\"][\"id\"][:7]} status={d[\"status\"]}')" 2>/dev/null
 
       - name: Attendre le build (max 5min)
         run: |
           SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
           DEPLOY_ID="${{ steps.deploy.outputs.deploy_id }}"
-          if [ -z "$DEPLOY_ID" ]; then
-            echo "Pas de deploy ID, skip"
-            exit 0
-          fi
+          [ -z "$DEPLOY_ID" ] && echo "Pas de deploy ID" && exit 0
           for i in $(seq 1 30); do
             sleep 10
             STATUS=$(curl -s "https://api.render.com/v1/services/$SERVICE_ID/deploys/$DEPLOY_ID" \
               -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
               | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null)
-            echo "[$i/30] Status: $STATUS"
-            if [ "$STATUS" = "live" ]; then
-              echo "Deploy réussi !"
-              exit 0
-            fi
-            if [ "$STATUS" = "build_failed" ] || [ "$STATUS" = "update_failed" ] || [ "$STATUS" = "canceled" ]; then
-              echo "Deploy échoué avec status: $STATUS"
-              echo "Récupération des logs..."
-              curl -s "https://api.render.com/v1/services/$SERVICE_ID/deploys/$DEPLOY_ID/logs" \
-                -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-                | python3 -c "
-              import sys,json
-              logs = json.load(sys.stdin)
-              for entry in logs[-50:]:
-                print(entry.get('message',''))
-              " 2>/dev/null || echo "Impossible de récupérer les logs"
-              exit 1
-            fi
+            echo "[$i/30] $STATUS"
+            case "$STATUS" in
+              live) echo "Deploy réussi !" && exit 0 ;;
+              build_failed|update_failed|canceled|deactivated)
+                echo "ÉCHEC: $STATUS"
+                exit 1 ;;
+            esac
           done
-          echo "Timeout - deploy toujours en cours après 5min"
+          echo "Timeout après 5min"
 
   deploy-frontend:
     name: Deploy Frontend to Vercel
@@ -100,11 +106,9 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Vercel CLI
-        run: npm install -g vercel
-
-      - name: Deploy to Vercel (Production)
+      - name: Install & Deploy Vercel
         run: |
+          npm install -g vercel
           cd frontend
           vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:
