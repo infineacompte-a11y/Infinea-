@@ -10,6 +10,7 @@ export default function SessionDebrief({ sessionId, duration, notes, onContinue 
 
   useEffect(() => {
     fetchDebrief();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchDebrief = async () => {
