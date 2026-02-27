@@ -151,7 +151,7 @@ async def call_ai(session_suffix: str, system_message: str, prompt: str) -> Opti
                     "content-type": "application/json"
                 },
                 json={
-                    "model": "claude-3-5-haiku-20241022",
+                    "model": "claude-3-haiku-20240307",
                     "max_tokens": 1000,
                     "system": system_message,
                     "messages": [
@@ -1062,8 +1062,8 @@ Réponds en JSON:
             "created_at": datetime.now(timezone.utc).isoformat()
         }
 
-    await db.user_custom_actions.insert_one({**action, "_id": None})
-    action.pop("_id", None)
+    doc = {**action}
+    await db.user_custom_actions.insert_one(doc)
     return {"action": action}
 
 # ============== SESSION TRACKING ROUTES ==============
