@@ -133,28 +133,31 @@ Réponds toujours en français, de manière concise, chaleureuse et motivante.
 Tes réponses doivent toujours être au format JSON quand demandé."""
 
 async def call_ai(session_suffix: str, system_message: str, prompt: str) -> Optional[str]:
-    """Shared AI call wrapper using OpenAI API directly via httpx."""
-    api_key = os.environ.get('OPENAI_API_KEY') or os.environ.get('EMERGENT_LLM_KEY')
+    """Shared AI call wrapper using Anthropic Claude API via httpx."""
+    api_key = os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('OPENAI_API_KEY')
     if not api_key:
         return None
     try:
         async with httpx.AsyncClient(timeout=30.0) as client_http:
             resp = await client_http.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json"
+                },
                 json={
-                    "model": "gpt-4o-mini",
-                    "messages": [
-                        {"role": "system", "content": system_message},
-                        {"role": "user", "content": prompt}
-                    ],
+                    "model": "claude-3-5-haiku-20241022",
                     "max_tokens": 1000,
-                    "temperature": 0.7
+                    "system": system_message,
+                    "messages": [
+                        {"role": "user", "content": prompt}
+                    ]
                 }
             )
             resp.raise_for_status()
             data = resp.json()
-            return data["choices"][0]["message"]["content"]
+            return data["content"][0]["text"]
     except Exception as e:
         logger.error(f"AI call error ({session_suffix}): {e}")
         return None

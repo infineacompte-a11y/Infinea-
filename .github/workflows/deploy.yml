@@ -59,7 +59,7 @@ jobs:
           set_env "FRONTEND_URL" "${{ secrets.FRONTEND_URL }}"
           set_env "MONGO_URL" "${{ secrets.MONGO_URL }}"
           set_env "JWT_SECRET" "${{ secrets.JWT_SECRET }}"
-          set_env "OPENAI_API_KEY" "${{ secrets.OPENAI_API_KEY }}"
+          set_env "ANTHROPIC_API_KEY" "${{ secrets.ANTHROPIC_API_KEY }}"
           set_env "ALLOWED_ORIGINS" "https://infinea.vercel.app,http://localhost:3000"
 
       - name: Déclencher le déploiement
