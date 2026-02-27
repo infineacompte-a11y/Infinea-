@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import SlotCard from "@/components/SlotCard";
+import AICoachCard from "@/components/AICoachCard";
 
 const categoryIcons = {
   learning: BookOpen,
@@ -350,6 +351,9 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           </div>
+
+          {/* AI Coach */}
+          <AICoachCard />
 
           {/* Main Action Card */}
           <Card className="mb-8 bento-item">

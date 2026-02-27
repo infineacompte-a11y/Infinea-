@@ -23,6 +23,7 @@ import {
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import CreateActionModal from "@/components/CreateActionModal";
 
 const categoryIcons = {
   learning: BookOpen,
@@ -46,9 +47,11 @@ export default function ActionsLibrary() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [actions, setActions] = useState([]);
+  const [customActions, setCustomActions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("all");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     fetchActions();
@@ -56,10 +59,13 @@ export default function ActionsLibrary() {
 
   const fetchActions = async () => {
     try {
-      const response = await authFetch(`${API}/actions`);
-      if (!response.ok) throw new Error("Erreur");
-      const data = await response.json();
-      setActions(data);
+      const [actionsRes, customRes] = await Promise.all([
+        authFetch(`${API}/actions`),
+        authFetch(`${API}/actions/custom`).catch(() => null),
+      ]);
+      if (!actionsRes.ok) throw new Error("Erreur");
+      setActions(await actionsRes.json());
+      if (customRes?.ok) setCustomActions(await customRes.json());
     } catch (error) {
       toast.error("Impossible de charger les actions");
     } finally {
@@ -97,9 +103,10 @@ export default function ActionsLibrary() {
     navigate("/login");
   };
 
-  const filteredActions = activeCategory === "all" 
-    ? actions 
-    : actions.filter(a => a.category === activeCategory);
+  const allActions = [...actions, ...customActions.map(a => ({ ...a, is_custom: true }))];
+  const filteredActions = activeCategory === "all"
+    ? allActions
+    : allActions.filter(a => a.category === activeCategory);
 
   const NavLinks = ({ mobile = false }) => (
     <>
@@ -202,13 +209,23 @@ export default function ActionsLibrary() {
       <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
         <div className="max-w-5xl mx-auto">
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="library-title">
-              Bibliothèque d'actions
-            </h1>
-            <p className="text-muted-foreground">
-              Explorez toutes les micro-actions disponibles
-            </p>
+          <div className="mb-8 flex items-start justify-between">
+            <div>
+              <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="library-title">
+                Bibliothèque d'actions
+              </h1>
+              <p className="text-muted-foreground">
+                Explorez toutes les micro-actions disponibles
+              </p>
+            </div>
+            <Button
+              onClick={() => setShowCreateModal(true)}
+              className="rounded-xl shrink-0"
+              data-testid="create-action-btn"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              Créer une action
+            </Button>
           </div>
 
           {/* Category Tabs */}
@@ -257,6 +274,11 @@ export default function ActionsLibrary() {
                           <div>
                             <div className="flex items-center gap-2 mb-1">
                               <h3 className="font-medium">{action.title}</h3>
+                              {action.is_custom && (
+                                <Badge className="text-xs bg-primary/20 text-primary border-primary/30">
+                                  Custom
+                                </Badge>
+                              )}
                               {action.is_premium && (
                                 <Badge variant="secondary" className="text-xs flex items-center gap-1">
                                   {isPremiumLocked && <Lock className="w-3 h-3" />}
@@ -290,6 +312,12 @@ export default function ActionsLibrary() {
           )}
         </div>
       </main>
+
+      <CreateActionModal
+        open={showCreateModal}
+        onOpenChange={setShowCreateModal}
+        onActionCreated={fetchActions}
+      />
     </div>
   );
 }
