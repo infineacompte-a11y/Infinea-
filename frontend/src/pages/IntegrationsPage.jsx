@@ -57,7 +57,11 @@ const AVAILABLE_INTEGRATIONS = [
     icon: Calendar,
     color: "blue",
     category: "calendrier",
-    status: "available", // available, coming_soon, premium
+    status: "available",
+    type: "url",
+    urlLabel: "URL secrète iCal de Google Calendar",
+    urlPlaceholder: "https://calendar.google.com/calendar/ical/.../basic.ics",
+    urlHelp: "Google Calendar → Paramètres → Votre calendrier → Adresse secrète au format iCal. Copiez l'URL et collez-la ici.",
   },
   {
     id: "notion",
@@ -111,6 +115,9 @@ const AVAILABLE_INTEGRATIONS = [
     category: "calendrier",
     status: "available",
     type: "url",
+    urlLabel: "URL du calendrier iCal",
+    urlPlaceholder: "https://calendar.example.com/basic.ics",
+    urlHelp: "Collez l'URL .ics de votre application calendrier (Apple, Outlook, etc.).",
   },
 ];
 
@@ -134,9 +141,9 @@ export default function IntegrationsPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedIntegration, setSelectedIntegration] = useState(null);
-  const [icalDialogOpen, setIcalDialogOpen] = useState(false);
-  const [icalUrl, setIcalUrl] = useState("");
-  const [isConnectingIcal, setIsConnectingIcal] = useState(false);
+  const [urlDialogService, setUrlDialogService] = useState(null);
+  const [urlValue, setUrlValue] = useState("");
+  const [isConnectingUrl, setIsConnectingUrl] = useState(false);
   const [tokenDialogService, setTokenDialogService] = useState(null);
   const [tokenValue, setTokenValue] = useState("");
   const [isConnectingToken, setIsConnectingToken] = useState(false);
@@ -206,31 +213,29 @@ export default function IntegrationsPage() {
     }
   };
 
-  const handleConnectIcal = async () => {
-    if (!icalUrl.trim()) {
-      toast.error("Veuillez entrer une URL iCal");
-      return;
-    }
-    setIsConnectingIcal(true);
+  const handleConnectUrl = async () => {
+    if (!urlValue.trim() || !urlDialogService) return;
+    setIsConnectingUrl(true);
     try {
-      const response = await authFetch(`${API}/integrations/ical/connect`, {
+      const serviceId = urlDialogService.id;
+      const response = await authFetch(`${API}/integrations/${serviceId}/connect-url`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: icalUrl.trim() }),
+        body: JSON.stringify({ url: urlValue.trim(), name: urlDialogService.name }),
       });
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.detail || "Erreur");
       }
       const data = await response.json();
-      toast.success(`${data.calendar_name} connecté ! ${data.events_found} événements trouvés.`);
-      setIcalDialogOpen(false);
-      setIcalUrl("");
+      toast.success(`${data.calendar_name || urlDialogService.name} connecté ! ${data.events_found || 0} événements trouvés.`);
+      setUrlDialogService(null);
+      setUrlValue("");
       fetchData();
     } catch (error) {
-      toast.error(error.message || "Erreur de connexion iCal");
+      toast.error(error.message || "Erreur de connexion");
     } finally {
-      setIsConnectingIcal(false);
+      setIsConnectingUrl(false);
     }
   };
 
@@ -604,7 +609,7 @@ export default function IntegrationsPage() {
                                       <Button
                                         size="sm"
                                         onClick={() => {
-                                          if (int.type === "url") setIcalDialogOpen(true);
+                                          if (int.type === "url") setUrlDialogService(int);
                                           else if (int.type === "token") setTokenDialogService(int);
                                           else handleConnect(int.provider);
                                         }}
@@ -811,43 +816,48 @@ export default function IntegrationsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* iCal URL Connect Dialog */}
-      <Dialog open={icalDialogOpen} onOpenChange={setIcalDialogOpen}>
+      {/* URL Connect Dialog (iCal, Google Calendar) */}
+      <Dialog open={!!urlDialogService} onOpenChange={() => { setUrlDialogService(null); setUrlValue(""); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Link2 className="w-5 h-5 text-orange-500" />
-              Ajouter un calendrier iCal
+              {urlDialogService && (() => {
+                const Icon = urlDialogService.icon;
+                const colors = colorClasses[urlDialogService.color];
+                return <div className={`w-8 h-8 rounded-lg ${colors?.bg} flex items-center justify-center`}>
+                  <Icon className={`w-4 h-4 ${colors?.text}`} />
+                </div>;
+              })()}
+              Connecter {urlDialogService?.name}
             </DialogTitle>
             <DialogDescription>
-              Collez l'URL de votre flux iCal (.ics) pour détecter automatiquement vos créneaux libres.
-              Vous la trouverez dans les paramètres de votre application calendrier.
+              {urlDialogService?.urlHelp}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <Label htmlFor="ical-url">URL du calendrier iCal</Label>
+            <Label htmlFor="url-input">{urlDialogService?.urlLabel || "URL du calendrier"}</Label>
             <Input
-              id="ical-url"
+              id="url-input"
               type="url"
-              placeholder="https://calendar.example.com/basic.ics"
-              value={icalUrl}
-              onChange={(e) => setIcalUrl(e.target.value)}
+              placeholder={urlDialogService?.urlPlaceholder || "https://..."}
+              value={urlValue}
+              onChange={(e) => setUrlValue(e.target.value)}
               className="mt-2"
-              data-testid="ical-url-input"
+              data-testid="url-connect-input"
             />
             <p className="text-xs text-muted-foreground mt-2">
               Formats supportés : .ics, webcal://, https://
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setIcalDialogOpen(false); setIcalUrl(""); }}>
+            <Button variant="outline" onClick={() => { setUrlDialogService(null); setUrlValue(""); }}>
               Annuler
             </Button>
             <Button
-              onClick={handleConnectIcal}
-              disabled={isConnectingIcal || !icalUrl.trim()}
+              onClick={handleConnectUrl}
+              disabled={isConnectingUrl || !urlValue.trim()}
             >
-              {isConnectingIcal ? (
+              {isConnectingUrl ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
               ) : (
                 <Link2 className="w-4 h-4 mr-2" />

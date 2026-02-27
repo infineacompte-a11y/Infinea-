@@ -1482,8 +1482,9 @@ async def get_integrations(user: dict = Depends(get_current_user)):
     for service_key, config in INTEGRATION_CONFIGS.items():
         client_id = os.environ.get(config["env_client_id"])
         connected = connected_map.get(service_key)
-        # Available if OAuth configured OR if token connect is supported
-        is_available = bool(client_id) or service_key in TOKEN_CONNECT_VALIDATORS
+        # Available if OAuth configured, token connect supported, or URL connect (calendars via iCal)
+        supports_url = service_key in ("google_calendar",) and ICAL_AVAILABLE
+        is_available = bool(client_id) or service_key in TOKEN_CONNECT_VALIDATORS or supports_url
         result[service_key] = {
             "name": config["name"],
             "connected": bool(connected),
@@ -1491,6 +1492,7 @@ async def get_integrations(user: dict = Depends(get_current_user)):
             "account_name": connected.get("account_name") if connected else None,
             "available": is_available,
             "supports_token": service_key in TOKEN_CONNECT_VALIDATORS,
+            "supports_url": supports_url,
             "sync_enabled": connected.get("sync_enabled", connected.get("enabled", False)) if connected else False,
         }
 
@@ -1751,10 +1753,69 @@ async def trigger_sync(service: str, user: dict = Depends(get_current_user)):
     except Exception:
         pass  # Token may not be encrypted (legacy)
 
-    # --- Google Calendar: use existing slot detection + event sync ---
+    # --- Google Calendar: URL-based (iCal) or OAuth ---
     if service == "google_calendar":
+        # Detect if connected via iCal URL (no token_expires_at, URL starts with http)
+        is_ical_url = not integration.get("token_expires_at") and access_token.startswith("http")
+        if is_ical_url and ICAL_AVAILABLE:
+            # Use iCal parsing (same as ical service)
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as http_client:
+                    resp = await http_client.get(access_token, follow_redirects=True)
+                    if resp.status_code != 200:
+                        raise HTTPException(status_code=502, detail=f"Calendar feed returned HTTP {resp.status_code}")
+                    cal = ICalCalendar.from_ical(resp.text)
+                    now = datetime.now(timezone.utc)
+                    end_time = now + timedelta(hours=24)
+                    events = []
+                    for component in cal.walk("VEVENT"):
+                        dtstart = component.get("dtstart")
+                        if not dtstart or not hasattr(dtstart, "dt"):
+                            continue
+                        start = dtstart.dt
+                        if hasattr(start, "hour"):
+                            if hasattr(start, "tzinfo") and start.tzinfo:
+                                start = start.astimezone(timezone.utc)
+                            else:
+                                start = start.replace(tzinfo=timezone.utc)
+                            if now <= start <= end_time:
+                                dtend = component.get("dtend")
+                                end = dtend.dt if dtend and hasattr(dtend, "dt") else start + timedelta(hours=1)
+                                if hasattr(end, "tzinfo") and end.tzinfo:
+                                    end = end.astimezone(timezone.utc)
+                                else:
+                                    end = end.replace(tzinfo=timezone.utc)
+                                events.append({
+                                    "summary": str(component.get("summary", "Sans titre")),
+                                    "start": {"dateTime": start.isoformat()},
+                                    "end": {"dateTime": end.isoformat()},
+                                })
+                    prefs = await db.notification_preferences.find_one({"user_id": user["user_id"]}, {"_id": 0}) or {}
+                    settings = {**DEFAULT_SETTINGS, **prefs}
+                    slots = await detect_free_slots(events, settings)
+                    await cleanup_old_slots(db, user["user_id"])
+                    actions = await db.micro_actions.find({}, {"_id": 0}).to_list(50)
+                    await schedule_slot_notifications(db, user["user_id"], slots, actions, user.get("subscription_tier", "free"))
+                    await db.user_integrations.update_one(
+                        {"user_id": user["user_id"], "$or": [{"service": service}, {"provider": service}]},
+                        {"$set": {"last_sync_at": now.isoformat(), "last_synced_at": now.isoformat()}}
+                    )
+                    return {
+                        "message": "Sync completed",
+                        "synced_count": len(slots),
+                        "events_found": len(events),
+                        "slots_detected": len(slots),
+                        "service": service,
+                        "last_sync": now.isoformat()
+                    }
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Google Calendar iCal sync failed: {e}")
+                raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+        # OAuth-based sync (legacy)
         try:
-            # Check token expiry and refresh if needed
             token_expires_str = integration.get("token_expires_at")
             if token_expires_str:
                 token_expires = datetime.fromisoformat(token_expires_str.replace('Z', '+00:00'))
@@ -2059,6 +2120,55 @@ async def connect_ical(request: ICalConnectRequest, user: dict = Depends(get_cur
         "service": "ical",
         "provider": "ical",
         "access_token": encrypted_url,  # Encrypted iCal URL
+        "account_name": cal_name,
+        "connected_at": datetime.now(timezone.utc).isoformat(),
+        "enabled": True,
+        "sync_enabled": True,
+        "integration_id": f"int_{uuid.uuid4().hex[:12]}",
+        "metadata": {"event_count": event_count, "ical_url_hash": url[:50] + "..."},
+    })
+
+    return {"success": True, "calendar_name": cal_name, "events_found": event_count}
+
+# URL-based services that support iCal format
+URL_CONNECT_SERVICES = {"ical", "google_calendar"}
+
+@api_router.post("/integrations/{service}/connect-url")
+async def connect_url(service: str, request: ICalConnectRequest, user: dict = Depends(get_current_user)):
+    """Connect any calendar service via iCal URL (.ics feed)."""
+    if service not in URL_CONNECT_SERVICES:
+        raise HTTPException(status_code=400, detail=f"Service '{service}' ne supporte pas la connexion par URL")
+    if not ICAL_AVAILABLE:
+        raise HTTPException(status_code=503, detail="iCal support not installed (pip install icalendar)")
+
+    url = request.url.strip()
+    if not url.startswith(("http://", "https://", "webcal://")):
+        raise HTTPException(status_code=400, detail="URL invalide. L'URL doit commencer par http://, https:// ou webcal://")
+
+    if url.startswith("webcal://"):
+        url = "https://" + url[len("webcal://"):]
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as http_client:
+            resp = await http_client.get(url, follow_redirects=True)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"Impossible d'accéder à l'URL (HTTP {resp.status_code})")
+            cal = ICalCalendar.from_ical(resp.text)
+            cal_name = str(cal.get("X-WR-CALNAME", request.name or service))
+            event_count = sum(1 for _ in cal.walk("VEVENT"))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"URL invalide ou format iCal non reconnu: {str(e)[:100]}")
+
+    encrypted_url = encrypt_token(url)
+
+    await db.user_integrations.delete_many({"user_id": user["user_id"], "service": service})
+    await db.user_integrations.insert_one({
+        "user_id": user["user_id"],
+        "service": service,
+        "provider": service,
+        "access_token": encrypted_url,
         "account_name": cal_name,
         "connected_at": datetime.now(timezone.utc).isoformat(),
         "enabled": True,
