@@ -168,6 +168,10 @@ const ProtectedRoute = ({ children }) => {
         const userData = await response.json();
         if (!cancelled) {
           setUser(userData);
+          // Redirect new users to onboarding if they haven't completed it
+          if (!userData.user_profile && location.pathname !== "/onboarding") {
+            navigate("/onboarding", { replace: true });
+          }
           setAuthState("authenticated");
         }
       } catch (error) {
@@ -183,7 +187,14 @@ const ProtectedRoute = ({ children }) => {
     verifyToken();
 
     return () => { cancelled = true; };
-  }, [user, location.state, navigate, setUser]);
+  }, [user, location.state, location.pathname, navigate, setUser]);
+
+  // Redirect to onboarding for new users (no profile yet)
+  useEffect(() => {
+    if (user && !user.user_profile && location.pathname !== "/onboarding") {
+      navigate("/onboarding", { replace: true });
+    }
+  }, [user, location.pathname, navigate]);
 
   if (authState === "checking") {
     return (
