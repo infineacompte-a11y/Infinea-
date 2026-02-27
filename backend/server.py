@@ -15,6 +15,11 @@ import jwt
 import bcrypt
 import httpx
 import json
+try:
+    from icalendar import Calendar as ICalCalendar
+    ICAL_AVAILABLE = True
+except ImportError:
+    ICAL_AVAILABLE = False
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -128,6 +133,14 @@ class DebriefRequest(BaseModel):
     actual_duration: Optional[int] = None
     duration_minutes: Optional[int] = None  # Frontend sends this
     notes: Optional[str] = None
+
+class ICalConnectRequest(BaseModel):
+    url: str
+    name: Optional[str] = "Mon calendrier iCal"
+
+class TokenConnectRequest(BaseModel):
+    token: str
+    name: Optional[str] = None
 
 # ============== AI HELPER FUNCTIONS ==============
 
@@ -1469,14 +1482,29 @@ async def get_integrations(user: dict = Depends(get_current_user)):
     for service_key, config in INTEGRATION_CONFIGS.items():
         client_id = os.environ.get(config["env_client_id"])
         connected = connected_map.get(service_key)
+        # Available if OAuth configured OR if token connect is supported
+        is_available = bool(client_id) or service_key in TOKEN_CONNECT_VALIDATORS
         result[service_key] = {
             "name": config["name"],
             "connected": bool(connected),
             "connected_at": connected.get("connected_at") or connected.get("created_at") if connected else None,
             "account_name": connected.get("account_name") if connected else None,
-            "available": bool(client_id),
+            "available": is_available,
+            "supports_token": service_key in TOKEN_CONNECT_VALIDATORS,
             "sync_enabled": connected.get("sync_enabled", connected.get("enabled", False)) if connected else False,
         }
+
+    # iCal is non-OAuth, always available
+    ical_connected = connected_map.get("ical")
+    result["ical"] = {
+        "name": "iCal",
+        "connected": bool(ical_connected),
+        "connected_at": ical_connected.get("connected_at") if ical_connected else None,
+        "account_name": ical_connected.get("account_name") if ical_connected else None,
+        "available": ICAL_AVAILABLE,
+        "sync_enabled": ical_connected.get("sync_enabled", False) if ical_connected else False,
+        "type": "url",
+    }
 
     return result
 
@@ -1785,6 +1813,75 @@ async def trigger_sync(service: str, user: dict = Depends(get_current_user)):
             logger.error(f"Google Calendar sync failed: {e}")
             raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
+    # --- iCal: fetch events and detect free slots ---
+    if service == "ical" and ICAL_AVAILABLE:
+        try:
+            ical_url = access_token  # For iCal, the "token" is the decrypted URL
+            async with httpx.AsyncClient(timeout=15.0) as http_client:
+                resp = await http_client.get(ical_url, follow_redirects=True)
+                if resp.status_code != 200:
+                    raise HTTPException(status_code=502, detail=f"iCal feed returned HTTP {resp.status_code}")
+
+                cal = ICalCalendar.from_ical(resp.text)
+                now = datetime.now(timezone.utc)
+                end_time = now + timedelta(hours=24)
+                events = []
+
+                for component in cal.walk("VEVENT"):
+                    dtstart = component.get("dtstart")
+                    dtend = component.get("dtend")
+                    if dtstart and dtend:
+                        start = dtstart.dt
+                        end = dtend.dt
+                        if hasattr(start, 'hour'):
+                            if start.tzinfo is None:
+                                start = start.replace(tzinfo=timezone.utc)
+                            if end.tzinfo is None:
+                                end = end.replace(tzinfo=timezone.utc)
+                            if start < end_time and end > now:
+                                events.append({"start": start.isoformat(), "end": end.isoformat()})
+
+                events.sort(key=lambda e: e["start"])
+                slots = []
+                settings = await db.notification_preferences.find_one(
+                    {"user_id": user["user_id"]}, {"_id": 0}
+                )
+                min_dur = (settings or {}).get("min_slot_duration", 5)
+                max_dur = (settings or {}).get("max_slot_duration", 20)
+
+                prev_end = now
+                for event in events:
+                    event_start = datetime.fromisoformat(event["start"])
+                    gap_minutes = (event_start - prev_end).total_seconds() / 60
+                    if min_dur <= gap_minutes <= max_dur:
+                        slots.append({
+                            "user_id": user["user_id"],
+                            "start_time": prev_end.isoformat(),
+                            "end_time": event_start.isoformat(),
+                            "duration_minutes": int(gap_minutes),
+                            "source": "ical",
+                            "detected_at": now.isoformat(),
+                        })
+                    prev_end = max(prev_end, datetime.fromisoformat(event["end"]))
+
+                if slots:
+                    await db.detected_free_slots.delete_many({"user_id": user["user_id"], "source": "ical"})
+                    await db.detected_free_slots.insert_many(slots)
+
+                await db.user_integrations.update_one(
+                    {"user_id": user["user_id"], "service": "ical"},
+                    {"$set": {"last_synced_at": now.isoformat(), "metadata.event_count": len(events)}}
+                )
+                return {
+                    "synced_count": len(events), "events_found": len(events),
+                    "slots_detected": len(slots), "service": "ical", "last_sync": now.isoformat()
+                }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"iCal sync error: {e}")
+            raise HTTPException(status_code=500, detail=f"iCal sync failed: {str(e)[:200]}")
+
     # --- Other services: sync recent sessions ---
     week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     recent_sessions = await db.user_sessions_history.find(
@@ -1896,13 +1993,20 @@ async def trigger_sync(service: str, user: dict = Depends(get_current_user)):
                         f"• Catégories: {cats_str}\n\n"
                         f"Continuez comme ça ! 🚀"
                     )
-                    resp = await http_client.post(
-                        "https://slack.com/api/chat.postMessage",
-                        json={"channel": "me", "text": message, "mrkdwn": True},
-                        headers={"Authorization": f"Bearer {access_token}"}
-                    )
-                    if resp.status_code == 200 and resp.json().get("ok"):
-                        synced_count = session_count
+
+                    # Support both webhook URLs and OAuth tokens
+                    if access_token.startswith("https://hooks.slack.com/"):
+                        resp = await http_client.post(access_token, json={"text": message})
+                    else:
+                        resp = await http_client.post(
+                            "https://slack.com/api/chat.postMessage",
+                            json={"channel": "me", "text": message, "mrkdwn": True},
+                            headers={"Authorization": f"Bearer {access_token}"}
+                        )
+                    if resp.status_code == 200:
+                        resp_data = resp.json() if "application/json" in resp.headers.get("content-type", "") else {}
+                        if resp_data.get("ok", True):  # Webhooks return "ok", API returns {"ok": true}
+                            synced_count = session_count
 
     except Exception as e:
         logger.error(f"Sync error for {service}: {e}")
@@ -1914,6 +2018,249 @@ async def trigger_sync(service: str, user: dict = Depends(get_current_user)):
     )
 
     return {"synced_count": synced_count, "service": service}
+
+# ============== iCal INTEGRATION (URL-based, non-OAuth) ==============
+
+@api_router.post("/integrations/ical/connect")
+async def connect_ical(request: ICalConnectRequest, user: dict = Depends(get_current_user)):
+    """Connect an iCal calendar via URL (.ics feed)."""
+    if not ICAL_AVAILABLE:
+        raise HTTPException(status_code=503, detail="iCal support not installed (pip install icalendar)")
+
+    url = request.url.strip()
+    if not url.startswith(("http://", "https://", "webcal://")):
+        raise HTTPException(status_code=400, detail="URL invalide. L'URL doit commencer par http://, https:// ou webcal://")
+
+    # Normalize webcal:// to https://
+    if url.startswith("webcal://"):
+        url = "https://" + url[len("webcal://"):]
+
+    # Validate the URL by fetching it
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as http_client:
+            resp = await http_client.get(url, follow_redirects=True)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"Impossible d'accéder à l'URL (HTTP {resp.status_code})")
+            # Try to parse as iCal to validate
+            cal = ICalCalendar.from_ical(resp.text)
+            cal_name = str(cal.get("X-WR-CALNAME", request.name or "iCal"))
+            event_count = sum(1 for _ in cal.walk("VEVENT"))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"URL invalide ou format iCal non reconnu: {str(e)[:100]}")
+
+    # Store as integration (URL encrypted like a token)
+    encrypted_url = encrypt_token(url)
+
+    await db.user_integrations.delete_many({"user_id": user["user_id"], "service": "ical"})
+    await db.user_integrations.insert_one({
+        "user_id": user["user_id"],
+        "service": "ical",
+        "provider": "ical",
+        "access_token": encrypted_url,  # Encrypted iCal URL
+        "account_name": cal_name,
+        "connected_at": datetime.now(timezone.utc).isoformat(),
+        "enabled": True,
+        "sync_enabled": True,
+        "integration_id": f"int_{uuid.uuid4().hex[:12]}",
+        "metadata": {"event_count": event_count, "ical_url_hash": url[:50] + "..."},
+    })
+
+    return {"success": True, "calendar_name": cal_name, "events_found": event_count}
+
+@api_router.post("/integrations/ical/sync")
+async def sync_ical(user: dict = Depends(get_current_user)):
+    """Sync iCal calendar — fetches events and detects free slots."""
+    if not ICAL_AVAILABLE:
+        raise HTTPException(status_code=503, detail="iCal support not installed")
+
+    integration = await db.user_integrations.find_one(
+        {"user_id": user["user_id"], "service": "ical"}, {"_id": 0}
+    )
+    if not integration:
+        raise HTTPException(status_code=404, detail="iCal not connected")
+
+    encrypted_url = integration.get("access_token")
+    if not encrypted_url:
+        raise HTTPException(status_code=400, detail="No iCal URL stored")
+
+    try:
+        ical_url = decrypt_token(encrypted_url)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to decrypt iCal URL")
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as http_client:
+            resp = await http_client.get(ical_url, follow_redirects=True)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"iCal feed returned HTTP {resp.status_code}")
+
+            cal = ICalCalendar.from_ical(resp.text)
+
+            now = datetime.now(timezone.utc)
+            end_time = now + timedelta(hours=24)
+            events = []
+
+            for component in cal.walk("VEVENT"):
+                dtstart = component.get("dtstart")
+                dtend = component.get("dtend")
+                if dtstart and dtend:
+                    start = dtstart.dt
+                    end = dtend.dt
+                    # Handle date vs datetime
+                    if hasattr(start, 'hour'):
+                        if start.tzinfo is None:
+                            start = start.replace(tzinfo=timezone.utc)
+                        if end.tzinfo is None:
+                            end = end.replace(tzinfo=timezone.utc)
+                        if start < end_time and end > now:
+                            events.append({
+                                "summary": str(component.get("summary", "Événement")),
+                                "start": start.isoformat(),
+                                "end": end.isoformat(),
+                            })
+
+            # Detect free slots between events (same logic as Google Calendar)
+            events.sort(key=lambda e: e["start"])
+            slots = []
+            settings = await db.notification_preferences.find_one(
+                {"user_id": user["user_id"]}, {"_id": 0}
+            )
+            min_dur = (settings or {}).get("min_slot_duration", 5)
+            max_dur = (settings or {}).get("max_slot_duration", 20)
+
+            prev_end = now
+            for event in events:
+                event_start = datetime.fromisoformat(event["start"])
+                gap_minutes = (event_start - prev_end).total_seconds() / 60
+                if min_dur <= gap_minutes <= max_dur:
+                    slots.append({
+                        "user_id": user["user_id"],
+                        "start_time": prev_end.isoformat(),
+                        "end_time": event_start.isoformat(),
+                        "duration_minutes": int(gap_minutes),
+                        "source": "ical",
+                        "detected_at": now.isoformat(),
+                    })
+                prev_end = max(prev_end, datetime.fromisoformat(event["end"]))
+
+            # Store detected slots
+            if slots:
+                await db.detected_free_slots.delete_many({"user_id": user["user_id"], "source": "ical"})
+                await db.detected_free_slots.insert_many(slots)
+
+            await db.user_integrations.update_one(
+                {"user_id": user["user_id"], "service": "ical"},
+                {"$set": {"last_synced_at": now.isoformat(), "metadata.event_count": len(events)}}
+            )
+
+            return {
+                "synced_count": len(events),
+                "events_found": len(events),
+                "slots_detected": len(slots),
+                "service": "ical",
+                "last_sync": now.isoformat(),
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"iCal sync error: {e}")
+        raise HTTPException(status_code=500, detail=f"iCal sync failed: {str(e)[:200]}")
+
+# ============== TOKEN/URL CONNECT (Notion, Todoist, Slack) ==============
+
+TOKEN_CONNECT_VALIDATORS = {
+    "notion": {
+        "name": "Notion",
+        "validate_url": "https://api.notion.com/v1/users/me",
+        "headers_fn": lambda token: {"Authorization": f"Bearer {token}", "Notion-Version": "2022-06-28"},
+        "account_fn": lambda data: data.get("name", "Notion Workspace"),
+        "placeholder": "secret_...",
+        "description": "Token d'intégration interne Notion",
+        "help_url": "https://www.notion.so/my-integrations",
+    },
+    "todoist": {
+        "name": "Todoist",
+        "validate_url": "https://api.todoist.com/rest/v2/projects",
+        "headers_fn": lambda token: {"Authorization": f"Bearer {token}"},
+        "account_fn": lambda data: "Todoist",
+        "placeholder": "votre token API Todoist",
+        "description": "Token API Todoist",
+        "help_url": "https://app.todoist.com/app/settings/integrations/developer",
+    },
+    "slack": {
+        "name": "Slack",
+        "validate_url": None,  # Slack uses webhook URL, validated differently
+        "placeholder": "https://hooks.slack.com/services/...",
+        "description": "URL de webhook Slack",
+        "help_url": "https://api.slack.com/messaging/webhooks",
+    },
+}
+
+@api_router.post("/integrations/{service}/connect-token")
+async def connect_via_token(service: str, request: TokenConnectRequest, user: dict = Depends(get_current_user)):
+    """Connect an integration via API token or webhook URL (alternative to OAuth)."""
+    if service not in TOKEN_CONNECT_VALIDATORS:
+        raise HTTPException(status_code=400, detail=f"Service '{service}' ne supporte pas la connexion par token")
+
+    config = TOKEN_CONNECT_VALIDATORS[service]
+    token = request.token.strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Token ou URL requis")
+
+    account_name = request.name or config["name"]
+
+    # Validate the token/URL by calling the service API
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http_client:
+            if service == "slack":
+                # Slack: validate webhook URL by sending a test message
+                if not token.startswith("https://hooks.slack.com/"):
+                    raise HTTPException(status_code=400, detail="URL Slack invalide. Doit commencer par https://hooks.slack.com/")
+                resp = await http_client.post(token, json={"text": "✅ InFinea connecté avec succès !"})
+                if resp.status_code != 200:
+                    raise HTTPException(status_code=400, detail=f"Webhook Slack invalide (HTTP {resp.status_code})")
+                account_name = request.name or "Slack Webhook"
+            else:
+                # Notion/Todoist: validate token via API call
+                headers = config["headers_fn"](token)
+                resp = await http_client.get(config["validate_url"], headers=headers)
+                if resp.status_code == 401:
+                    raise HTTPException(status_code=400, detail=f"Token {config['name']} invalide ou expiré")
+                if resp.status_code != 200:
+                    raise HTTPException(status_code=400, detail=f"Erreur de validation {config['name']} (HTTP {resp.status_code})")
+                try:
+                    data = resp.json()
+                    account_name = config["account_fn"](data) or config["name"]
+                except Exception:
+                    pass
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Impossible de valider le token: {str(e)[:100]}")
+
+    # Store encrypted token
+    encrypted_token = encrypt_token(token)
+
+    await db.user_integrations.delete_many({"user_id": user["user_id"], "service": service})
+    await db.user_integrations.delete_many({"user_id": user["user_id"], "provider": service})
+    await db.user_integrations.insert_one({
+        "user_id": user["user_id"],
+        "service": service,
+        "provider": service,
+        "access_token": encrypted_token,
+        "account_name": account_name,
+        "connected_at": datetime.now(timezone.utc).isoformat(),
+        "enabled": True,
+        "sync_enabled": True,
+        "integration_id": f"int_{uuid.uuid4().hex[:12]}",
+        "connection_type": "token",  # Distinguish from OAuth connections
+    })
+
+    return {"success": True, "account_name": account_name, "service": service}
 
 # ============== FREE SLOTS ENDPOINTS ==============
 
