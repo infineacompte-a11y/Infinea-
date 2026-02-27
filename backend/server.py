@@ -106,12 +106,15 @@ class ProgressStats(BaseModel):
     recent_sessions: List[Dict[str, Any]]
 
 class OnboardingProfile(BaseModel):
-    goals: List[str]  # ["learning", "productivity", "well_being"]
-    availability_slots: List[str]  # ["morning", "lunch", "evening"]
-    daily_minutes: int  # 5, 10, or 15
-    energy_high: str  # "morning", "afternoon", "evening"
-    energy_low: str  # "morning", "afternoon", "evening"
-    interests: Dict[str, List[str]]  # {"learning": ["langues", "coding"], ...}
+    goals: List[str] = []  # ["learning", "productivity", "well_being"]
+    preferred_times: List[str] = []  # ["morning", "lunch", "evening"]
+    energy_level: str = "medium"  # "low", "medium", "high"
+    interests: List[str] = []  # ["learning", "productivity", "wellness"]
+    # Legacy fields (optional for backward compat)
+    availability_slots: Optional[List[str]] = None
+    daily_minutes: Optional[int] = None
+    energy_high: Optional[str] = None
+    energy_low: Optional[str] = None
 
 class CustomActionRequest(BaseModel):
     description: str
