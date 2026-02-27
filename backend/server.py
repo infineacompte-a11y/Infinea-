@@ -123,9 +123,10 @@ class CustomActionRequest(BaseModel):
 
 class DebriefRequest(BaseModel):
     session_id: str
-    action_title: str
-    action_category: str
-    actual_duration: int
+    action_title: Optional[str] = None
+    action_category: Optional[str] = None
+    actual_duration: Optional[int] = None
+    duration_minutes: Optional[int] = None  # Frontend sends this
     notes: Optional[str] = None
 
 # ============== AI HELPER FUNCTIONS ==============
@@ -631,6 +632,15 @@ async def get_actions(
     
     return actions
 
+@api_router.get("/actions/custom")
+async def get_custom_actions(user: dict = Depends(get_current_user)):
+    """Get user's custom AI-generated actions"""
+    actions = await db.user_custom_actions.find(
+        {"created_by": user["user_id"]},
+        {"_id": 0}
+    ).to_list(50)
+    return actions
+
 @api_router.get("/actions/{action_id}")
 async def get_action(action_id: str):
     action = await db.micro_actions.find_one({"action_id": action_id}, {"_id": 0})
@@ -800,13 +810,28 @@ async def get_ai_debrief(
     """Get AI debrief after completing a session"""
     user_context = await build_user_context(user)
 
+    # Support both frontend format (duration_minutes) and legacy (actual_duration)
+    duration = debrief_req.duration_minutes or debrief_req.actual_duration or 0
+    action_title = debrief_req.action_title or "micro-action"
+    action_category = debrief_req.action_category or "productivité"
+
+    # Try to get session info from DB if we have session_id
+    if debrief_req.session_id and (not debrief_req.action_title):
+        session = await db.sessions.find_one({"session_id": debrief_req.session_id})
+        if session:
+            action_info = session.get("action", {})
+            action_title = action_info.get("title", action_title)
+            action_category = action_info.get("category", action_category)
+            if not duration:
+                duration = session.get("actual_duration", 0)
+
     notes_info = f"\nNotes de l'utilisateur: {debrief_req.notes}" if debrief_req.notes else ""
 
     prompt = f"""{user_context}
 
 L'utilisateur vient de terminer une session:
-- Action: {debrief_req.action_title} (catégorie: {debrief_req.action_category})
-- Durée réelle: {debrief_req.actual_duration} minutes{notes_info}
+- Action: {action_title} (catégorie: {action_category})
+- Durée réelle: {duration} minutes{notes_info}
 
 Génère un débrief personnalisé et motivant. Suggère aussi une prochaine action.
 Réponds en JSON:
@@ -834,7 +859,7 @@ Réponds en JSON:
         }
 
     return {
-        "feedback": f"Excellente session de {debrief_req.actual_duration} min sur {debrief_req.action_title} !",
+        "feedback": f"Excellente session de {duration} min sur {action_title} !",
         "encouragement": "Chaque micro-action vous rapproche de vos objectifs.",
         "next_suggestion": "Prenez une pause et revenez quand vous êtes prêt(e) pour la suite.",
         "next_action_id": next_action_id
@@ -1040,15 +1065,6 @@ Réponds en JSON:
     await db.user_custom_actions.insert_one({**action, "_id": None})
     action.pop("_id", None)
     return {"action": action}
-
-@api_router.get("/actions/custom")
-async def get_custom_actions(user: dict = Depends(get_current_user)):
-    """Get user's custom AI-generated actions"""
-    actions = await db.user_custom_actions.find(
-        {"created_by": user["user_id"]},
-        {"_id": 0}
-    ).to_list(50)
-    return actions
 
 # ============== SESSION TRACKING ROUTES ==============
 
