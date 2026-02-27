@@ -3,11 +3,10 @@ name: Deploy InFinea (Backend Render + Frontend Vercel)
 on:
   push:
     branches:
-      - infineacompte-a11y/Infinea-
       - main
+  workflow_dispatch:
 
 jobs:
-  # ─── BACKEND : Configure les env vars sur Render et déclenche le déploiement ───
   deploy-backend:
     name: Deploy Backend to Render
     runs-on: ubuntu-latest
@@ -18,16 +17,13 @@ jobs:
           RESPONSE=$(curl -s "https://api.render.com/v1/services?name=infinea-api&limit=1" \
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}")
           SERVICE_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; s=json.load(sys.stdin); print(s[0]['service']['id'] if s else '')")
-          REPO=$(echo "$RESPONSE" | python3 -c "import sys,json; s=json.load(sys.stdin); svc=s[0]['service'] if s else {}; print(f\"repo={svc.get('repo','?')} branch={svc.get('branch','?')} rootDir={svc.get('rootDir','?')}\")")
           echo "service_id=$SERVICE_ID" >> $GITHUB_OUTPUT
           echo "Service trouvé : $SERVICE_ID"
-          echo "Config : $REPO"
 
-      - name: Corriger la config Render (branche, build, start)
+      - name: Configurer le service Render
         run: |
           SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
-          echo "Mise à jour config service Render..."
-          PATCH_RESPONSE=$(curl -s -X PATCH "https://api.render.com/v1/services/$SERVICE_ID" \
+          curl -s -X PATCH "https://api.render.com/v1/services/$SERVICE_ID" \
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
             -H "Content-Type: application/json" \
             -d '{
@@ -39,51 +35,60 @@ jobs:
                   "startCommand": "uvicorn server:app --host 0.0.0.0 --port $PORT"
                 }
               }
-            }')
-          echo "Config mise à jour"
-          echo "$PATCH_RESPONSE" | python3 -c "
-          import sys,json
-          d=json.load(sys.stdin)
+            }' | python3 -c "
+          import sys,json; d=json.load(sys.stdin)
           sd=d.get('serviceDetails',{}).get('envSpecificDetails',{})
-          print(f\"branch={d.get('branch')} autoDeploy={d.get('autoDeploy')}\")
-          print(f\"buildCommand={sd.get('buildCommand')}\")
-          print(f\"startCommand={sd.get('startCommand')}\")
-          " 2>/dev/null || echo "Réponse brute: $PATCH_RESPONSE"
+          print(f'branch={d.get(\"branch\")} build={sd.get(\"buildCommand\")} start={sd.get(\"startCommand\")}')
+          " 2>/dev/null
 
-      - name: Configurer les variables d'environnement sur Render
+      - name: Déclencher le déploiement
+        id: deploy
         run: |
           SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
-          curl -s -X PUT "https://api.render.com/v1/services/$SERVICE_ID/env-vars" \
+          sleep 3
+          BODY=$(curl -s -X POST "https://api.render.com/v1/services/$SERVICE_ID/deploys" \
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
             -H "Content-Type: application/json" \
-            -d '[
-              {"key":"GOOGLE_CLIENT_ID","value":"${{ secrets.GOOGLE_CLIENT_ID }}"},
-              {"key":"GOOGLE_CLIENT_SECRET","value":"${{ secrets.GOOGLE_CLIENT_SECRET }}"},
-              {"key":"BACKEND_URL","value":"${{ secrets.BACKEND_URL }}"},
-              {"key":"FRONTEND_URL","value":"${{ secrets.FRONTEND_URL }}"}
-            ]'
-          echo "Variables configurées"
+            -d '{"clearCache":"do_not_clear"}')
+          DEPLOY_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+          echo "deploy_id=$DEPLOY_ID" >> $GITHUB_OUTPUT
+          echo "Deploy ID: $DEPLOY_ID"
+          echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'commit={d.get(\"commit\",{}).get(\"id\",\"?\")[:7]} status={d.get(\"status\")}')" 2>/dev/null
 
-      - name: Déclencher le déploiement Render
+      - name: Attendre le build (max 5min)
         run: |
           SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
-          echo "Attente 5s pour que le PATCH soit pris en compte..."
-          sleep 5
-          RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "https://api.render.com/v1/services/$SERVICE_ID/deploys" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"clearCache\":\"clear\"}")
-          HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP_CODE:" | sed 's/HTTP_CODE://')
-          BODY=$(echo "$RESPONSE" | grep -v "HTTP_CODE:")
-          echo "HTTP Code: $HTTP_CODE"
-          echo "Réponse: $BODY"
-          if [ -n "$BODY" ] && [ "$BODY" != "" ]; then
-            DEPLOY_COMMIT=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('commit',{}).get('id','unknown'))" 2>/dev/null || echo "parse-failed")
-            echo "Commit déployé : $DEPLOY_COMMIT"
+          DEPLOY_ID="${{ steps.deploy.outputs.deploy_id }}"
+          if [ -z "$DEPLOY_ID" ]; then
+            echo "Pas de deploy ID, skip"
+            exit 0
           fi
-          echo "Commit attendu (HEAD) : ${{ github.sha }}"
+          for i in $(seq 1 30); do
+            sleep 10
+            STATUS=$(curl -s "https://api.render.com/v1/services/$SERVICE_ID/deploys/$DEPLOY_ID" \
+              -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null)
+            echo "[$i/30] Status: $STATUS"
+            if [ "$STATUS" = "live" ]; then
+              echo "Deploy réussi !"
+              exit 0
+            fi
+            if [ "$STATUS" = "build_failed" ] || [ "$STATUS" = "update_failed" ] || [ "$STATUS" = "canceled" ]; then
+              echo "Deploy échoué avec status: $STATUS"
+              echo "Récupération des logs..."
+              curl -s "https://api.render.com/v1/services/$SERVICE_ID/deploys/$DEPLOY_ID/logs" \
+                -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+                | python3 -c "
+              import sys,json
+              logs = json.load(sys.stdin)
+              for entry in logs[-50:]:
+                print(entry.get('message',''))
+              " 2>/dev/null || echo "Impossible de récupérer les logs"
+              exit 1
+            fi
+          done
+          echo "Timeout - deploy toujours en cours après 5min"
 
-  # ─── FRONTEND : Build et déploie sur Vercel ───────────────────────────────────
   deploy-frontend:
     name: Deploy Frontend to Vercel
     runs-on: ubuntu-latest
