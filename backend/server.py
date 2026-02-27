@@ -14,6 +14,7 @@ from datetime import datetime, timezone, timedelta
 import jwt
 import bcrypt
 import httpx
+import json
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -103,6 +104,53 @@ class ProgressStats(BaseModel):
     streak_days: int
     sessions_by_category: Dict[str, int]
     recent_sessions: List[Dict[str, Any]]
+
+# ============== AI HELPER FUNCTIONS ==============
+
+AI_SYSTEM_MESSAGE = """Tu es le coach IA InFinea, expert en productivité, apprentissage et bien-être.
+Tu aides les utilisateurs à transformer leurs moments perdus en micro-victoires.
+Réponds toujours en français, de manière concise, chaleureuse et motivante.
+Tes réponses doivent toujours être au format JSON quand demandé."""
+
+async def call_ai(session_suffix: str, system_message: str, prompt: str) -> Optional[str]:
+    """Shared AI call wrapper using OpenAI API directly via httpx."""
+    api_key = os.environ.get('OPENAI_API_KEY') or os.environ.get('EMERGENT_LLM_KEY')
+    if not api_key:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client_http:
+            resp = await client_http.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {"role": "system", "content": system_message},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "max_tokens": 1000,
+                    "temperature": 0.7
+                }
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"]
+    except Exception as e:
+        logger.error(f"AI call error ({session_suffix}): {e}")
+        return None
+
+def parse_ai_json(response: Optional[str]) -> Optional[dict]:
+    """Extract JSON from AI response."""
+    if not response:
+        return None
+    try:
+        json_start = response.find('{')
+        json_end = response.rfind('}') + 1
+        if json_start != -1 and json_end > json_start:
+            return json.loads(response[json_start:json_end])
+    except Exception:
+        pass
+    return None
 
 # ============== HELPER FUNCTIONS ==============
 
@@ -460,57 +508,40 @@ async def get_ai_suggestions(
     user: dict = Depends(get_current_user)
 ):
     """Get AI-powered micro-action suggestions based on time and energy"""
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
-    
-    api_key = os.environ.get('EMERGENT_LLM_KEY')
-    if not api_key:
-        raise HTTPException(status_code=500, detail="AI service not configured")
-    
     # Get matching actions from database
     query = {"duration_min": {"$lte": ai_request.available_time}}
     if ai_request.preferred_category:
         query["category"] = ai_request.preferred_category
     if ai_request.energy_level:
         query["energy_level"] = ai_request.energy_level
-    
+
     # Filter premium actions for free users
     if user.get("subscription_tier") == "free":
         query["is_premium"] = False
-    
+
     available_actions = await db.micro_actions.find(query, {"_id": 0}).to_list(50)
-    
+
     if not available_actions:
-        # Return default suggestion if no actions match
         return {
             "suggestion": "Prenez une pause de respiration profonde",
             "reasoning": "Aucune micro-action ne correspond exactement à vos critères. Profitez de ce moment pour vous recentrer.",
             "recommended_actions": []
         }
-    
+
     # Get user's recent activity for personalization
     recent_sessions = await db.user_sessions_history.find(
         {"user_id": user["user_id"]},
         {"_id": 0}
     ).sort("started_at", -1).limit(5).to_list(5)
-    
+
     recent_categories = [s.get("category", "") for s in recent_sessions]
-    
+
     # Build context for AI
     actions_text = "\n".join([
         f"- {a['title']} ({a['category']}, {a['duration_min']}-{a['duration_max']}min, énergie: {a['energy_level']}): {a['description']}"
         for a in available_actions[:10]
     ])
-    
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"suggestion_{user['user_id']}_{datetime.now().timestamp()}",
-        system_message="""Tu es l'assistant InFinea, expert en productivité et bien-être. 
-Tu aides les utilisateurs à transformer leurs moments perdus en micro-victoires.
-Réponds toujours en français, de manière concise et motivante.
-Suggère les meilleures micro-actions en fonction du temps disponible et du niveau d'énergie."""
-    )
-    chat.with_model("openai", "gpt-5.2")
-    
+
     prompt = f"""L'utilisateur a {ai_request.available_time} minutes disponibles et un niveau d'énergie {ai_request.energy_level}.
 Catégories récentes: {', '.join(recent_categories) if recent_categories else 'Aucune'}
 Catégorie préférée: {ai_request.preferred_category or 'Aucune'}
@@ -524,52 +555,38 @@ Format ta réponse en JSON avec:
 - "reasoning": explication courte (1 phrase) pourquoi c'est le meilleur choix
 - "alternatives": liste de 2 autres titres d'actions adaptées"""
 
-    try:
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
-        
-        # Parse AI response
-        import json
-        try:
-            # Try to extract JSON from response
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
-            if json_start != -1 and json_end > json_start:
-                ai_result = json.loads(response[json_start:json_end])
-            else:
-                ai_result = {"top_pick": available_actions[0]["title"], "reasoning": response, "alternatives": []}
-        except:
-            ai_result = {"top_pick": available_actions[0]["title"], "reasoning": response, "alternatives": []}
-        
-        # Match recommended actions with full action data
-        recommended_actions = []
+    system_msg = """Tu es l'assistant InFinea, expert en productivité et bien-être.
+Tu aides les utilisateurs à transformer leurs moments perdus en micro-victoires.
+Réponds toujours en français, de manière concise et motivante.
+Suggère les meilleures micro-actions en fonction du temps disponible et du niveau d'énergie."""
+
+    response = await call_ai(f"suggestion_{user['user_id']}", system_msg, prompt)
+    ai_result = parse_ai_json(response)
+
+    if not ai_result:
+        ai_result = {"top_pick": available_actions[0]["title"], "reasoning": "Basé sur vos préférences et le temps disponible.", "alternatives": []}
+
+    # Match recommended actions with full action data
+    recommended_actions = []
+    for action in available_actions:
+        if action["title"] == ai_result.get("top_pick"):
+            recommended_actions.insert(0, action)
+        elif action["title"] in ai_result.get("alternatives", []):
+            recommended_actions.append(action)
+
+    # Fill with remaining actions if needed
+    if len(recommended_actions) < 3:
         for action in available_actions:
-            if action["title"] == ai_result.get("top_pick"):
-                recommended_actions.insert(0, action)
-            elif action["title"] in ai_result.get("alternatives", []):
+            if action not in recommended_actions:
                 recommended_actions.append(action)
-        
-        # Fill with remaining actions if needed
-        if len(recommended_actions) < 3:
-            for action in available_actions:
-                if action not in recommended_actions:
-                    recommended_actions.append(action)
-                if len(recommended_actions) >= 3:
-                    break
-        
-        return {
-            "suggestion": ai_result.get("top_pick", available_actions[0]["title"]),
-            "reasoning": ai_result.get("reasoning", "Cette action est parfaite pour le temps dont vous disposez."),
-            "recommended_actions": recommended_actions[:3]
-        }
-    except Exception as e:
-        logger.error(f"AI suggestion error: {e}")
-        # Fallback to rule-based suggestion
-        return {
-            "suggestion": available_actions[0]["title"] if available_actions else "Respiration profonde",
-            "reasoning": "Basé sur vos préférences et le temps disponible.",
-            "recommended_actions": available_actions[:3]
-        }
+            if len(recommended_actions) >= 3:
+                break
+
+    return {
+        "suggestion": ai_result.get("top_pick", available_actions[0]["title"]),
+        "reasoning": ai_result.get("reasoning", "Cette action est parfaite pour le temps dont vous disposez."),
+        "recommended_actions": recommended_actions[:3]
+    }
 
 # ============== SESSION TRACKING ROUTES ==============
 
@@ -740,40 +757,40 @@ async def create_checkout(
     user: dict = Depends(get_current_user)
 ):
     """Create Stripe checkout session for Premium subscription"""
-    from emergentintegrations.payments.stripe.checkout import (
-        StripeCheckout, CheckoutSessionRequest
-    )
-    
     stripe_key = os.environ.get('STRIPE_API_KEY')
     if not stripe_key:
         raise HTTPException(status_code=500, detail="Payment service not configured")
-    
-    host_url = str(request.base_url).rstrip('/')
-    webhook_url = f"{host_url}/api/webhook/stripe"
-    
-    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
-    
+
     success_url = f"{checkout_data.origin_url}/pricing?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{checkout_data.origin_url}/pricing"
-    
-    checkout_request = CheckoutSessionRequest(
-        amount=SUBSCRIPTION_PRICE,
-        currency="eur",
-        success_url=success_url,
-        cancel_url=cancel_url,
-        metadata={
-            "user_id": user["user_id"],
-            "email": user["email"],
-            "plan": "premium"
-        }
-    )
-    
-    session = await stripe_checkout.create_checkout_session(checkout_request)
-    
-    # Create payment transaction record
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client_http:
+            resp = await client_http.post(
+                "https://api.stripe.com/v1/checkout/sessions",
+                headers={"Authorization": f"Bearer {stripe_key}"},
+                data={
+                    "mode": "payment",
+                    "success_url": success_url,
+                    "cancel_url": cancel_url,
+                    "line_items[0][price_data][currency]": "eur",
+                    "line_items[0][price_data][product_data][name]": "InFinea Premium",
+                    "line_items[0][price_data][unit_amount]": int(SUBSCRIPTION_PRICE * 100),
+                    "line_items[0][quantity]": "1",
+                    "metadata[user_id]": user["user_id"],
+                    "metadata[email]": user["email"],
+                    "metadata[plan]": "premium",
+                }
+            )
+            resp.raise_for_status()
+            session = resp.json()
+    except Exception as e:
+        logger.error(f"Stripe checkout error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create checkout session")
+
     await db.payment_transactions.insert_one({
         "transaction_id": f"txn_{uuid.uuid4().hex[:12]}",
-        "session_id": session.session_id,
+        "session_id": session["id"],
         "user_id": user["user_id"],
         "email": user["email"],
         "amount": SUBSCRIPTION_PRICE,
@@ -782,8 +799,8 @@ async def create_checkout(
         "payment_status": "pending",
         "created_at": datetime.now(timezone.utc).isoformat()
     })
-    
-    return {"url": session.url, "session_id": session.session_id}
+
+    return {"url": session["url"], "session_id": session["id"]}
 
 @api_router.get("/payments/status/{session_id}")
 async def get_payment_status(
@@ -791,35 +808,33 @@ async def get_payment_status(
     user: dict = Depends(get_current_user)
 ):
     """Check payment status and upgrade user if successful"""
-    from emergentintegrations.payments.stripe.checkout import StripeCheckout
-    
     stripe_key = os.environ.get('STRIPE_API_KEY')
     if not stripe_key:
         raise HTTPException(status_code=500, detail="Payment service not configured")
-    
-    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url="")
-    
+
     try:
-        status = await stripe_checkout.get_checkout_status(session_id)
-        
-        # Update transaction
+        async with httpx.AsyncClient(timeout=15.0) as client_http:
+            resp = await client_http.get(
+                f"https://api.stripe.com/v1/checkout/sessions/{session_id}",
+                headers={"Authorization": f"Bearer {stripe_key}"}
+            )
+            resp.raise_for_status()
+            status = resp.json()
+
+        payment_status = status.get("payment_status", "unpaid")
         await db.payment_transactions.update_one(
             {"session_id": session_id},
             {"$set": {
-                "payment_status": status.payment_status,
-                "status": status.status,
+                "payment_status": payment_status,
+                "status": status.get("status"),
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }}
         )
-        
-        # If paid, upgrade user
-        if status.payment_status == "paid":
-            # Check if not already processed
+
+        if payment_status == "paid":
             txn = await db.payment_transactions.find_one(
-                {"session_id": session_id, "processed": True},
-                {"_id": 0}
+                {"session_id": session_id, "processed": True}, {"_id": 0}
             )
-            
             if not txn:
                 await db.users.update_one(
                     {"user_id": user["user_id"]},
@@ -832,12 +847,12 @@ async def get_payment_status(
                     {"session_id": session_id},
                     {"$set": {"processed": True}}
                 )
-        
+
         return {
-            "status": status.status,
-            "payment_status": status.payment_status,
-            "amount": status.amount_total / 100,  # Convert from cents
-            "currency": status.currency
+            "status": status.get("status"),
+            "payment_status": payment_status,
+            "amount": (status.get("amount_total", 0) or 0) / 100,
+            "currency": status.get("currency", "eur")
         }
     except Exception as e:
         logger.error(f"Payment status error: {e}")
@@ -846,31 +861,24 @@ async def get_payment_status(
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
     """Handle Stripe webhooks"""
-    from emergentintegrations.payments.stripe.checkout import StripeCheckout
-    
     stripe_key = os.environ.get('STRIPE_API_KEY')
     if not stripe_key:
         return {"status": "error", "message": "Not configured"}
-    
-    host_url = str(request.base_url).rstrip('/')
-    webhook_url = f"{host_url}/api/webhook/stripe"
-    
-    stripe_checkout = StripeCheckout(api_key=stripe_key, webhook_url=webhook_url)
-    
+
     body = await request.body()
-    signature = request.headers.get("Stripe-Signature")
-    
+
     try:
-        event = await stripe_checkout.handle_webhook(body, signature)
-        
-        if event.payment_status == "paid":
-            user_id = event.metadata.get("user_id")
-            if user_id:
-                await db.users.update_one(
-                    {"user_id": user_id},
-                    {"$set": {"subscription_tier": "premium"}}
-                )
-        
+        event = json.loads(body)
+        event_type = event.get("type", "")
+        if event_type == "checkout.session.completed":
+            session_data = event.get("data", {}).get("object", {})
+            if session_data.get("payment_status") == "paid":
+                user_id = session_data.get("metadata", {}).get("user_id")
+                if user_id:
+                    await db.users.update_one(
+                        {"user_id": user_id},
+                        {"$set": {"subscription_tier": "premium"}}
+                    )
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"Webhook error: {e}")
@@ -2123,39 +2131,33 @@ async def delete_reflection(
 @api_router.get("/reflections/summary")
 async def get_reflections_summary(user: dict = Depends(get_current_user)):
     """Generate AI-powered weekly summary of reflections"""
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
-    
-    api_key = os.environ.get('EMERGENT_LLM_KEY')
-    if not api_key:
-        raise HTTPException(status_code=500, detail="AI service not configured")
-    
     # Get reflections from the last 4 weeks
     month_ago = (datetime.now(timezone.utc) - timedelta(days=28)).isoformat()
-    
+
     reflections = await db.reflections.find(
         {"user_id": user["user_id"], "created_at": {"$gte": month_ago}},
         {"_id": 0}
     ).sort("created_at", 1).to_list(200)
-    
+
     if not reflections:
         return {
             "summary": None,
             "message": "Pas encore assez de réflexions pour générer un résumé. Commencez à noter vos pensées!",
             "reflection_count": 0
         }
-    
+
     # Get sessions data for context
     sessions = await db.user_sessions_history.find(
         {"user_id": user["user_id"], "completed": True, "started_at": {"$gte": month_ago}},
         {"_id": 0}
     ).to_list(100)
-    
+
     # Build reflection context
     reflections_text = "\n".join([
         f"[{r['created_at'][:10]}] {r.get('mood', 'neutre')}: {r['content']}"
-        for r in reflections[-30:]  # Last 30 reflections
+        for r in reflections[-30:]
     ])
-    
+
     # Session stats
     category_counts = {}
     total_time = 0
@@ -2163,17 +2165,12 @@ async def get_reflections_summary(user: dict = Depends(get_current_user)):
         cat = s.get("category", "autre")
         category_counts[cat] = category_counts.get(cat, 0) + 1
         total_time += s.get("actual_duration", 0)
-    
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"summary_{user['user_id']}_{datetime.now().timestamp()}",
-        system_message="""Tu es le compagnon cognitif InFinea. Ton rôle est d'analyser les réflexions 
+
+    system_msg = """Tu es le compagnon cognitif InFinea. Ton rôle est d'analyser les réflexions
 de l'utilisateur et de fournir un résumé personnalisé, bienveillant et perspicace.
 Tu dois identifier les patterns, les progrès et suggérer des axes d'amélioration.
 Réponds toujours en français, de manière empathique et constructive."""
-    )
-    chat.with_model("openai", "gpt-5.2")
-    
+
     prompt = f"""Analyse les réflexions suivantes de l'utilisateur sur les 4 dernières semaines:
 
 {reflections_text}
@@ -2187,61 +2184,43 @@ Génère un résumé structuré en JSON avec:
 - "weekly_insight": Une observation clé sur les tendances de la semaine (2-3 phrases max)
 - "patterns_identified": Liste de 2-3 patterns comportementaux observés
 - "strengths": Ce qui fonctionne bien (1-2 points)
-- "areas_for_growth": Suggestions d'amélioration bienveillantes (1-2 points)  
+- "areas_for_growth": Suggestions d'amélioration bienveillantes (1-2 points)
 - "personalized_tip": Un conseil personnalisé basé sur les réflexions
 - "mood_trend": Tendance générale de l'humeur (positive, stable, en progression, à surveiller)"""
 
-    try:
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
-        
-        import json
-        try:
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
-            if json_start != -1 and json_end > json_start:
-                ai_summary = json.loads(response[json_start:json_end])
-            else:
-                ai_summary = {
-                    "weekly_insight": response[:300],
-                    "patterns_identified": [],
-                    "strengths": [],
-                    "areas_for_growth": [],
-                    "personalized_tip": "",
-                    "mood_trend": "stable"
-                }
-        except:
-            ai_summary = {
-                "weekly_insight": response[:300],
-                "patterns_identified": [],
-                "strengths": [],
-                "areas_for_growth": [],
-                "personalized_tip": "",
-                "mood_trend": "stable"
-            }
-        
-        # Store summary for history
-        summary_doc = {
-            "summary_id": f"sum_{uuid.uuid4().hex[:12]}",
-            "user_id": user["user_id"],
-            "summary": ai_summary,
-            "reflection_count": len(reflections),
-            "period_start": month_ago,
-            "period_end": datetime.now(timezone.utc).isoformat(),
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        await db.reflection_summaries.insert_one(summary_doc)
-        
-        return {
-            "summary": ai_summary,
-            "reflection_count": len(reflections),
-            "session_count": len(sessions),
-            "total_time": total_time
-        }
-        
-    except Exception as e:
-        logger.error(f"Summary generation error: {e}")
-        raise HTTPException(status_code=500, detail="Erreur lors de la génération du résumé")
+    response = await call_ai(f"summary_{user['user_id']}", system_msg, prompt)
+    ai_summary = parse_ai_json(response)
+
+    fallback_summary = {
+        "weekly_insight": "Continuez à noter vos réflexions pour un résumé plus détaillé.",
+        "patterns_identified": [],
+        "strengths": [],
+        "areas_for_growth": [],
+        "personalized_tip": "Essayez de noter au moins une réflexion par jour.",
+        "mood_trend": "stable"
+    }
+
+    if not ai_summary:
+        ai_summary = fallback_summary
+
+    # Store summary for history
+    summary_doc = {
+        "summary_id": f"sum_{uuid.uuid4().hex[:12]}",
+        "user_id": user["user_id"],
+        "summary": ai_summary,
+        "reflection_count": len(reflections),
+        "period_start": month_ago,
+        "period_end": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.reflection_summaries.insert_one(summary_doc)
+
+    return {
+        "summary": ai_summary,
+        "reflection_count": len(reflections),
+        "session_count": len(sessions),
+        "total_time": total_time
+    }
 
 @api_router.get("/reflections/summaries")
 async def get_past_summaries(

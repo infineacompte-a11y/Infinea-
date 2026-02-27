@@ -2,11 +2,25 @@ services:
   - type: web
     name: infinea-api
     runtime: python
-    buildCommand: pip install -r requirements-render.txt
-    startCommand: uvicorn server_local:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install -r requirements-deploy.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: MONGO_URL
+        sync: false
       - key: JWT_SECRET
         generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: STRIPE_API_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: BACKEND_URL
+        value: https://infinea-api.onrender.com
+      - key: FRONTEND_URL
+        value: https://infinea.vercel.app
       - key: ALLOWED_ORIGINS
         value: https://infinea.vercel.app
       - key: PYTHON_VERSION
