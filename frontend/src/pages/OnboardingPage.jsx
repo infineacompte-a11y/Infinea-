@@ -59,7 +59,7 @@ const INTERESTS = [
 ];
 
 export default function OnboardingPage() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -120,7 +120,9 @@ export default function OnboardingPage() {
       if (!response.ok) throw new Error("Erreur");
 
       const data = await response.json();
-      setWelcomeMessage(data.ai_welcome || data.message);
+      // Update auth context so ProtectedRoute knows onboarding is done
+      setUser((prev) => ({ ...prev, user_profile: data.user_profile || profile, onboarding_completed: true }));
+      setWelcomeMessage(data.welcome_message || data.first_recommendation || "Bienvenue sur InFinea ! Prêt(e) à transformer vos moments perdus en micro-victoires ?");
     } catch (error) {
       toast.error("Erreur lors de la sauvegarde du profil");
     } finally {
