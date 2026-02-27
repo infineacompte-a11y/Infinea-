@@ -14,13 +14,24 @@ jobs:
       - name: Trouver le service Render
         id: find_service
         run: |
-          SERVICE_ID=$(curl -s "https://api.render.com/v1/services?name=infinea-api&limit=1" \
-            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-            | python3 -c "import sys,json; s=json.load(sys.stdin); print(s[0]['service']['id'] if s else '')")
+          RESPONSE=$(curl -s "https://api.render.com/v1/services?name=infinea-api&limit=1" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}")
+          SERVICE_ID=$(echo "$RESPONSE" | python3 -c "
+          import sys,json
+          try:
+              s = json.load(sys.stdin)
+              print(s[0]['service']['id'] if s else '')
+          except Exception as e:
+              print('')
+          " 2>/dev/null)
           echo "service_id=$SERVICE_ID" >> $GITHUB_OUTPUT
           echo "Service: $SERVICE_ID"
+          if [ -z "$SERVICE_ID" ]; then
+            echo "⚠️ Service non trouvé, vérifiez RENDER_API_KEY"
+          fi
 
       - name: Configurer le service (branche + commandes)
+        if: steps.find_service.outputs.service_id != ''
         run: |
           SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
           curl -s -X PATCH "https://api.render.com/v1/services/$SERVICE_ID" \
@@ -38,6 +49,7 @@ jobs:
             }' > /dev/null
 
       - name: Configurer les env vars (ajout individuel, sans écraser)
+        if: steps.find_service.outputs.service_id != ''
         run: |
           SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
           set_env() {
@@ -64,6 +76,7 @@ jobs:
 
       - name: Déclencher le déploiement
         id: deploy
+        if: steps.find_service.outputs.service_id != ''
         run: |
           SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
           sleep 3
@@ -71,33 +84,52 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
             -H "Content-Type: application/json" \
             -d '{"clearCache":"do_not_clear"}')
-          DEPLOY_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+          echo "API response: $BODY"
+          DEPLOY_ID=$(echo "$BODY" | python3 -c "
+          import sys,json
+          try:
+              d = json.load(sys.stdin)
+              print(d.get('id', ''))
+          except:
+              print('')
+          " 2>/dev/null)
           echo "deploy_id=$DEPLOY_ID" >> $GITHUB_OUTPUT
-          echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'Deploy {d[\"id\"]} commit={d[\"commit\"][\"id\"][:7]} status={d[\"status\"]}')" 2>/dev/null
+          if [ -n "$DEPLOY_ID" ]; then
+            echo "✅ Deploy déclenché: $DEPLOY_ID"
+          else
+            echo "⚠️ Deploy non déclenché (autoDeploy peut gérer)"
+          fi
 
       - name: Attendre le build (max 5min)
+        if: steps.deploy.outputs.deploy_id != ''
         run: |
           SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
           DEPLOY_ID="${{ steps.deploy.outputs.deploy_id }}"
-          [ -z "$DEPLOY_ID" ] && echo "Pas de deploy ID" && exit 0
           for i in $(seq 1 30); do
             sleep 10
             STATUS=$(curl -s "https://api.render.com/v1/services/$SERVICE_ID/deploys/$DEPLOY_ID" \
               -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-              | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null)
+              | python3 -c "
+          import sys,json
+          try:
+              print(json.load(sys.stdin).get('status','unknown'))
+          except:
+              print('unknown')
+          " 2>/dev/null)
             echo "[$i/30] $STATUS"
             case "$STATUS" in
-              live) echo "Deploy réussi !" && exit 0 ;;
+              live) echo "✅ Deploy réussi !" && exit 0 ;;
               build_failed|update_failed|canceled|deactivated)
-                echo "ÉCHEC: $STATUS"
+                echo "❌ ÉCHEC: $STATUS"
                 exit 1 ;;
             esac
           done
-          echo "Timeout après 5min"
+          echo "⏱ Timeout après 5min — vérifiez sur dashboard.render.com"
 
   deploy-frontend:
     name: Deploy Frontend to Vercel
     runs-on: ubuntu-latest
+    if: ${{ secrets.VERCEL_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -108,9 +140,15 @@ jobs:
 
       - name: Install & Deploy Vercel
         run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "⏭ VERCEL_TOKEN non configuré, skip deploy frontend"
+            echo "ℹ️ Vercel auto-deploy depuis GitHub gère le frontend"
+            exit 0
+          fi
           npm install -g vercel
           cd frontend
-          vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+          vercel --prod --token=$VERCEL_TOKEN --yes
         env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
