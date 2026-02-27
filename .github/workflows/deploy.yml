@@ -23,6 +23,16 @@ jobs:
           echo "Service trouvé : $SERVICE_ID"
           echo "Config : $REPO"
 
+      - name: Corriger la branche Render vers main
+        run: |
+          SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
+          echo "Mise à jour de la branche vers 'main'..."
+          curl -s -X PATCH "https://api.render.com/v1/services/$SERVICE_ID" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"branch":"main"}'
+          echo "Branche mise à jour vers main"
+
       - name: Configurer les variables d'environnement sur Render
         run: |
           SERVICE_ID="${{ steps.find_service.outputs.service_id }}"
