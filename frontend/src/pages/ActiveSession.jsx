@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch } from "@/App";
+import SessionDebrief from "@/components/SessionDebrief";
 
 const categoryIcons = {
   learning: BookOpen,
@@ -174,6 +175,14 @@ export default function ActiveSession() {
               Nouvelle action
             </Button>
           </div>
+
+          {/* AI Debrief */}
+          <SessionDebrief
+            sessionId={sessionId}
+            duration={Math.ceil(elapsedTime / 60)}
+            notes={notes}
+            onContinue={() => navigate("/dashboard")}
+          />
         </div>
       </div>
     );
