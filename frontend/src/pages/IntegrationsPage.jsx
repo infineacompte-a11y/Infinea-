@@ -32,6 +32,7 @@ import {
   ChevronRight,
   Lock,
   Award,
+  Link2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
@@ -62,31 +63,54 @@ const AVAILABLE_INTEGRATIONS = [
     id: "notion",
     provider: "notion",
     name: "Notion",
-    description: "Synchronisez vos tâches et notes pour des suggestions contextuelles",
+    description: "Exportez vos sessions comme pages Notion automatiquement",
     icon: FileText,
     color: "gray",
     category: "notes",
     status: "available",
+    type: "token",
+    tokenLabel: "Token d'intégration Notion",
+    tokenPlaceholder: "secret_...",
+    tokenHelp: "Créez une intégration sur notion.so/my-integrations, puis copiez le token.",
   },
   {
     id: "todoist",
     provider: "todoist",
     name: "Todoist",
-    description: "Connectez vos tâches pour prioriser vos micro-actions",
+    description: "Loguez vos sessions comme tâches complétées dans Todoist",
     icon: ListTodo,
     color: "red",
     category: "tâches",
     status: "available",
+    type: "token",
+    tokenLabel: "Token API Todoist",
+    tokenPlaceholder: "votre token API",
+    tokenHelp: "Allez dans Paramètres → Intégrations → Développeur pour copier votre token API.",
   },
   {
     id: "slack",
     provider: "slack",
     name: "Slack",
-    description: "Recevez des rappels de micro-actions directement dans Slack",
+    description: "Recevez vos résumés hebdomadaires directement dans Slack",
     icon: MessageSquare,
     color: "purple",
     category: "communication",
     status: "available",
+    type: "token",
+    tokenLabel: "URL de webhook Slack",
+    tokenPlaceholder: "https://hooks.slack.com/services/...",
+    tokenHelp: "Créez un webhook entrant sur api.slack.com/messaging/webhooks.",
+  },
+  {
+    id: "ical",
+    provider: "ical",
+    name: "iCal",
+    description: "Importez votre calendrier iCal/ICS pour détecter vos créneaux libres",
+    icon: Link2,
+    color: "orange",
+    category: "calendrier",
+    status: "available",
+    type: "url",
   },
 ];
 
@@ -96,6 +120,7 @@ const colorClasses = {
   red: { bg: "bg-red-500/10", text: "text-red-500", border: "border-red-500/30" },
   purple: { bg: "bg-purple-500/10", text: "text-purple-500", border: "border-purple-500/30" },
   green: { bg: "bg-emerald-500/10", text: "text-emerald-500", border: "border-emerald-500/30" },
+  orange: { bg: "bg-orange-500/10", text: "text-orange-500", border: "border-orange-500/30" },
 };
 
 export default function IntegrationsPage() {
@@ -109,6 +134,12 @@ export default function IntegrationsPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedIntegration, setSelectedIntegration] = useState(null);
+  const [icalDialogOpen, setIcalDialogOpen] = useState(false);
+  const [icalUrl, setIcalUrl] = useState("");
+  const [isConnectingIcal, setIsConnectingIcal] = useState(false);
+  const [tokenDialogService, setTokenDialogService] = useState(null);
+  const [tokenValue, setTokenValue] = useState("");
+  const [isConnectingToken, setIsConnectingToken] = useState(false);
 
   useEffect(() => {
     // Check for OAuth callback results (supports all services)
@@ -172,6 +203,59 @@ export default function IntegrationsPage() {
       window.location.href = data.auth_url;
     } catch (error) {
       toast.error(error.message);
+    }
+  };
+
+  const handleConnectIcal = async () => {
+    if (!icalUrl.trim()) {
+      toast.error("Veuillez entrer une URL iCal");
+      return;
+    }
+    setIsConnectingIcal(true);
+    try {
+      const response = await authFetch(`${API}/integrations/ical/connect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: icalUrl.trim() }),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || "Erreur");
+      }
+      const data = await response.json();
+      toast.success(`${data.calendar_name} connecté ! ${data.events_found} événements trouvés.`);
+      setIcalDialogOpen(false);
+      setIcalUrl("");
+      fetchData();
+    } catch (error) {
+      toast.error(error.message || "Erreur de connexion iCal");
+    } finally {
+      setIsConnectingIcal(false);
+    }
+  };
+
+  const handleConnectToken = async () => {
+    if (!tokenValue.trim() || !tokenDialogService) return;
+    setIsConnectingToken(true);
+    try {
+      const response = await authFetch(`${API}/integrations/${tokenDialogService.id}/connect-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: tokenValue.trim() }),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || "Erreur");
+      }
+      const data = await response.json();
+      toast.success(`${data.account_name || tokenDialogService.name} connecté avec succès !`);
+      setTokenDialogService(null);
+      setTokenValue("");
+      fetchData();
+    } catch (error) {
+      toast.error(error.message || "Erreur de connexion");
+    } finally {
+      setIsConnectingToken(false);
     }
   };
 
@@ -519,7 +603,11 @@ export default function IntegrationsPage() {
                                     isAvailable ? (
                                       <Button
                                         size="sm"
-                                        onClick={() => handleConnect(int.provider)}
+                                        onClick={() => {
+                                          if (int.type === "url") setIcalDialogOpen(true);
+                                          else if (int.type === "token") setTokenDialogService(int);
+                                          else handleConnect(int.provider);
+                                        }}
                                         data-testid={`connect-${int.id}-btn`}
                                       >
                                         Connecter
@@ -549,7 +637,7 @@ export default function IntegrationsPage() {
               })}
 
               {/* Slot Detection Settings */}
-              {slotSettings && integrations.google_calendar?.connected && (
+              {slotSettings && (integrations.google_calendar?.connected || integrations.ical?.connected) && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="font-heading text-lg flex items-center gap-2">
@@ -718,6 +806,105 @@ export default function IntegrationsPage() {
             >
               <Unplug className="w-4 h-4 mr-2" />
               Déconnecter
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* iCal URL Connect Dialog */}
+      <Dialog open={icalDialogOpen} onOpenChange={setIcalDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="w-5 h-5 text-orange-500" />
+              Ajouter un calendrier iCal
+            </DialogTitle>
+            <DialogDescription>
+              Collez l'URL de votre flux iCal (.ics) pour détecter automatiquement vos créneaux libres.
+              Vous la trouverez dans les paramètres de votre application calendrier.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="ical-url">URL du calendrier iCal</Label>
+            <Input
+              id="ical-url"
+              type="url"
+              placeholder="https://calendar.example.com/basic.ics"
+              value={icalUrl}
+              onChange={(e) => setIcalUrl(e.target.value)}
+              className="mt-2"
+              data-testid="ical-url-input"
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              Formats supportés : .ics, webcal://, https://
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setIcalDialogOpen(false); setIcalUrl(""); }}>
+              Annuler
+            </Button>
+            <Button
+              onClick={handleConnectIcal}
+              disabled={isConnectingIcal || !icalUrl.trim()}
+            >
+              {isConnectingIcal ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Link2 className="w-4 h-4 mr-2" />
+              )}
+              Connecter
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Token/URL Connect Dialog (Notion, Todoist, Slack) */}
+      <Dialog open={!!tokenDialogService} onOpenChange={() => { setTokenDialogService(null); setTokenValue(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {tokenDialogService && (() => {
+                const Icon = tokenDialogService.icon;
+                const colors = colorClasses[tokenDialogService.color];
+                return <div className={`w-8 h-8 rounded-lg ${colors?.bg} flex items-center justify-center`}>
+                  <Icon className={`w-4 h-4 ${colors?.text}`} />
+                </div>;
+              })()}
+              Connecter {tokenDialogService?.name}
+            </DialogTitle>
+            <DialogDescription>
+              {tokenDialogService?.tokenHelp}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="token-input">{tokenDialogService?.tokenLabel}</Label>
+            <Input
+              id="token-input"
+              type="text"
+              placeholder={tokenDialogService?.tokenPlaceholder}
+              value={tokenValue}
+              onChange={(e) => setTokenValue(e.target.value)}
+              className="mt-2 font-mono text-sm"
+              data-testid="token-input"
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              Votre token est chiffré et stocké de manière sécurisée.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setTokenDialogService(null); setTokenValue(""); }}>
+              Annuler
+            </Button>
+            <Button
+              onClick={handleConnectToken}
+              disabled={isConnectingToken || !tokenValue.trim()}
+            >
+              {isConnectingToken ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Plug className="w-4 h-4 mr-2" />
+              )}
+              Connecter
             </Button>
           </DialogFooter>
         </DialogContent>
