@@ -187,13 +187,25 @@ async def build_user_context(user: dict) -> str:
     goals_map = {"learning": "apprentissage", "productivity": "productivité", "well_being": "bien-être"}
     goals = ", ".join([goals_map.get(g, g) for g in profile.get("goals", [])])
 
+    # Handle both new format (preferred_times, energy_level, interests as list)
+    # and legacy format (availability_slots, energy_high/low, interests as dict)
+    interests = profile.get('interests', [])
+    if isinstance(interests, dict):
+        interests_str = json.dumps(interests, ensure_ascii=False)
+    elif isinstance(interests, list):
+        interests_str = ", ".join(interests) if interests else "non définis"
+    else:
+        interests_str = str(interests)
+
+    times = profile.get('preferred_times', profile.get('availability_slots', []))
+    energy = profile.get('energy_level', profile.get('energy_high', 'medium'))
+
     return f"""Profil utilisateur:
 - Nom: {user.get('name', 'Inconnu')}
 - Objectifs: {goals}
-- Disponibilité: {', '.join(profile.get('availability_slots', []))} ({profile.get('daily_minutes', 10)} min/jour)
-- Énergie haute: {profile.get('energy_high', 'matin')}
-- Énergie basse: {profile.get('energy_low', 'après-midi')}
-- Intérêts: {json.dumps(profile.get('interests', {}), ensure_ascii=False)}
+- Créneaux préférés: {', '.join(times) if times else 'non définis'}
+- Niveau d'énergie: {energy}
+- Intérêts: {interests_str}
 - Streak actuel: {user.get('streak_days', 0)} jours
 - Temps total investi: {user.get('total_time_invested', 0)} minutes
 - Abonnement: {user.get('subscription_tier', 'free')}"""
