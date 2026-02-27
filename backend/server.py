@@ -1643,241 +1643,512 @@ class SlotSettings(BaseModel):
         "evening": "well_being"
     }
 
+# ============== INTEGRATION HUB CONFIG ==============
+
+INTEGRATION_CONFIGS = {
+    "google_calendar": {
+        "name": "Google Calendar",
+        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "scopes": "https://www.googleapis.com/auth/calendar.events",
+        "env_client_id": "GOOGLE_CLIENT_ID",
+        "env_client_secret": "GOOGLE_CLIENT_SECRET",
+    },
+    "notion": {
+        "name": "Notion",
+        "auth_url": "https://api.notion.com/v1/oauth/authorize",
+        "token_url": "https://api.notion.com/v1/oauth/token",
+        "scopes": "",
+        "env_client_id": "NOTION_CLIENT_ID",
+        "env_client_secret": "NOTION_CLIENT_SECRET",
+    },
+    "todoist": {
+        "name": "Todoist",
+        "auth_url": "https://todoist.com/oauth/authorize",
+        "token_url": "https://todoist.com/oauth/access_token",
+        "scopes": "data:read_write",
+        "env_client_id": "TODOIST_CLIENT_ID",
+        "env_client_secret": "TODOIST_CLIENT_SECRET",
+    },
+    "slack": {
+        "name": "Slack",
+        "auth_url": "https://slack.com/oauth/v2/authorize",
+        "token_url": "https://slack.com/api/oauth.v2.access",
+        "scopes": "chat:write,users:read",
+        "env_client_id": "SLACK_CLIENT_ID",
+        "env_client_secret": "SLACK_CLIENT_SECRET",
+    },
+}
+
+HUB_FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+# ============== INTEGRATION HUB ROUTES ==============
+
 @api_router.get("/integrations")
 async def get_integrations(user: dict = Depends(get_current_user)):
-    """Get user's connected integrations."""
+    """Get user's connected integrations with status for all services."""
     integrations = await db.user_integrations.find(
         {"user_id": user["user_id"]},
         {"_id": 0, "access_token": 0, "refresh_token": 0}
     ).to_list(10)
-    
-    # Add Google Calendar availability status
-    google_available = bool(GOOGLE_CLIENT_ID)
-    
-    return {
-        "integrations": integrations,
-        "available": [
-            {
-                "provider": "google_calendar",
-                "name": "Google Calendar",
-                "description": "Détecte automatiquement vos créneaux libres",
-                "icon": "calendar",
-                "available": google_available,
-                "connected": any(i["provider"] == "google_calendar" for i in integrations)
-            }
-        ]
-    }
 
-@api_router.post("/integrations/google/connect")
-async def connect_google_calendar(request: Request, user: dict = Depends(get_current_user)):
-    """Initiate Google Calendar OAuth flow."""
-    if not GOOGLE_CLIENT_ID:
-        raise HTTPException(status_code=503, detail="Google Calendar integration not configured")
-    
-    # Generate state token for CSRF protection
+    # Build response with connection status for all services
+    result = {}
+    # Support both "provider" (main legacy) and "service" (hub) field names
+    connected_map = {}
+    for i in integrations:
+        key = i.get("service") or i.get("provider")
+        if key:
+            connected_map[key] = i
+
+    for service_key, config in INTEGRATION_CONFIGS.items():
+        client_id = os.environ.get(config["env_client_id"])
+        connected = connected_map.get(service_key)
+        result[service_key] = {
+            "name": config["name"],
+            "connected": bool(connected),
+            "connected_at": connected.get("connected_at") or connected.get("created_at") if connected else None,
+            "account_name": connected.get("account_name") if connected else None,
+            "available": bool(client_id),
+            "sync_enabled": connected.get("sync_enabled", connected.get("enabled", False)) if connected else False,
+        }
+
+    return result
+
+@api_router.get("/integrations/connect/{service}")
+async def connect_integration(service: str, request: Request, user: dict = Depends(get_current_user)):
+    """Initiate OAuth flow for a service — returns the authorization URL."""
+    if service not in INTEGRATION_CONFIGS:
+        raise HTTPException(status_code=400, detail=f"Unknown service: {service}")
+
+    config = INTEGRATION_CONFIGS[service]
+    client_id = os.environ.get(config["env_client_id"])
+    if not client_id:
+        raise HTTPException(status_code=503, detail=f"{config['name']} integration not configured")
+
     state = f"{user['user_id']}:{uuid.uuid4().hex[:16]}"
-    
-    # Store state in session
-    await db.oauth_states.insert_one({
+    await db.integration_states.insert_one({
         "state": state,
         "user_id": user["user_id"],
+        "service": service,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
     })
-    
-    # Get redirect URI from request
-    body = await request.json() if request.headers.get("content-type") == "application/json" else {}
-    origin_url = body.get("origin_url", str(request.base_url).rstrip('/'))
-    redirect_uri = f"{origin_url}/api/integrations/google/callback"
-    
-    auth_url = generate_auth_url(redirect_uri, state)
-    
-    return {"authorization_url": auth_url, "state": state}
 
-@api_router.get("/integrations/google/callback")
-async def google_calendar_callback(
-    request: Request,
-    code: str = None,
-    state: str = None,
-    error: str = None
-):
-    """Handle Google OAuth callback."""
-    from fastapi.responses import RedirectResponse
-    
-    # Get origin from referer or use default
-    origin = str(request.base_url).rstrip('/').replace('/api/integrations/google/callback', '')
-    
-    if error:
-        logger.error(f"Google OAuth error: {error}")
-        return RedirectResponse(f"{origin}/integrations?error=oauth_error")
-    
-    if not code or not state:
-        return RedirectResponse(f"{origin}/integrations?error=missing_params")
-    
-    # Verify state
-    state_doc = await db.oauth_states.find_one_and_delete({"state": state})
-    if not state_doc:
-        return RedirectResponse(f"{origin}/integrations?error=invalid_state")
-    
-    user_id = state_doc["user_id"]
-    
-    try:
-        # Exchange code for tokens
-        redirect_uri = f"{origin}/api/integrations/google/callback"
-        tokens = await exchange_code_for_tokens(code, redirect_uri)
-        
-        # Encrypt and store tokens
-        encrypted_tokens = encrypt_tokens(tokens)
-        
-        integration_id = f"int_{uuid.uuid4().hex[:12]}"
-        integration_doc = {
-            "integration_id": integration_id,
-            "user_id": user_id,
-            "provider": "google_calendar",
-            "access_token": encrypted_tokens["access_token"],
-            "refresh_token": encrypted_tokens.get("refresh_token", ""),
-            "token_expires_at": (datetime.now(timezone.utc) + timedelta(seconds=tokens.get("expires_in", 3600))).isoformat(),
-            "scopes": tokens.get("scope", "").split(" "),
-            "enabled": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "last_sync_at": None,
-            "metadata": {}
-        }
-        
-        # Remove existing Google Calendar integration
-        await db.user_integrations.delete_many({
-            "user_id": user_id,
-            "provider": "google_calendar"
+    backend_url = os.environ.get("BACKEND_URL", str(request.base_url).rstrip('/'))
+    redirect_uri = f"{backend_url}/api/integrations/callback/{service}"
+
+    params = {"client_id": client_id, "state": state}
+
+    if service == "google_calendar":
+        params.update({
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": config["scopes"],
+            "access_type": "offline",
+            "prompt": "consent",
         })
-        
-        await db.user_integrations.insert_one(integration_doc)
-        
-        # Fetch calendars list
-        try:
-            calendars = await get_user_calendars(encrypted_tokens["access_token"])
-            primary_calendar = next((c for c in calendars if c.get("primary")), None)
-            
-            await db.user_integrations.update_one(
-                {"integration_id": integration_id},
-                {"$set": {
-                    "metadata.calendars": [{"id": c["id"], "summary": c.get("summary", "")} for c in calendars],
-                    "metadata.primary_calendar": primary_calendar["id"] if primary_calendar else "primary"
-                }}
-            )
-        except Exception as e:
-            logger.warning(f"Failed to fetch calendars: {e}")
-        
-        return RedirectResponse(f"{origin}/integrations?success=true")
-        
-    except Exception as e:
-        logger.error(f"Google Calendar connection failed: {e}")
-        return RedirectResponse(f"{origin}/integrations?error=connection_failed")
+    elif service == "notion":
+        params.update({
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "owner": "user",
+        })
+    elif service == "todoist":
+        params.update({"scope": config["scopes"]})
+    elif service == "slack":
+        params.update({
+            "scope": config["scopes"],
+            "redirect_uri": redirect_uri,
+        })
 
-@api_router.delete("/integrations/{integration_id}")
-async def disconnect_integration(
-    integration_id: str,
-    user: dict = Depends(get_current_user)
-):
-    """Disconnect an integration."""
-    result = await db.user_integrations.delete_one({
-        "integration_id": integration_id,
-        "user_id": user["user_id"]
-    })
-    
+    auth_url = f"{config['auth_url']}?{urllib.parse.urlencode(params)}"
+    return {"auth_url": auth_url}
+
+@api_router.get("/integrations/callback/{service}")
+async def integration_callback(service: str, code: str = "", state: str = "", error: str = ""):
+    """OAuth callback handler — exchanges code for tokens, redirects to frontend."""
+    if error:
+        return RedirectResponse(f"{HUB_FRONTEND_URL}/integrations?error={urllib.parse.quote(error)}&service={service}")
+
+    if service not in INTEGRATION_CONFIGS:
+        return RedirectResponse(f"{HUB_FRONTEND_URL}/integrations?error=unknown_service")
+
+    state_doc = await db.integration_states.find_one_and_delete({"state": state, "service": service})
+    if not state_doc:
+        return RedirectResponse(f"{HUB_FRONTEND_URL}/integrations?error=invalid_state&service={service}")
+
+    expires_at = datetime.fromisoformat(state_doc["expires_at"])
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        return RedirectResponse(f"{HUB_FRONTEND_URL}/integrations?error=expired&service={service}")
+
+    user_id = state_doc["user_id"]
+    config = INTEGRATION_CONFIGS[service]
+    client_id = os.environ.get(config["env_client_id"])
+    client_secret = os.environ.get(config["env_client_secret"])
+
+    if not client_id or not client_secret:
+        return RedirectResponse(f"{HUB_FRONTEND_URL}/integrations?error=not_configured&service={service}")
+
+    try:
+        backend_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
+        redirect_uri = f"{backend_url.rstrip('/')}/api/integrations/callback/{service}"
+
+        async with httpx.AsyncClient() as http_client:
+            access_token = None
+            refresh_token = None
+            expires_in = None
+            account_name = config["name"]
+
+            if service == "google_calendar":
+                token_resp = await http_client.post(config["token_url"], data={
+                    "client_id": client_id, "client_secret": client_secret,
+                    "code": code, "grant_type": "authorization_code",
+                    "redirect_uri": redirect_uri,
+                })
+                token_data = token_resp.json()
+                access_token = token_data.get("access_token")
+                refresh_token = token_data.get("refresh_token")
+                expires_in = token_data.get("expires_in", 3600)
+                try:
+                    info_resp = await http_client.get(
+                        "https://www.googleapis.com/oauth2/v2/userinfo",
+                        headers={"Authorization": f"Bearer {access_token}"}
+                    )
+                    if info_resp.status_code == 200:
+                        account_name = info_resp.json().get("email", "Google Calendar")
+                except Exception:
+                    pass
+
+            elif service == "notion":
+                auth_header = httpx.BasicAuth(client_id, client_secret)
+                token_resp = await http_client.post(config["token_url"], json={
+                    "grant_type": "authorization_code", "code": code,
+                    "redirect_uri": redirect_uri,
+                }, auth=auth_header, headers={"Notion-Version": "2022-06-28"})
+                token_data = token_resp.json()
+                access_token = token_data.get("access_token")
+                account_name = token_data.get("workspace_name", "Notion")
+
+            elif service == "todoist":
+                token_resp = await http_client.post(config["token_url"], data={
+                    "client_id": client_id, "client_secret": client_secret, "code": code,
+                })
+                token_data = token_resp.json()
+                access_token = token_data.get("access_token")
+                account_name = "Todoist"
+
+            elif service == "slack":
+                token_resp = await http_client.post(config["token_url"], data={
+                    "client_id": client_id, "client_secret": client_secret,
+                    "code": code, "redirect_uri": redirect_uri,
+                })
+                token_data = token_resp.json()
+                access_token = token_data.get("access_token")
+                if not access_token:
+                    access_token = token_data.get("authed_user", {}).get("access_token")
+                account_name = token_data.get("team", {}).get("name", "Slack")
+
+            if not access_token:
+                logger.error(f"Integration {service} token exchange failed: {token_data}")
+                return RedirectResponse(f"{HUB_FRONTEND_URL}/integrations?error=token_failed&service={service}")
+
+            # Encrypt tokens before storage
+            encrypted_access = encrypt_token(access_token)
+            encrypted_refresh = encrypt_token(refresh_token) if refresh_token else None
+
+            integration_doc = {
+                "user_id": user_id,
+                "service": service,
+                "provider": service,  # backward compat with existing Google Calendar code
+                "access_token": encrypted_access,
+                "refresh_token": encrypted_refresh,
+                "expires_in": expires_in,
+                "token_expires_at": (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat() if expires_in else None,
+                "token_obtained_at": datetime.now(timezone.utc).isoformat(),
+                "account_name": account_name,
+                "connected_at": datetime.now(timezone.utc).isoformat(),
+                "enabled": True,
+                "sync_enabled": True,
+                "integration_id": f"int_{uuid.uuid4().hex[:12]}",
+            }
+
+            await db.user_integrations.delete_many({"user_id": user_id, "service": service})
+            await db.user_integrations.delete_many({"user_id": user_id, "provider": service})
+            await db.user_integrations.insert_one(integration_doc)
+
+            # For Google Calendar, also fetch calendars metadata
+            if service == "google_calendar":
+                try:
+                    calendars = await get_user_calendars(encrypted_access)
+                    primary_calendar = next((c for c in calendars if c.get("primary")), None)
+                    await db.user_integrations.update_one(
+                        {"integration_id": integration_doc["integration_id"]},
+                        {"$set": {
+                            "metadata": {
+                                "calendars": [{"id": c["id"], "summary": c.get("summary", "")} for c in calendars],
+                                "primary_calendar": primary_calendar["id"] if primary_calendar else "primary"
+                            }
+                        }}
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to fetch calendars: {e}")
+
+            return RedirectResponse(f"{HUB_FRONTEND_URL}/integrations?success=true&service={service}")
+
+    except Exception as e:
+        logger.error(f"Integration {service} callback error: {e}")
+        return RedirectResponse(f"{HUB_FRONTEND_URL}/integrations?error=callback_failed&service={service}")
+
+@api_router.delete("/integrations/{service}")
+async def disconnect_integration(service: str, user: dict = Depends(get_current_user)):
+    """Disconnect an integration by service name or integration_id."""
+    # Try by service name first, then by integration_id for backward compat
+    result = await db.user_integrations.delete_one(
+        {"user_id": user["user_id"], "service": service}
+    )
+    if result.deleted_count == 0:
+        result = await db.user_integrations.delete_one(
+            {"user_id": user["user_id"], "integration_id": service}
+        )
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Integration not found")
-    
+
     # Clean up related data
     await db.detected_free_slots.delete_many({"user_id": user["user_id"]})
-    
-    return {"message": "Integration disconnected"}
+    await db.synced_events.delete_many({"user_id": user["user_id"], "service": service})
 
-@api_router.post("/integrations/{integration_id}/sync")
-async def sync_integration(
-    integration_id: str,
-    user: dict = Depends(get_current_user)
-):
-    """Force synchronization of an integration."""
-    integration = await db.user_integrations.find_one({
-        "integration_id": integration_id,
-        "user_id": user["user_id"]
-    }, {"_id": 0})
-    
-    if not integration:
+    return {"message": f"{INTEGRATION_CONFIGS.get(service, {}).get('name', service)} disconnected"}
+
+@api_router.put("/integrations/{service}/sync")
+async def toggle_sync(service: str, request: Request, user: dict = Depends(get_current_user)):
+    """Toggle sync on/off for an integration."""
+    body = await request.json()
+    sync_enabled = body.get("sync_enabled", True)
+
+    result = await db.user_integrations.update_one(
+        {"user_id": user["user_id"], "$or": [{"service": service}, {"provider": service}]},
+        {"$set": {"sync_enabled": sync_enabled, "enabled": sync_enabled}}
+    )
+    if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Integration not found")
-    
-    if integration["provider"] != "google_calendar":
-        raise HTTPException(status_code=400, detail="Sync not supported for this integration")
-    
+    return {"sync_enabled": sync_enabled}
+
+@api_router.post("/integrations/{service}/sync")
+async def trigger_sync(service: str, user: dict = Depends(get_current_user)):
+    """Trigger a manual sync for a service — syncs recent sessions to external services."""
+    integration = await db.user_integrations.find_one(
+        {"user_id": user["user_id"], "$or": [{"service": service}, {"provider": service}]},
+        {"_id": 0}
+    )
+    if not integration:
+        raise HTTPException(status_code=404, detail="Integration not connected")
+
+    access_token = integration.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=400, detail="No access token")
+
+    # Decrypt token if encrypted
     try:
-        # Check token expiry and refresh if needed
-        token_expires = datetime.fromisoformat(integration["token_expires_at"].replace('Z', '+00:00'))
-        
-        if token_expires < datetime.now(timezone.utc):
-            if not integration.get("refresh_token"):
-                raise HTTPException(status_code=401, detail="Token expired, please reconnect")
-            
-            new_tokens = await refresh_access_token(integration["refresh_token"])
-            encrypted = encrypt_tokens(new_tokens)
-            
-            await db.user_integrations.update_one(
-                {"integration_id": integration_id},
-                {"$set": {
-                    "access_token": encrypted["access_token"],
-                    "token_expires_at": (datetime.now(timezone.utc) + timedelta(seconds=new_tokens.get("expires_in", 3600))).isoformat()
-                }}
+        decrypted_token = decrypt_token(access_token)
+        if decrypted_token:
+            access_token = decrypted_token
+    except Exception:
+        pass  # Token may not be encrypted (legacy)
+
+    # --- Google Calendar: use existing slot detection + event sync ---
+    if service == "google_calendar":
+        try:
+            # Check token expiry and refresh if needed
+            token_expires_str = integration.get("token_expires_at")
+            if token_expires_str:
+                token_expires = datetime.fromisoformat(token_expires_str.replace('Z', '+00:00'))
+                if token_expires < datetime.now(timezone.utc):
+                    if not integration.get("refresh_token"):
+                        raise HTTPException(status_code=401, detail="Token expired, please reconnect")
+                    refresh_tok = integration["refresh_token"]
+                    try:
+                        refresh_tok = decrypt_token(refresh_tok) or refresh_tok
+                    except Exception:
+                        pass
+                    new_tokens = await refresh_access_token(refresh_tok)
+                    encrypted = encrypt_tokens(new_tokens)
+                    await db.user_integrations.update_one(
+                        {"user_id": user["user_id"], "$or": [{"service": service}, {"provider": service}]},
+                        {"$set": {
+                            "access_token": encrypted["access_token"],
+                            "token_expires_at": (datetime.now(timezone.utc) + timedelta(seconds=new_tokens.get("expires_in", 3600))).isoformat()
+                        }}
+                    )
+                    access_token = encrypted["access_token"]
+
+            now = datetime.now(timezone.utc)
+            tomorrow = now + timedelta(hours=24)
+
+            events = await get_calendar_events(
+                access_token, now, tomorrow,
+                integration.get("metadata", {}).get("primary_calendar", "primary")
             )
-            integration["access_token"] = encrypted["access_token"]
-        
-        # Fetch calendar events for next 24 hours
-        now = datetime.now(timezone.utc)
-        tomorrow = now + timedelta(hours=24)
-        
-        events = await get_calendar_events(
-            integration["access_token"],
-            now,
-            tomorrow,
-            integration.get("metadata", {}).get("primary_calendar", "primary")
-        )
-        
-        # Get user's slot settings
-        prefs = await db.notification_preferences.find_one(
-            {"user_id": user["user_id"]},
-            {"_id": 0}
-        ) or {}
-        
-        settings = {**DEFAULT_SETTINGS, **prefs}
-        
-        # Detect free slots
-        slots = await detect_free_slots(events, settings)
-        
-        # Clean up old slots
-        await cleanup_old_slots(db, user["user_id"])
-        
-        # Get available actions
-        actions = await db.micro_actions.find({}, {"_id": 0}).to_list(50)
-        
-        # Schedule notifications for slots
-        await schedule_slot_notifications(
-            db, user["user_id"], slots, actions, user.get("subscription_tier", "free")
-        )
-        
-        # Update last sync time
-        await db.user_integrations.update_one(
-            {"integration_id": integration_id},
-            {"$set": {"last_sync_at": now.isoformat()}}
-        )
-        
-        return {
-            "message": "Sync completed",
-            "events_found": len(events),
-            "slots_detected": len(slots),
-            "last_sync": now.isoformat()
-        }
-        
+
+            prefs = await db.notification_preferences.find_one(
+                {"user_id": user["user_id"]}, {"_id": 0}
+            ) or {}
+            settings = {**DEFAULT_SETTINGS, **prefs}
+            slots = await detect_free_slots(events, settings)
+            await cleanup_old_slots(db, user["user_id"])
+            actions = await db.micro_actions.find({}, {"_id": 0}).to_list(50)
+            await schedule_slot_notifications(
+                db, user["user_id"], slots, actions, user.get("subscription_tier", "free")
+            )
+
+            await db.user_integrations.update_one(
+                {"user_id": user["user_id"], "$or": [{"service": service}, {"provider": service}]},
+                {"$set": {"last_sync_at": now.isoformat(), "last_synced_at": now.isoformat()}}
+            )
+
+            return {
+                "message": "Sync completed",
+                "synced_count": len(slots),
+                "events_found": len(events),
+                "slots_detected": len(slots),
+                "service": service,
+                "last_sync": now.isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Google Calendar sync failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+    # --- Other services: sync recent sessions ---
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    recent_sessions = await db.user_sessions_history.find(
+        {"user_id": user["user_id"], "completed": True, "completed_at": {"$gte": week_ago}},
+        {"_id": 0}
+    ).sort("completed_at", -1).to_list(20)
+
+    synced_count = 0
+
+    try:
+        async with httpx.AsyncClient() as http_client:
+            if service == "notion":
+                for session in recent_sessions:
+                    already = await db.synced_events.find_one({
+                        "user_id": user["user_id"], "service": service,
+                        "session_id": session["session_id"]
+                    })
+                    if already:
+                        continue
+
+                    search_resp = await http_client.post(
+                        "https://api.notion.com/v1/search",
+                        json={"query": "InFinea Sessions", "filter": {"property": "object", "value": "page"}},
+                        headers={"Authorization": f"Bearer {access_token}", "Notion-Version": "2022-06-28"}
+                    )
+                    parent_page_id = None
+                    if search_resp.status_code == 200:
+                        results = search_resp.json().get("results", [])
+                        if results:
+                            parent_page_id = results[0]["id"]
+
+                    if not parent_page_id:
+                        pages_resp = await http_client.post(
+                            "https://api.notion.com/v1/search",
+                            json={"filter": {"property": "object", "value": "page"}, "page_size": 1},
+                            headers={"Authorization": f"Bearer {access_token}", "Notion-Version": "2022-06-28"}
+                        )
+                        if pages_resp.status_code == 200:
+                            pages = pages_resp.json().get("results", [])
+                            if pages:
+                                parent_page_id = pages[0]["id"]
+
+                    if parent_page_id:
+                        title = session.get("action_title", "Micro-action")
+                        duration = session.get("actual_duration", 5)
+                        completed_at = session.get("completed_at", "")
+                        page_data = {
+                            "parent": {"page_id": parent_page_id},
+                            "properties": {"title": {"title": [{"text": {"content": f"✅ {title} — {duration} min"}}]}},
+                            "children": [{"object": "block", "type": "paragraph", "paragraph": {
+                                "rich_text": [{"text": {"content": f"Catégorie: {session.get('category', 'N/A')}\nDurée: {duration} min\nDate: {completed_at[:10] if completed_at else 'N/A'}"}}]
+                            }}]
+                        }
+                        resp = await http_client.post(
+                            "https://api.notion.com/v1/pages", json=page_data,
+                            headers={"Authorization": f"Bearer {access_token}", "Notion-Version": "2022-06-28"}
+                        )
+                        if resp.status_code in (200, 201):
+                            await db.synced_events.insert_one({
+                                "user_id": user["user_id"], "service": service,
+                                "session_id": session["session_id"],
+                                "external_id": resp.json().get("id"),
+                                "synced_at": datetime.now(timezone.utc).isoformat()
+                            })
+                            synced_count += 1
+
+            elif service == "todoist":
+                for session in recent_sessions:
+                    already = await db.synced_events.find_one({
+                        "user_id": user["user_id"], "service": service,
+                        "session_id": session["session_id"]
+                    })
+                    if already:
+                        continue
+
+                    title = session.get("action_title", "Micro-action")
+                    duration = session.get("actual_duration", 5)
+                    resp = await http_client.post(
+                        "https://api.todoist.com/rest/v2/tasks",
+                        json={"content": f"✅ {title}", "description": f"Session InFinea complétée — {duration} min"},
+                        headers={"Authorization": f"Bearer {access_token}"}
+                    )
+                    if resp.status_code in (200, 201):
+                        task_id = resp.json().get("id")
+                        await http_client.post(
+                            f"https://api.todoist.com/rest/v2/tasks/{task_id}/close",
+                            headers={"Authorization": f"Bearer {access_token}"}
+                        )
+                        await db.synced_events.insert_one({
+                            "user_id": user["user_id"], "service": service,
+                            "session_id": session["session_id"],
+                            "external_id": str(task_id),
+                            "synced_at": datetime.now(timezone.utc).isoformat()
+                        })
+                        synced_count += 1
+
+            elif service == "slack":
+                if recent_sessions:
+                    total_time = sum(s.get("actual_duration", 0) for s in recent_sessions)
+                    session_count = len(recent_sessions)
+                    categories = set(s.get("category", "N/A") for s in recent_sessions)
+                    cat_map = {"learning": "📚 Apprentissage", "productivity": "🎯 Productivité", "well_being": "💚 Bien-être"}
+                    cats_str = ", ".join([cat_map.get(c, c) for c in categories])
+
+                    message = (
+                        f"*📊 Résumé InFinea — 7 derniers jours*\n\n"
+                        f"• *{session_count}* sessions complétées\n"
+                        f"• *{total_time}* minutes investies\n"
+                        f"• Catégories: {cats_str}\n\n"
+                        f"Continuez comme ça ! 🚀"
+                    )
+                    resp = await http_client.post(
+                        "https://slack.com/api/chat.postMessage",
+                        json={"channel": "me", "text": message, "mrkdwn": True},
+                        headers={"Authorization": f"Bearer {access_token}"}
+                    )
+                    if resp.status_code == 200 and resp.json().get("ok"):
+                        synced_count = session_count
+
     except Exception as e:
-        logger.error(f"Sync failed: {e}")
+        logger.error(f"Sync error for {service}: {e}")
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+    await db.user_integrations.update_one(
+        {"user_id": user["user_id"], "$or": [{"service": service}, {"provider": service}]},
+        {"$set": {"last_synced_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    return {"synced_count": synced_count, "service": service}
 
 # ============== FREE SLOTS ENDPOINTS ==============
 

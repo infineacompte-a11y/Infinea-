@@ -66,7 +66,7 @@ const AVAILABLE_INTEGRATIONS = [
     icon: FileText,
     color: "gray",
     category: "notes",
-    status: "coming_soon",
+    status: "available",
   },
   {
     id: "todoist",
@@ -76,7 +76,7 @@ const AVAILABLE_INTEGRATIONS = [
     icon: ListTodo,
     color: "red",
     category: "tâches",
-    status: "coming_soon",
+    status: "available",
   },
   {
     id: "slack",
@@ -86,7 +86,7 @@ const AVAILABLE_INTEGRATIONS = [
     icon: MessageSquare,
     color: "purple",
     category: "communication",
-    status: "coming_soon",
+    status: "available",
   },
 ];
 
@@ -102,7 +102,7 @@ export default function IntegrationsPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [integrations, setIntegrations] = useState({ integrations: [], available: [] });
+  const [integrations, setIntegrations] = useState({});
   const [slotSettings, setSlotSettings] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -111,19 +111,26 @@ export default function IntegrationsPage() {
   const [selectedIntegration, setSelectedIntegration] = useState(null);
 
   useEffect(() => {
-    // Check for OAuth callback results
+    // Check for OAuth callback results (supports all services)
     const success = searchParams.get("success");
     const error = searchParams.get("error");
+    const service = searchParams.get("service");
+    const serviceName = AVAILABLE_INTEGRATIONS.find((i) => i.id === service)?.name || service;
 
     if (success) {
-      toast.success("Google Calendar connecté avec succès!");
+      toast.success(`${serviceName || "Service"} connecté avec succès!`);
       navigate("/integrations", { replace: true });
     } else if (error) {
       const errorMessages = {
-        oauth_error: "Erreur lors de l'authentification Google",
+        oauth_error: "Erreur lors de l'authentification",
         missing_params: "Paramètres manquants",
         invalid_state: "Session expirée, veuillez réessayer",
         connection_failed: "Échec de la connexion",
+        not_configured: `${serviceName} n'est pas configuré sur ce serveur`,
+        token_failed: "Échec de l'obtention du token",
+        expired: "Lien expiré, veuillez réessayer",
+        unknown_service: "Service inconnu",
+        callback_failed: "Échec du callback OAuth",
       };
       toast.error(errorMessages[error] || "Une erreur est survenue");
       navigate("/integrations", { replace: true });
@@ -139,7 +146,11 @@ export default function IntegrationsPage() {
         authFetch(`${API}/slots/settings`),
       ]);
 
-      if (intRes.ok) setIntegrations(await intRes.json());
+      if (intRes.ok) {
+        const data = await intRes.json();
+        // Backend returns { google_calendar: { connected, available, ... }, notion: {...}, ... }
+        setIntegrations(data);
+      }
       if (settingsRes.ok) setSlotSettings(await settingsRes.json());
     } catch (error) {
       toast.error("Erreur de chargement");
@@ -148,15 +159,9 @@ export default function IntegrationsPage() {
     }
   };
 
-  const handleConnect = async (provider) => {
+  const handleConnect = async (service) => {
     try {
-      const response = await authFetch(`${API}/integrations/${provider}/connect`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ origin_url: window.location.origin }),
-      });
+      const response = await authFetch(`${API}/integrations/connect/${service}`);
 
       if (!response.ok) {
         const err = await response.json();
@@ -164,15 +169,15 @@ export default function IntegrationsPage() {
       }
 
       const data = await response.json();
-      window.location.href = data.authorization_url;
+      window.location.href = data.auth_url;
     } catch (error) {
       toast.error(error.message);
     }
   };
 
-  const handleDisconnect = async (integrationId) => {
+  const handleDisconnect = async (service) => {
     try {
-      const response = await authFetch(`${API}/integrations/${integrationId}`, {
+      const response = await authFetch(`${API}/integrations/${service}`, {
         method: "DELETE",
       });
 
@@ -186,17 +191,20 @@ export default function IntegrationsPage() {
     }
   };
 
-  const handleSync = async (integrationId) => {
+  const handleSync = async (service) => {
     setIsSyncing(true);
     try {
-      const response = await authFetch(`${API}/integrations/${integrationId}/sync`, {
+      const response = await authFetch(`${API}/integrations/${service}/sync`, {
         method: "POST",
       });
 
       if (!response.ok) throw new Error("Erreur");
 
       const data = await response.json();
-      toast.success(`Synchronisation terminée: ${data.slots_detected} créneaux détectés`);
+      const msg = data.slots_detected != null
+        ? `${data.slots_detected} créneaux détectés`
+        : `${data.synced_count || 0} éléments synchronisés`;
+      toast.success(`Synchronisation terminée: ${msg}`);
       fetchData();
     } catch (error) {
       toast.error("Erreur lors de la synchronisation");
@@ -229,13 +237,14 @@ export default function IntegrationsPage() {
     navigate("/login");
   };
 
-  const getConnectedIntegration = (provider) => {
-    return integrations.integrations.find((i) => i.provider === provider);
+  const getConnectedIntegration = (service) => {
+    const info = integrations[service];
+    return info?.connected ? info : null;
   };
 
-  const isIntegrationAvailable = (provider) => {
-    const available = integrations.available?.find((a) => a.provider === provider);
-    return available?.available !== false;
+  const isIntegrationAvailable = (service) => {
+    const info = integrations[service];
+    return info?.available !== false;
   };
 
   const NavLinks = ({ mobile = false }) => (
@@ -384,76 +393,83 @@ export default function IntegrationsPage() {
           ) : (
             <div className="space-y-8">
               {/* Connected Integrations */}
-              {integrations.integrations.length > 0 && (
-                <div>
-                  <h2 className="text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    Connectés ({integrations.integrations.length})
-                  </h2>
-                  <div className="grid gap-4">
-                    {integrations.integrations.map((int) => {
-                      const config = AVAILABLE_INTEGRATIONS.find((a) => a.provider === int.provider);
-                      if (!config) return null;
-                      const Icon = config.icon;
-                      const colors = colorClasses[config.color];
+              {(() => {
+                const connectedServices = AVAILABLE_INTEGRATIONS.filter(
+                  (a) => integrations[a.id]?.connected
+                );
+                if (connectedServices.length === 0) return null;
 
-                      return (
-                        <Card key={int.integration_id} className={`${colors.border} border`}>
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-4">
-                                <div className={`w-12 h-12 rounded-xl ${colors.bg} flex items-center justify-center`}>
-                                  <Icon className={`w-6 h-6 ${colors.text}`} />
-                                </div>
-                                <div>
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <h3 className="font-heading font-semibold">{config.name}</h3>
-                                    <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/30">
-                                      <CheckCircle2 className="w-3 h-3 mr-1" />
-                                      Connecté
-                                    </Badge>
+                return (
+                  <div>
+                    <h2 className="text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      Connectés ({connectedServices.length})
+                    </h2>
+                    <div className="grid gap-4">
+                      {connectedServices.map((config) => {
+                        const info = integrations[config.id];
+                        const Icon = config.icon;
+                        const colors = colorClasses[config.color];
+
+                        return (
+                          <Card key={config.id} className={`${colors.border} border`}>
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                  <div className={`w-12 h-12 rounded-xl ${colors.bg} flex items-center justify-center`}>
+                                    <Icon className={`w-6 h-6 ${colors.text}`} />
                                   </div>
-                                  <p className="text-sm text-muted-foreground">
-                                    Dernière sync: {int.last_sync_at ? new Date(int.last_sync_at).toLocaleString("fr-FR") : "Jamais"}
-                                  </p>
+                                  <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <h3 className="font-heading font-semibold">{config.name}</h3>
+                                      <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/30">
+                                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                                        Connecté
+                                      </Badge>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">
+                                      {info.account_name && <span className="mr-2">{info.account_name}</span>}
+                                      Connecté le: {info.connected_at ? new Date(info.connected_at).toLocaleString("fr-FR") : "—"}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleSync(config.id)}
+                                    disabled={isSyncing}
+                                    data-testid="sync-btn"
+                                  >
+                                    {isSyncing ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="w-4 h-4" />
+                                    )}
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setSelectedIntegration({ service: config.id, ...info })}
+                                  >
+                                    <Settings className="w-4 h-4" />
+                                  </Button>
                                 </div>
                               </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleSync(int.integration_id)}
-                                  disabled={isSyncing}
-                                  data-testid="sync-btn"
-                                >
-                                  {isSyncing ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <RefreshCw className="w-4 h-4" />
-                                  )}
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setSelectedIntegration(int)}
-                                >
-                                  <Settings className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Available Integrations by Category */}
               {Object.entries(groupedIntegrations).map(([category, ints]) => {
                 // Filter out already connected integrations
                 const availableInts = ints.filter(
-                  (int) => !integrations.integrations.some((c) => c.provider === int.provider)
+                  (int) => !integrations[int.id]?.connected
                 );
                 
                 if (availableInts.length === 0) return null;
@@ -533,7 +549,7 @@ export default function IntegrationsPage() {
               })}
 
               {/* Slot Detection Settings */}
-              {slotSettings && integrations.integrations.some((i) => i.provider === "google_calendar") && (
+              {slotSettings && integrations.google_calendar?.connected && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="font-heading text-lg flex items-center gap-2">
@@ -660,7 +676,7 @@ export default function IntegrationsPage() {
           <DialogHeader>
             <DialogTitle>Paramètres de l'intégration</DialogTitle>
             <DialogDescription>
-              {selectedIntegration?.provider === "google_calendar" && "Google Calendar"}
+              {selectedIntegration && (AVAILABLE_INTEGRATIONS.find((a) => a.id === selectedIntegration.service)?.name || selectedIntegration.service)}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -668,17 +684,17 @@ export default function IntegrationsPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
                   <div>
-                    <p className="text-sm text-muted-foreground">Dernière synchronisation</p>
+                    <p className="text-sm text-muted-foreground">Connecté le</p>
                     <p className="font-medium">
-                      {selectedIntegration.last_sync_at
-                        ? new Date(selectedIntegration.last_sync_at).toLocaleString("fr-FR")
-                        : "Jamais"}
+                      {selectedIntegration.connected_at
+                        ? new Date(selectedIntegration.connected_at).toLocaleString("fr-FR")
+                        : "—"}
                     </p>
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleSync(selectedIntegration.integration_id)}
+                    onClick={() => handleSync(selectedIntegration.service)}
                     disabled={isSyncing}
                   >
                     {isSyncing ? (
@@ -698,7 +714,7 @@ export default function IntegrationsPage() {
             </Button>
             <Button
               variant="destructive"
-              onClick={() => handleDisconnect(selectedIntegration?.integration_id)}
+              onClick={() => handleDisconnect(selectedIntegration?.service)}
             >
               <Unplug className="w-4 h-4 mr-2" />
               Déconnecter
