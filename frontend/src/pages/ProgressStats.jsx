@@ -17,6 +17,15 @@ import {
   Flame,
   Clock,
   Loader2,
+  Palette,
+  Dumbbell,
+  Leaf,
+  Users,
+  MessageCircle,
+  Brain,
+  Rocket,
+  Crown,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
@@ -33,17 +42,34 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import PremiumAnalytics from "@/components/PremiumAnalytics";
 
 const categoryColors = {
   learning: "#3b82f6",
   productivity: "#f59e0b",
   well_being: "#10b981",
+  creativity: "#a855f7",
+  fitness: "#ef4444",
+  mindfulness: "#06b6d4",
+  leadership: "#6366f1",
+  finance: "#22c55e",
+  relations: "#ec4899",
+  mental_health: "#14b8a6",
+  entrepreneurship: "#f97316",
 };
 
 const categoryLabels = {
   learning: "Apprentissage",
   productivity: "Productivité",
   well_being: "Bien-être",
+  creativity: "Créativité",
+  fitness: "Fitness",
+  mindfulness: "Mindfulness",
+  leadership: "Leadership",
+  finance: "Finance",
+  relations: "Relations",
+  mental_health: "Santé mentale",
+  entrepreneurship: "Entrepreneuriat",
 };
 
 export default function ProgressStats() {
@@ -357,6 +383,9 @@ export default function ProgressStats() {
                 </Card>
               </div>
 
+              {/* Premium Analytics */}
+              <PremiumAnalytics />
+
               {/* Recent Sessions */}
               <Card>
                 <CardHeader>
@@ -375,9 +404,22 @@ export default function ProgressStats() {
                               className="w-10 h-10 rounded-lg flex items-center justify-center"
                               style={{ backgroundColor: `${categoryColors[session.category]}20` }}
                             >
-                              {session.category === "learning" && <BookOpen className="w-5 h-5 text-blue-500" />}
-                              {session.category === "productivity" && <Target className="w-5 h-5 text-amber-500" />}
-                              {session.category === "well_being" && <Heart className="w-5 h-5 text-emerald-500" />}
+                              {(() => {
+                                const iconMap = {
+                                  learning: <BookOpen className="w-5 h-5 text-blue-500" />,
+                                  productivity: <Target className="w-5 h-5 text-amber-500" />,
+                                  well_being: <Heart className="w-5 h-5 text-emerald-500" />,
+                                  creativity: <Palette className="w-5 h-5 text-purple-500" />,
+                                  fitness: <Dumbbell className="w-5 h-5 text-red-500" />,
+                                  mindfulness: <Leaf className="w-5 h-5 text-cyan-500" />,
+                                  leadership: <Users className="w-5 h-5 text-indigo-500" />,
+                                  finance: <TrendingUp className="w-5 h-5 text-green-500" />,
+                                  relations: <MessageCircle className="w-5 h-5 text-pink-500" />,
+                                  mental_health: <Brain className="w-5 h-5 text-teal-500" />,
+                                  entrepreneurship: <Rocket className="w-5 h-5 text-orange-500" />,
+                                };
+                                return iconMap[session.category] || <Sparkles className="w-5 h-5 text-primary" />;
+                              })()}
                             </div>
                             <div>
                               <p className="font-medium">{session.action_title}</p>

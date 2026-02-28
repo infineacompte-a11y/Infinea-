@@ -19,6 +19,7 @@ import B2BDashboard from "@/pages/B2BDashboard";
 import IntegrationsPage from "@/pages/IntegrationsPage";
 import JournalPage from "@/pages/JournalPage";
 import OnboardingPage from "@/pages/OnboardingPage";
+import ChallengesPage from "@/pages/ChallengesPage";
 import PrivacyPage from "@/pages/PrivacyPage";
 import CGUPage from "@/pages/CGUPage";
 import NotFound from "@/pages/NotFound";
@@ -308,6 +309,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <JournalPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/challenges"
+        element={
+          <ProtectedRoute>
+            <ChallengesPage />
           </ProtectedRoute>
         }
       />

@@ -56,6 +56,11 @@ const INTERESTS = [
   { id: "creativity", label: "Créativité", color: "text-purple-500 bg-purple-500/10" },
   { id: "fitness", label: "Forme physique", color: "text-red-500 bg-red-500/10" },
   { id: "mindfulness", label: "Pleine conscience", color: "text-cyan-500 bg-cyan-500/10" },
+  { id: "leadership", label: "Leadership", color: "text-indigo-500 bg-indigo-500/10" },
+  { id: "finance", label: "Finance", color: "text-green-500 bg-green-500/10" },
+  { id: "relations", label: "Relations", color: "text-pink-500 bg-pink-500/10" },
+  { id: "mental_health", label: "Santé mentale", color: "text-teal-500 bg-teal-500/10" },
+  { id: "entrepreneurship", label: "Entrepreneuriat", color: "text-orange-500 bg-orange-500/10" },
 ];
 
 export default function OnboardingPage() {

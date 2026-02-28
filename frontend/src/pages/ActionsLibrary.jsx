@@ -19,6 +19,15 @@ import {
   ArrowLeft,
   Lock,
   Loader2,
+  Crown,
+  Palette,
+  Dumbbell,
+  Leaf,
+  Users,
+  TrendingUp,
+  MessageCircle,
+  Brain,
+  Rocket,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
@@ -29,18 +38,45 @@ const categoryIcons = {
   learning: BookOpen,
   productivity: Target,
   well_being: Heart,
+  creativity: Palette,
+  fitness: Dumbbell,
+  mindfulness: Leaf,
+  leadership: Users,
+  finance: TrendingUp,
+  relations: MessageCircle,
+  mental_health: Brain,
+  entrepreneurship: Rocket,
 };
 
 const categoryColors = {
   learning: "text-blue-500 bg-blue-500/10",
   productivity: "text-amber-500 bg-amber-500/10",
   well_being: "text-emerald-500 bg-emerald-500/10",
+  creativity: "text-purple-500 bg-purple-500/10",
+  fitness: "text-red-500 bg-red-500/10",
+  mindfulness: "text-cyan-500 bg-cyan-500/10",
+  leadership: "text-indigo-500 bg-indigo-500/10",
+  finance: "text-green-500 bg-green-500/10",
+  relations: "text-pink-500 bg-pink-500/10",
+  mental_health: "text-teal-500 bg-teal-500/10",
+  entrepreneurship: "text-orange-500 bg-orange-500/10",
 };
 
 const categoryLabels = {
   learning: "Apprentissage",
   productivity: "Productivité",
   well_being: "Bien-être",
+};
+
+const premiumCategoryLabels = {
+  creativity: "Créativité",
+  fitness: "Fitness",
+  mindfulness: "Mindfulness",
+  leadership: "Leadership",
+  finance: "Finance",
+  relations: "Relations",
+  mental_health: "Santé mentale",
+  entrepreneurship: "Entrepreneuriat",
 };
 
 export default function ActionsLibrary() {
@@ -244,6 +280,24 @@ export default function ActionsLibrary() {
                   {label}
                 </TabsTrigger>
               ))}
+              {Object.entries(premiumCategoryLabels).map(([key, label]) => {
+                const isPremium = user?.subscription_tier !== "premium";
+                return (
+                  <TabsTrigger
+                    key={key}
+                    value={key}
+                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg px-4 py-2 gap-1"
+                    data-testid={`tab-${key}`}
+                  >
+                    {isPremium ? (
+                      <Lock className="w-3 h-3" />
+                    ) : (
+                      <Crown className="w-3 h-3 text-amber-500" />
+                    )}
+                    {label}
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
           </Tabs>
 

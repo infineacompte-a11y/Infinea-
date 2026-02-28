@@ -20,7 +20,7 @@ import {
   CreditCard,
 } from "lucide-react";
 import { toast } from "sonner";
-import { API, useAuth } from "@/App";
+import { API, useAuth, authFetch } from "@/App";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 export default function ProfilePage() {
@@ -209,7 +209,28 @@ export default function ProfilePage() {
                 </Badge>
               </div>
 
-              {user?.subscription_tier !== "premium" && (
+              {user?.subscription_tier === "premium" ? (
+                <Button
+                  variant="outline"
+                  className="w-full rounded-xl"
+                  onClick={async () => {
+                    try {
+                      const res = await authFetch(`${API}/premium/portal`, { method: "POST" });
+                      if (res.ok) {
+                        const data = await res.json();
+                        window.open(data.url, "_blank");
+                      } else {
+                        toast.error("Erreur lors de l'ouverture du portail");
+                      }
+                    } catch {
+                      toast.error("Erreur de connexion");
+                    }
+                  }}
+                >
+                  <Settings className="w-5 h-5 mr-2" />
+                  Gérer mon abonnement
+                </Button>
+              ) : (
                 <Link to="/pricing">
                   <Button className="w-full rounded-xl" data-testid="upgrade-btn">
                     <Crown className="w-5 h-5 mr-2" />

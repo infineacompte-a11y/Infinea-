@@ -30,6 +30,15 @@ import {
   Building2,
   Calendar,
   Brain,
+  Crown,
+  Shield,
+  Palette,
+  Dumbbell,
+  Leaf,
+  Users,
+  MessageCircle,
+  Rocket,
+  Trophy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
@@ -48,18 +57,42 @@ const categoryIcons = {
   learning: BookOpen,
   productivity: Target,
   well_being: Heart,
+  creativity: Palette,
+  fitness: Dumbbell,
+  mindfulness: Leaf,
+  leadership: Users,
+  finance: TrendingUp,
+  relations: MessageCircle,
+  mental_health: Brain,
+  entrepreneurship: Rocket,
 };
 
 const categoryColors = {
   learning: "text-blue-500 bg-blue-500/10",
   productivity: "text-amber-500 bg-amber-500/10",
   well_being: "text-emerald-500 bg-emerald-500/10",
+  creativity: "text-purple-500 bg-purple-500/10",
+  fitness: "text-red-500 bg-red-500/10",
+  mindfulness: "text-cyan-500 bg-cyan-500/10",
+  leadership: "text-indigo-500 bg-indigo-500/10",
+  finance: "text-green-500 bg-green-500/10",
+  relations: "text-pink-500 bg-pink-500/10",
+  mental_health: "text-teal-500 bg-teal-500/10",
+  entrepreneurship: "text-orange-500 bg-orange-500/10",
 };
 
 const categoryLabels = {
   learning: "Apprentissage",
   productivity: "Productivité",
   well_being: "Bien-être",
+  creativity: "Créativité",
+  fitness: "Fitness",
+  mindfulness: "Mindfulness",
+  leadership: "Leadership",
+  finance: "Finance",
+  relations: "Relations",
+  mental_health: "Santé mentale",
+  entrepreneurship: "Entrepreneuriat",
 };
 
 export default function Dashboard() {
@@ -285,9 +318,17 @@ export default function Dashboard() {
         <div className="max-w-5xl mx-auto">
           {/* Welcome Header */}
           <div className="mb-8">
-            <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="dashboard-welcome">
-              Bonjour, {user?.name?.split(" ")[0] || "Utilisateur"} 👋
-            </h1>
+            <div className="flex items-center gap-3 mb-2">
+              <h1 className="font-heading text-3xl font-semibold" data-testid="dashboard-welcome">
+                Bonjour, {user?.name?.split(" ")[0] || "Utilisateur"} 👋
+              </h1>
+              {user?.subscription_tier === "premium" && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-500 text-sm font-medium">
+                  <Crown className="w-4 h-4" />
+                  Premium
+                </span>
+              )}
+            </div>
             <p className="text-muted-foreground">
               Que pouvez-vous accomplir maintenant ?
             </p>
@@ -329,7 +370,12 @@ export default function Dashboard() {
                     <Flame className="w-5 h-5 text-amber-500" />
                   </div>
                   <div>
-                    <p className="text-2xl font-heading font-bold">{user?.streak_days || 0}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-2xl font-heading font-bold">{user?.streak_days || 0}</p>
+                      {user?.subscription_tier === "premium" && (
+                        <Shield className="w-4 h-4 text-emerald-500" title="Streak Shield actif" />
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground">jours streak</p>
                   </div>
                 </div>

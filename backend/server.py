@@ -142,6 +142,9 @@ class TokenConnectRequest(BaseModel):
     token: str
     name: Optional[str] = None
 
+class PromoCodeRequest(BaseModel):
+    code: str
+
 # ============== AI HELPER FUNCTIONS ==============
 
 AI_SYSTEM_MESSAGE = """Tu es le coach IA InFinea, expert en productivité, apprentissage et bien-être.
@@ -149,11 +152,63 @@ Tu aides les utilisateurs à transformer leurs moments perdus en micro-victoires
 Réponds toujours en français, de manière concise, chaleureuse et motivante.
 Tes réponses doivent toujours être au format JSON quand demandé."""
 
-async def call_ai(session_suffix: str, system_message: str, prompt: str) -> Optional[str]:
+def get_ai_model(user: dict = None) -> str:
+    """Return AI model based on user subscription tier."""
+    if user and user.get("subscription_tier") == "premium":
+        return "claude-3-5-sonnet-20241022"
+    return "claude-3-haiku-20240307"
+
+async def check_usage_limit(user_id: str, feature: str, limit: int, period: str = "daily") -> dict:
+    """Check and increment usage counter for free-tier AI limits.
+    Returns {"allowed": bool, "used": int, "limit": int, "remaining": int}
+    """
+    today = datetime.now(timezone.utc).date().isoformat()
+    week = datetime.now(timezone.utc).strftime("%Y-W%W")
+
+    if period == "daily":
+        doc = await db.usage_limits.find_one({"user_id": user_id, "date": today})
+        used = (doc or {}).get(feature, 0)
+        if used >= limit:
+            return {"allowed": False, "used": used, "limit": limit, "remaining": 0}
+        await db.usage_limits.update_one(
+            {"user_id": user_id, "date": today},
+            {"$inc": {feature: 1}, "$setOnInsert": {"created_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True
+        )
+        return {"allowed": True, "used": used + 1, "limit": limit, "remaining": limit - used - 1}
+
+    elif period == "weekly":
+        doc = await db.usage_limits.find_one({"user_id": user_id, "date": today})
+        last_week = (doc or {}).get(f"{feature}_week", "")
+        if last_week == week:
+            return {"allowed": False, "used": 1, "limit": limit, "remaining": 0}
+        await db.usage_limits.update_one(
+            {"user_id": user_id, "date": today},
+            {"$set": {f"{feature}_week": week}, "$setOnInsert": {"created_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True
+        )
+        return {"allowed": True, "used": 1, "limit": limit, "remaining": 0}
+
+    elif period == "total":
+        count = await db.usage_limits.find_one({"user_id": user_id, "type": "lifetime"})
+        used = (count or {}).get(feature, 0)
+        if used >= limit:
+            return {"allowed": False, "used": used, "limit": limit, "remaining": 0}
+        await db.usage_limits.update_one(
+            {"user_id": user_id, "type": "lifetime"},
+            {"$inc": {feature: 1}, "$setOnInsert": {"created_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True
+        )
+        return {"allowed": True, "used": used + 1, "limit": limit, "remaining": limit - used - 1}
+
+    return {"allowed": True, "used": 0, "limit": limit, "remaining": limit}
+
+async def call_ai(session_suffix: str, system_message: str, prompt: str, model: str = None) -> Optional[str]:
     """Shared AI call wrapper using Anthropic Claude API via httpx."""
     api_key = os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('OPENAI_API_KEY')
     if not api_key:
         return None
+    ai_model = model or "claude-3-haiku-20240307"
     try:
         async with httpx.AsyncClient(timeout=30.0) as client_http:
             resp = await client_http.post(
@@ -164,7 +219,7 @@ async def call_ai(session_suffix: str, system_message: str, prompt: str) -> Opti
                     "content-type": "application/json"
                 },
                 json={
-                    "model": "claude-3-haiku-20240307",
+                    "model": ai_model,
                     "max_tokens": 1000,
                     "system": system_message,
                     "messages": [
@@ -368,6 +423,7 @@ async def login(user_data: UserLogin, response: Response):
         "name": user["name"],
         "picture": user.get("picture"),
         "subscription_tier": user.get("subscription_tier", "free"),
+        "user_profile": user.get("user_profile"),
         "token": token
     }
 
@@ -520,6 +576,7 @@ async def process_oauth_session(request: Request, response: Response):
         "name": user["name"],
         "picture": user.get("picture"),
         "subscription_tier": user.get("subscription_tier", "free"),
+        "user_profile": user.get("user_profile"),
         "token": jwt_token,
     }
 
@@ -532,7 +589,8 @@ async def get_me(user: dict = Depends(get_current_user)):
         "picture": user.get("picture"),
         "subscription_tier": user.get("subscription_tier", "free"),
         "total_time_invested": user.get("total_time_invested", 0),
-        "streak_days": user.get("streak_days", 0)
+        "streak_days": user.get("streak_days", 0),
+        "user_profile": user.get("user_profile")
     }
 
 @api_router.post("/auth/logout")
@@ -721,7 +779,7 @@ Tu aides les utilisateurs à transformer leurs moments perdus en micro-victoires
 Réponds toujours en français, de manière concise et motivante.
 Suggère les meilleures micro-actions en fonction du temps disponible et du niveau d'énergie."""
 
-    response = await call_ai(f"suggestion_{user['user_id']}", system_msg, prompt)
+    response = await call_ai(f"suggestion_{user['user_id']}", system_msg, prompt, model=get_ai_model(user))
     ai_result = parse_ai_json(response)
 
     if not ai_result:
@@ -785,7 +843,7 @@ Réponds en JSON:
     "context_note": "Note contextuelle courte liée au moment/streak (1 phrase)"
 }}"""
 
-    ai_response = await call_ai(f"coach_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt)
+    ai_response = await call_ai(f"coach_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
     ai_result = parse_ai_json(ai_response)
 
     profile = user.get("user_profile", {}) or {}
@@ -854,7 +912,7 @@ Réponds en JSON:
     "next_suggestion": "Suggestion pour la prochaine action (1 phrase)"
 }}"""
 
-    ai_response = await call_ai(f"debrief_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt)
+    ai_response = await call_ai(f"debrief_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
     ai_result = parse_ai_json(ai_response)
 
     query = {}
@@ -906,7 +964,12 @@ async def get_weekly_analysis(user: dict = Depends(get_current_user)):
         category_counts[cat] = category_counts.get(cat, 0) + 1
         total_duration += s.get("actual_duration", 0)
 
-    categories_fr = {"learning": "apprentissage", "productivity": "productivité", "well_being": "bien-être"}
+    categories_fr = {
+        "learning": "apprentissage", "productivity": "productivité", "well_being": "bien-être",
+        "creativity": "créativité", "fitness": "forme physique", "mindfulness": "pleine conscience",
+        "leadership": "leadership", "finance": "finance", "relations": "relations",
+        "mental_health": "santé mentale", "entrepreneurship": "entrepreneuriat"
+    }
     cat_summary = ", ".join([f"{categories_fr.get(k, k)}: {v} sessions" for k, v in category_counts.items()])
 
     prompt = f"""{user_context}
@@ -927,7 +990,7 @@ Réponds en JSON:
     "personalized_tips": ["Conseil personnalisé 1", "Conseil personnalisé 2"]
 }}"""
 
-    ai_response = await call_ai(f"analysis_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt)
+    ai_response = await call_ai(f"analysis_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
     ai_result = parse_ai_json(ai_response)
 
     if ai_result:
@@ -976,7 +1039,7 @@ Le streak de {streak} jours de l'utilisateur est en danger ! Il n'a pas encore f
 Génère un message d'alerte motivant et court pour l'encourager à maintenir son streak.
 Réponds en JSON: {{"title": "Titre court", "message": "Message motivant (1-2 phrases)"}}"""
 
-            ai_response = await call_ai(f"streak_alert_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt)
+            ai_response = await call_ai(f"streak_alert_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
             ai_result = parse_ai_json(ai_response)
 
             title = ai_result.get("title", f"Streak de {streak}j en danger !") if ai_result else f"Streak de {streak}j en danger !"
@@ -1037,7 +1100,7 @@ Réponds en JSON:
     "icon": "sparkles"
 }}"""
 
-    ai_response = await call_ai(f"create_action_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt)
+    ai_response = await call_ai(f"create_action_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
     ai_result = parse_ai_json(ai_response)
 
     action_id = f"custom_{uuid.uuid4().hex[:12]}"
@@ -1150,25 +1213,53 @@ async def complete_session(
     if completion.completed:
         # Update user stats
         user_doc = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
-        
+
         # Calculate streak
         today = datetime.now(timezone.utc).date()
         last_session = user_doc.get("last_session_date")
-        
+
         new_streak = user_doc.get("streak_days", 0)
+        streak_shield_used = False
         if last_session:
             if isinstance(last_session, str):
                 last_date = datetime.fromisoformat(last_session).date()
             else:
                 last_date = last_session.date() if hasattr(last_session, 'date') else last_session
-            
+
             if last_date == today - timedelta(days=1):
                 new_streak += 1
             elif last_date != today:
-                new_streak = 1
+                # Streak would break — check for Premium Streak Shield
+                gap_days = (today - last_date).days
+                if (user_doc.get("subscription_tier") == "premium"
+                    and gap_days <= 2):
+                    # Check if shield is available (once per 7 days)
+                    shield_used_at = user_doc.get("streak_shield_used_at")
+                    shield_available = True
+                    if shield_used_at:
+                        if isinstance(shield_used_at, str):
+                            shield_date = datetime.fromisoformat(shield_used_at).date()
+                        else:
+                            shield_date = shield_used_at.date() if hasattr(shield_used_at, 'date') else shield_used_at
+                        shield_available = (today - shield_date).days >= 7
+
+                    if shield_available:
+                        # Shield activated — preserve streak
+                        new_streak += 1
+                        streak_shield_used = True
+                        await db.users.update_one(
+                            {"user_id": user["user_id"]},
+                            {"$set": {"streak_shield_used_at": today.isoformat()},
+                             "$inc": {"streak_shield_count": 1}}
+                        )
+                        logger.info(f"Streak shield activated for user {user['user_id']}")
+                    else:
+                        new_streak = 1
+                else:
+                    new_streak = 1
         else:
             new_streak = 1
-        
+
         await db.users.update_one(
             {"user_id": user["user_id"]},
             {
@@ -1253,7 +1344,7 @@ async def create_checkout(
     request: Request,
     user: dict = Depends(get_current_user)
 ):
-    """Create Stripe checkout session for Premium subscription"""
+    """Create Stripe checkout session for Premium subscription (recurring monthly)"""
     stripe_key = os.environ.get('STRIPE_API_KEY')
     if not stripe_key:
         raise HTTPException(status_code=500, detail="Payment service not configured")
@@ -1267,16 +1358,19 @@ async def create_checkout(
                 "https://api.stripe.com/v1/checkout/sessions",
                 headers={"Authorization": f"Bearer {stripe_key}"},
                 data={
-                    "mode": "payment",
+                    "mode": "subscription",
                     "success_url": success_url,
                     "cancel_url": cancel_url,
+                    "customer_email": user["email"],
                     "line_items[0][price_data][currency]": "eur",
                     "line_items[0][price_data][product_data][name]": "InFinea Premium",
                     "line_items[0][price_data][unit_amount]": int(SUBSCRIPTION_PRICE * 100),
+                    "line_items[0][price_data][recurring][interval]": "month",
                     "line_items[0][quantity]": "1",
                     "metadata[user_id]": user["user_id"],
                     "metadata[email]": user["email"],
                     "metadata[plan]": "premium",
+                    "subscription_data[metadata][user_id]": user["user_id"],
                 }
             )
             resp.raise_for_status()
@@ -1319,11 +1413,16 @@ async def get_payment_status(
             status = resp.json()
 
         payment_status = status.get("payment_status", "unpaid")
+        subscription_id = status.get("subscription")
+        customer_id = status.get("customer")
+
         await db.payment_transactions.update_one(
             {"session_id": session_id},
             {"$set": {
                 "payment_status": payment_status,
                 "status": status.get("status"),
+                "subscription_id": subscription_id,
+                "customer_id": customer_id,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }}
         )
@@ -1337,7 +1436,9 @@ async def get_payment_status(
                     {"user_id": user["user_id"]},
                     {"$set": {
                         "subscription_tier": "premium",
-                        "subscription_started_at": datetime.now(timezone.utc).isoformat()
+                        "subscription_started_at": datetime.now(timezone.utc).isoformat(),
+                        "stripe_subscription_id": subscription_id,
+                        "stripe_customer_id": customer_id,
                     }}
                 )
                 await db.payment_transactions.update_one(
@@ -1357,7 +1458,7 @@ async def get_payment_status(
 
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
-    """Handle Stripe webhooks"""
+    """Handle Stripe webhooks for subscription lifecycle"""
     stripe_key = os.environ.get('STRIPE_API_KEY')
     if not stripe_key:
         return {"status": "error", "message": "Not configured"}
@@ -1367,31 +1468,154 @@ async def stripe_webhook(request: Request):
     try:
         event = json.loads(body)
         event_type = event.get("type", "")
+        event_data = event.get("data", {}).get("object", {})
+
         if event_type == "checkout.session.completed":
-            session_data = event.get("data", {}).get("object", {})
-            if session_data.get("payment_status") == "paid":
-                user_id = session_data.get("metadata", {}).get("user_id")
+            if event_data.get("payment_status") == "paid":
+                user_id = event_data.get("metadata", {}).get("user_id")
+                subscription_id = event_data.get("subscription")
+                customer_id = event_data.get("customer")
                 if user_id:
                     await db.users.update_one(
                         {"user_id": user_id},
-                        {"$set": {"subscription_tier": "premium"}}
+                        {"$set": {
+                            "subscription_tier": "premium",
+                            "subscription_started_at": datetime.now(timezone.utc).isoformat(),
+                            "stripe_subscription_id": subscription_id,
+                            "stripe_customer_id": customer_id,
+                        }}
                     )
+
+        elif event_type == "invoice.payment_succeeded":
+            subscription_id = event_data.get("subscription")
+            if subscription_id:
+                await db.users.update_one(
+                    {"stripe_subscription_id": subscription_id},
+                    {"$set": {"subscription_tier": "premium"}}
+                )
+
+        elif event_type == "invoice.payment_failed":
+            subscription_id = event_data.get("subscription")
+            if subscription_id:
+                logger.warning(f"Payment failed for subscription {subscription_id}")
+
+        elif event_type == "customer.subscription.deleted":
+            subscription_id = event_data.get("id")
+            if subscription_id:
+                await db.users.update_one(
+                    {"stripe_subscription_id": subscription_id},
+                    {"$set": {"subscription_tier": "free", "stripe_subscription_id": None}}
+                )
+                logger.info(f"Subscription {subscription_id} cancelled — user downgraded to free")
+
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"Webhook error: {e}")
         return {"status": "error"}
 
+@api_router.post("/premium/portal")
+async def create_customer_portal(
+    checkout_data: CheckoutRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Create Stripe Customer Portal session for subscription management"""
+    stripe_key = os.environ.get('STRIPE_API_KEY')
+    if not stripe_key:
+        raise HTTPException(status_code=500, detail="Payment service not configured")
+
+    customer_id = user.get("stripe_customer_id")
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="No active subscription found")
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client_http:
+            resp = await client_http.post(
+                "https://api.stripe.com/v1/billing_portal/sessions",
+                headers={"Authorization": f"Bearer {stripe_key}"},
+                data={
+                    "customer": customer_id,
+                    "return_url": f"{checkout_data.origin_url}/pricing",
+                }
+            )
+            resp.raise_for_status()
+            portal = resp.json()
+        return {"url": portal["url"]}
+    except Exception as e:
+        logger.error(f"Portal creation error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create portal session")
+
+# ============== PROMO CODE ROUTES ==============
+
+@api_router.post("/promo/redeem")
+async def redeem_promo_code(
+    promo_data: PromoCodeRequest,
+    request: Request,
+    user: dict = Depends(get_current_user)
+):
+    """Redeem admin promo code for permanent Premium access (bypasses Stripe)"""
+    client_ip = request.headers.get("x-forwarded-for", "unknown").split(",")[0].strip()
+
+    # 1. Already premium?
+    if user.get("subscription_tier") == "premium":
+        logger.warning(f"Promo attempt by already-premium user {user['user_id']} from IP {client_ip}")
+        raise HTTPException(status_code=400, detail="Vous êtes déjà Premium")
+
+    # 2. Admin check via ADMIN_EMAILS env var
+    admin_emails_raw = os.environ.get("ADMIN_EMAILS", "")
+    admin_emails = [e.strip().lower() for e in admin_emails_raw.split(",") if e.strip()]
+    if not admin_emails or user.get("email", "").lower() not in admin_emails:
+        logger.warning(f"Promo attempt by non-admin user {user['user_id']} ({user.get('email')}) from IP {client_ip}")
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
+
+    # 3. Validate promo code against bcrypt hash
+    promo_hash = os.environ.get("PROMO_CODE_HASH")
+    if not promo_hash:
+        logger.error("PROMO_CODE_HASH not configured in environment")
+        raise HTTPException(status_code=500, detail="Code promo non configuré")
+
+    if not bcrypt.checkpw(promo_data.code.encode(), promo_hash.encode()):
+        logger.warning(f"Invalid promo code attempt by user {user['user_id']} from IP {client_ip}")
+        raise HTTPException(status_code=400, detail="Code promo invalide")
+
+    # 4. Upgrade to permanent premium (no Stripe fields)
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "subscription_tier": "premium",
+            "subscription_started_at": datetime.now(timezone.utc).isoformat(),
+            "promo_activated": True,
+        }}
+    )
+
+    # 5. Audit log
+    await db.promo_logs.insert_one({
+        "user_id": user["user_id"],
+        "email": user["email"],
+        "redeemed_at": datetime.now(timezone.utc).isoformat(),
+        "ip_address": client_ip,
+    })
+
+    logger.info(f"Promo code redeemed by admin {user['user_id']} ({user['email']}) from IP {client_ip}")
+
+    return {"status": "success", "message": "Premium activé avec succès"}
+
 # ============== SEED DATA ==============
 
 async def seed_micro_actions():
-    """Seed database with 300 micro-actions from seed_actions.py"""
+    """Seed database with micro-actions from seed_actions.py + premium actions"""
     from seed_actions import SEED_ACTIONS
+    try:
+        from seed_premium_actions import PREMIUM_ACTIONS
+    except ImportError:
+        PREMIUM_ACTIONS = []
+
+    all_actions = SEED_ACTIONS + PREMIUM_ACTIONS
 
     # Clear existing and insert new
     await db.micro_actions.delete_many({})
-    await db.micro_actions.insert_many(SEED_ACTIONS)
+    await db.micro_actions.insert_many(all_actions)
 
-    return {"message": f"Seeded {len(SEED_ACTIONS)} micro-actions"}
+    return {"message": f"Seeded {len(all_actions)} micro-actions ({len(SEED_ACTIONS)} free + {len(PREMIUM_ACTIONS)} premium)"}
 
 # ============== GOOGLE CALENDAR INTEGRATION ==============
 
@@ -2084,6 +2308,15 @@ async def trigger_sync(service: str, user: dict = Depends(get_current_user)):
 @api_router.post("/integrations/ical/connect")
 async def connect_ical(request: ICalConnectRequest, user: dict = Depends(get_current_user)):
     """Connect an iCal calendar via URL (.ics feed)."""
+    # Check integration limit for free users (max 1)
+    if user.get("subscription_tier") != "premium":
+        existing = await db.user_integrations.count_documents({"user_id": user["user_id"]})
+        if existing >= 1:
+            raise HTTPException(
+                status_code=403,
+                detail="Limite atteinte : 1 intégration maximum en mode gratuit. Passez à Premium pour connecter toutes vos intégrations."
+            )
+
     if not ICAL_AVAILABLE:
         raise HTTPException(status_code=503, detail="iCal support not installed (pip install icalendar)")
 
@@ -2311,6 +2544,15 @@ TOKEN_CONNECT_VALIDATORS = {
 @api_router.post("/integrations/{service}/connect-token")
 async def connect_via_token(service: str, request: TokenConnectRequest, user: dict = Depends(get_current_user)):
     """Connect an integration via API token or webhook URL (alternative to OAuth)."""
+    # Check integration limit for free users (max 1)
+    if user.get("subscription_tier") != "premium":
+        existing = await db.user_integrations.count_documents({"user_id": user["user_id"]})
+        if existing >= 1:
+            raise HTTPException(
+                status_code=403,
+                detail="Limite atteinte : 1 intégration maximum en mode gratuit. Passez à Premium pour connecter toutes vos intégrations."
+            )
+
     if service not in TOKEN_CONNECT_VALIDATORS:
         raise HTTPException(status_code=400, detail=f"Service '{service}' ne supporte pas la connexion par token")
 
@@ -2560,6 +2802,71 @@ BADGES = [
         "description": "Passez à Premium",
         "icon": "gem",
         "condition": {"type": "subscription", "value": "premium"}
+    },
+    # --- Premium-exclusive badges ---
+    {
+        "badge_id": "streak_60",
+        "name": "Discipline de Fer",
+        "description": "Maintenez un streak de 60 jours",
+        "icon": "shield",
+        "condition": {"type": "streak_days", "value": 60},
+        "premium_only": True
+    },
+    {
+        "badge_id": "streak_100",
+        "name": "Centurion",
+        "description": "Maintenez un streak de 100 jours",
+        "icon": "award",
+        "condition": {"type": "streak_days", "value": 100},
+        "premium_only": True
+    },
+    {
+        "badge_id": "time_1500",
+        "name": "25 Heures",
+        "description": "Accumulez 25 heures de micro-actions",
+        "icon": "crown",
+        "condition": {"type": "total_time", "value": 1500},
+        "premium_only": True
+    },
+    {
+        "badge_id": "category_master",
+        "name": "Polymathe",
+        "description": "Complétez 20 sessions dans 5 catégories différentes",
+        "icon": "layers",
+        "condition": {"type": "multi_category_master", "min_categories": 5, "value": 20},
+        "premium_only": True
+    },
+    {
+        "badge_id": "challenge_3",
+        "name": "Challenger",
+        "description": "Complétez 3 défis mensuels",
+        "icon": "trophy",
+        "condition": {"type": "challenges_completed", "value": 3},
+        "premium_only": True
+    },
+    {
+        "badge_id": "challenge_10",
+        "name": "Champion",
+        "description": "Complétez 10 défis mensuels",
+        "icon": "medal",
+        "condition": {"type": "challenges_completed", "value": 10},
+        "premium_only": True
+    },
+    {
+        "badge_id": "custom_10",
+        "name": "Architecte",
+        "description": "Créez 10 actions personnalisées",
+        "icon": "wrench",
+        "condition": {"type": "custom_actions_created", "value": 10},
+        "premium_only": True
+    },
+    {
+        "badge_id": "streak_shield_5",
+        "name": "Résilient",
+        "description": "Utilisez le Bouclier de Streak 5 fois",
+        "icon": "heart-handshake",
+        "condition": {"type": "streak_shield_uses", "value": 5},
+        "premium_only": True
     }
 ]
 
@@ -2586,15 +2893,28 @@ async def check_and_award_badges(user_id: str) -> List[dict]:
     category_stats = await db.user_sessions_history.aggregate(pipeline).to_list(10)
     category_counts = {stat["_id"]: stat["count"] for stat in category_stats}
     
+    # Get custom actions count
+    custom_actions_count = await db.user_custom_actions.count_documents({"created_by": user_id})
+
+    # Get challenges completed count
+    challenges_completed = await db.user_challenges.count_documents(
+        {"user_id": user_id, "completed": True}
+    )
+
     new_badges = []
-    
+    is_premium = user.get("subscription_tier") == "premium"
+
     for badge in BADGES:
         if badge["badge_id"] in user_badge_ids:
             continue
-        
+
+        # Skip premium-only badges for free users
+        if badge.get("premium_only") and not is_premium:
+            continue
+
         condition = badge["condition"]
         earned = False
-        
+
         if condition["type"] == "sessions_completed":
             earned = total_sessions >= condition["value"]
         elif condition["type"] == "streak_days":
@@ -2610,6 +2930,15 @@ async def check_and_award_badges(user_id: str) -> List[dict]:
             )
         elif condition["type"] == "subscription":
             earned = user.get("subscription_tier") == condition["value"]
+        elif condition["type"] == "multi_category_master":
+            qualifying = sum(1 for c in category_counts.values() if c >= condition["value"])
+            earned = qualifying >= condition["min_categories"]
+        elif condition["type"] == "challenges_completed":
+            earned = challenges_completed >= condition["value"]
+        elif condition["type"] == "custom_actions_created":
+            earned = custom_actions_count >= condition["value"]
+        elif condition["type"] == "streak_shield_uses":
+            earned = user.get("streak_shield_count", 0) >= condition["value"]
         
         if earned:
             badge_award = {
@@ -2649,6 +2978,314 @@ async def get_user_badges(user: dict = Depends(get_current_user)):
         "new_badges": new_badges,
         "total_available": len(BADGES),
         "total_earned": len(all_earned)
+    }
+
+# ============== PREMIUM FEATURES ==============
+
+@api_router.get("/premium/streak-shield")
+async def get_streak_shield_status(user: dict = Depends(get_current_user)):
+    """Get streak shield status for premium users"""
+    if user.get("subscription_tier") != "premium":
+        return {"available": False, "is_premium": False, "message": "Fonctionnalité Premium"}
+
+    today = datetime.now(timezone.utc).date()
+    shield_used_at = user.get("streak_shield_used_at")
+    shield_available = True
+    cooldown_days = 0
+
+    if shield_used_at:
+        if isinstance(shield_used_at, str):
+            shield_date = datetime.fromisoformat(shield_used_at).date()
+        else:
+            shield_date = shield_used_at.date() if hasattr(shield_used_at, 'date') else shield_used_at
+        days_since = (today - shield_date).days
+        shield_available = days_since >= 7
+        cooldown_days = max(0, 7 - days_since)
+
+    return {
+        "available": shield_available,
+        "is_premium": True,
+        "cooldown_days": cooldown_days,
+        "total_uses": user.get("streak_shield_count", 0),
+        "last_used": shield_used_at
+    }
+
+# Monthly challenges definitions
+MONTHLY_CHALLENGES = [
+    {
+        "challenge_id": "explorer",
+        "title": "Explorateur",
+        "description": "Complétez 5 actions dans 3 catégories différentes ce mois-ci",
+        "icon": "compass",
+        "condition": {"type": "categories_touched", "min_categories": 3, "min_sessions": 5},
+        "target": 5
+    },
+    {
+        "challenge_id": "deep_diver",
+        "title": "Deep Diver",
+        "description": "Complétez 10 actions dans la même catégorie ce mois-ci",
+        "icon": "target",
+        "condition": {"type": "single_category_sessions", "value": 10},
+        "target": 10
+    },
+    {
+        "challenge_id": "early_bird",
+        "title": "Matinal",
+        "description": "Complétez 5 actions avant 9h ce mois-ci",
+        "icon": "sunrise",
+        "condition": {"type": "early_sessions", "hour_before": 9, "value": 5},
+        "target": 5
+    },
+    {
+        "challenge_id": "consistency",
+        "title": "Régulier",
+        "description": "Complétez au moins 1 action par jour pendant 15 jours ce mois-ci",
+        "icon": "calendar-check",
+        "condition": {"type": "active_days", "value": 15},
+        "target": 15
+    },
+    {
+        "challenge_id": "time_investor",
+        "title": "Investisseur du Temps",
+        "description": "Investissez 120 minutes ce mois-ci",
+        "icon": "hourglass",
+        "condition": {"type": "monthly_time", "value": 120},
+        "target": 120
+    },
+    {
+        "challenge_id": "diversifier",
+        "title": "Diversificateur",
+        "description": "Essayez au moins 5 catégories différentes ce mois-ci",
+        "icon": "shuffle",
+        "condition": {"type": "unique_categories", "value": 5},
+        "target": 5
+    },
+]
+
+@api_router.get("/premium/challenges")
+async def get_premium_challenges(user: dict = Depends(get_current_user)):
+    """Get current month's challenges with progress for premium users"""
+    if user.get("subscription_tier") != "premium":
+        return {"challenges": [], "is_premium": False, "message": "Fonctionnalité Premium"}
+
+    now = datetime.now(timezone.utc)
+    month_key = now.strftime("%Y-%m")
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    # Get this month's sessions
+    sessions = await db.user_sessions_history.find(
+        {"user_id": user["user_id"], "completed": True, "started_at": {"$gte": month_start}},
+        {"_id": 0}
+    ).to_list(500)
+
+    # Calculate stats for challenge evaluation
+    category_counts = {}
+    total_time = 0
+    early_sessions = 0
+    active_days = set()
+    for s in sessions:
+        cat = s.get("category", "unknown")
+        category_counts[cat] = category_counts.get(cat, 0) + 1
+        total_time += s.get("actual_duration", 0)
+        started = s.get("started_at", "")
+        if started:
+            try:
+                dt = datetime.fromisoformat(started)
+                if dt.hour < 9:
+                    early_sessions += 1
+                active_days.add(dt.date().isoformat())
+            except (ValueError, TypeError):
+                pass
+
+    # Get user challenge records
+    user_challenges = await db.user_challenges.find(
+        {"user_id": user["user_id"], "month": month_key},
+        {"_id": 0}
+    ).to_list(20)
+    completed_map = {uc["challenge_id"]: uc for uc in user_challenges}
+
+    challenges_with_progress = []
+    for ch in MONTHLY_CHALLENGES:
+        cond = ch["condition"]
+        progress = 0
+
+        if cond["type"] == "categories_touched":
+            cats_with_min = sum(1 for c in category_counts.values() if c >= 1)
+            progress = min(len(sessions), ch["target"])
+            if cats_with_min >= cond["min_categories"] and len(sessions) >= cond["min_sessions"]:
+                progress = ch["target"]
+        elif cond["type"] == "single_category_sessions":
+            progress = max(category_counts.values()) if category_counts else 0
+        elif cond["type"] == "early_sessions":
+            progress = early_sessions
+        elif cond["type"] == "active_days":
+            progress = len(active_days)
+        elif cond["type"] == "monthly_time":
+            progress = total_time
+        elif cond["type"] == "unique_categories":
+            progress = len(category_counts)
+
+        is_completed = progress >= ch["target"]
+
+        # Auto-complete if newly completed
+        if is_completed and ch["challenge_id"] not in completed_map:
+            await db.user_challenges.update_one(
+                {"user_id": user["user_id"], "challenge_id": ch["challenge_id"], "month": month_key},
+                {"$set": {
+                    "completed": True,
+                    "completed_at": now.isoformat(),
+                    "progress": progress
+                }},
+                upsert=True
+            )
+
+        challenges_with_progress.append({
+            "challenge_id": ch["challenge_id"],
+            "title": ch["title"],
+            "description": ch["description"],
+            "icon": ch["icon"],
+            "target": ch["target"],
+            "progress": min(progress, ch["target"]),
+            "completed": is_completed,
+            "completed_at": completed_map.get(ch["challenge_id"], {}).get("completed_at")
+        })
+
+    total_completed = sum(1 for c in challenges_with_progress if c["completed"])
+
+    return {
+        "challenges": challenges_with_progress,
+        "is_premium": True,
+        "month": month_key,
+        "total_completed": total_completed,
+        "total_challenges": len(MONTHLY_CHALLENGES)
+    }
+
+@api_router.get("/premium/analytics")
+async def get_premium_analytics(user: dict = Depends(get_current_user)):
+    """Get advanced analytics for premium users"""
+    if user.get("subscription_tier") != "premium":
+        return {"is_premium": False, "message": "Fonctionnalité Premium"}
+
+    now = datetime.now(timezone.utc)
+    thirty_days_ago = (now - timedelta(days=30)).isoformat()
+
+    # Get sessions from last 30 days
+    sessions = await db.user_sessions_history.find(
+        {"user_id": user["user_id"], "completed": True, "started_at": {"$gte": thirty_days_ago}},
+        {"_id": 0}
+    ).sort("started_at", 1).to_list(500)
+
+    # Daily activity
+    daily_activity = {}
+    hour_distribution = {}
+    day_distribution = {}
+    category_stats = {}
+    day_names = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+
+    for s in sessions:
+        started = s.get("started_at", "")
+        duration = s.get("actual_duration", 0)
+        category = s.get("category", "unknown")
+        try:
+            dt = datetime.fromisoformat(started)
+            date_key = dt.date().isoformat()
+            daily_activity[date_key] = daily_activity.get(date_key, 0) + 1
+
+            hour = dt.hour
+            period = "matin" if hour < 12 else "après-midi" if hour < 18 else "soir"
+            hour_distribution[period] = hour_distribution.get(period, 0) + 1
+
+            day_name = day_names[dt.weekday()]
+            day_distribution[day_name] = day_distribution.get(day_name, 0) + 1
+        except (ValueError, TypeError):
+            pass
+
+        if category not in category_stats:
+            category_stats[category] = {"sessions": 0, "total_duration": 0}
+        category_stats[category]["sessions"] += 1
+        category_stats[category]["total_duration"] += duration
+
+    # Best time of day
+    best_time = max(hour_distribution, key=hour_distribution.get) if hour_distribution else "matin"
+
+    # Most productive day
+    best_day = max(day_distribution, key=day_distribution.get) if day_distribution else "lundi"
+
+    # Category deep dive with averages
+    for cat, stats in category_stats.items():
+        stats["avg_duration"] = round(stats["total_duration"] / max(stats["sessions"], 1), 1)
+
+    # Streak history (from all-time sessions)
+    all_sessions = await db.user_sessions_history.find(
+        {"user_id": user["user_id"], "completed": True},
+        {"_id": 0, "started_at": 1}
+    ).sort("started_at", 1).to_list(2000)
+
+    streak_history = []
+    if all_sessions:
+        dates = set()
+        for s in all_sessions:
+            try:
+                dt = datetime.fromisoformat(s["started_at"]).date()
+                dates.add(dt)
+            except (ValueError, TypeError):
+                pass
+        sorted_dates = sorted(dates)
+        if sorted_dates:
+            current_start = sorted_dates[0]
+            current_end = sorted_dates[0]
+            for i in range(1, len(sorted_dates)):
+                if (sorted_dates[i] - sorted_dates[i - 1]).days <= 1:
+                    current_end = sorted_dates[i]
+                else:
+                    length = (current_end - current_start).days + 1
+                    if length >= 2:
+                        streak_history.append({
+                            "start": current_start.isoformat(),
+                            "end": current_end.isoformat(),
+                            "length": length
+                        })
+                    current_start = sorted_dates[i]
+                    current_end = sorted_dates[i]
+            length = (current_end - current_start).days + 1
+            if length >= 2:
+                streak_history.append({
+                    "start": current_start.isoformat(),
+                    "end": current_end.isoformat(),
+                    "length": length
+                })
+
+    # Milestone prediction
+    total_time = user.get("total_time_invested", 0)
+    milestones = [60, 300, 600, 1500, 3000]
+    next_milestone = None
+    for m in milestones:
+        if total_time < m:
+            next_milestone = m
+            break
+
+    eta_days = None
+    if next_milestone and sessions:
+        time_last_30 = sum(s.get("actual_duration", 0) for s in sessions)
+        daily_avg = time_last_30 / 30
+        if daily_avg > 0:
+            remaining = next_milestone - total_time
+            eta_days = round(remaining / daily_avg)
+
+    return {
+        "is_premium": True,
+        "daily_activity": daily_activity,
+        "best_time_of_day": best_time,
+        "most_productive_day": best_day,
+        "category_deep_dive": category_stats,
+        "streak_history": streak_history[-10:],
+        "milestones": {
+            "current": total_time,
+            "next": next_milestone,
+            "eta_days": eta_days
+        },
+        "sessions_last_30_days": len(sessions),
+        "time_last_30_days": sum(s.get("actual_duration", 0) for s in sessions)
     }
 
 # ============== NOTIFICATIONS ==============
@@ -3130,7 +3767,7 @@ Génère un résumé structuré en JSON avec:
 - "personalized_tip": Un conseil personnalisé basé sur les réflexions
 - "mood_trend": Tendance générale de l'humeur (positive, stable, en progression, à surveiller)"""
 
-    response = await call_ai(f"summary_{user['user_id']}", system_msg, prompt)
+    response = await call_ai(f"summary_{user['user_id']}", system_msg, prompt, model=get_ai_model(user))
     ai_summary = parse_ai_json(response)
 
     fallback_summary = {

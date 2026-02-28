@@ -24,6 +24,11 @@ import {
   Heart,
   Gem,
   Lock,
+  Shield,
+  Layers,
+  Medal,
+  Wrench,
+  HeartHandshake,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
@@ -42,6 +47,12 @@ const badgeIcons = {
   heart: Heart,
   sparkles: Sparkles,
   gem: Gem,
+  shield: Shield,
+  award: Award,
+  layers: Layers,
+  medal: Medal,
+  wrench: Wrench,
+  "heart-handshake": HeartHandshake,
 };
 
 export default function BadgesPage() {
@@ -223,9 +234,12 @@ export default function BadgesPage() {
             </CardContent>
           </Card>
 
-          {/* Badges Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {allBadges.map((badge) => {
+          {/* Free Badges Grid */}
+          {(() => {
+            const freeBadges = allBadges.filter((b) => !b.premium_only);
+            const premiumBadges = allBadges.filter((b) => b.premium_only);
+
+            const renderBadge = (badge) => {
               const isEarned = earnedBadgeIds.includes(badge.badge_id);
               const Icon = badgeIcons[badge.icon] || Sparkles;
               const earnedData = userBadges.earned?.find((b) => b.badge_id === badge.badge_id);
@@ -262,8 +276,35 @@ export default function BadgesPage() {
                   </CardContent>
                 </Card>
               );
-            })}
-          </div>
+            };
+
+            return (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {freeBadges.map(renderBadge)}
+                </div>
+
+                {premiumBadges.length > 0 && (
+                  <div className="mt-10">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center">
+                        <Crown className="w-5 h-5 text-amber-500" />
+                      </div>
+                      <div>
+                        <h2 className="font-heading text-xl font-semibold">Badges Premium</h2>
+                        <p className="text-sm text-muted-foreground">
+                          Badges exclusifs pour les membres Premium
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {premiumBadges.map(renderBadge)}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       </main>
     </div>

@@ -481,6 +481,30 @@ export default function IntegrationsPage() {
             </div>
           ) : (
             <div className="space-y-8">
+              {/* Free tier limit banner */}
+              {user?.subscription_tier !== "premium" && (() => {
+                const connectedCount = AVAILABLE_INTEGRATIONS.filter(
+                  (a) => integrations[a.id]?.connected
+                ).length;
+                return connectedCount >= 1 ? (
+                  <Card className="border-amber-500/30 bg-amber-500/5">
+                    <CardContent className="p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Lock className="w-5 h-5 text-amber-500" />
+                        <p className="text-sm">
+                          Plan gratuit : 1 intégration max. Passez à Premium pour connecter tous vos outils.
+                        </p>
+                      </div>
+                      <Link to="/pricing">
+                        <Button size="sm" variant="outline" className="shrink-0">
+                          Voir Premium
+                        </Button>
+                      </Link>
+                    </CardContent>
+                  </Card>
+                ) : null;
+              })()}
+
               {/* Connected Integrations */}
               {(() => {
                 const connectedServices = AVAILABLE_INTEGRATIONS.filter(
@@ -555,91 +579,105 @@ export default function IntegrationsPage() {
               })()}
 
               {/* Available Integrations by Category */}
-              {Object.entries(groupedIntegrations).map(([category, ints]) => {
-                // Filter out already connected integrations
-                const availableInts = ints.filter(
-                  (int) => !integrations[int.id]?.connected
-                );
-                
-                if (availableInts.length === 0) return null;
+              {(() => {
+                const connectedCount = AVAILABLE_INTEGRATIONS.filter(
+                  (a) => integrations[a.id]?.connected
+                ).length;
+                const isFreeUser = user?.subscription_tier !== "premium";
+                const isLimitReached = isFreeUser && connectedCount >= 1;
 
-                return (
-                  <div key={category}>
-                    <h2 className="text-sm font-medium text-muted-foreground mb-4 capitalize">
-                      {category}
-                    </h2>
-                    <div className="grid md:grid-cols-2 gap-4">
-                      {availableInts.map((int) => {
-                        const Icon = int.icon;
-                        const colors = colorClasses[int.color];
-                        const isAvailable = int.status === "available" && isIntegrationAvailable(int.provider);
+                return Object.entries(groupedIntegrations).map(([category, ints]) => {
+                  const availableInts = ints.filter(
+                    (int) => !integrations[int.id]?.connected
+                  );
 
-                        return (
-                          <Card
-                            key={int.id}
-                            className={`transition-all ${
-                              int.status === "coming_soon" ? "opacity-60" : "hover:border-primary/50"
-                            }`}
-                            data-testid={`integration-${int.id}`}
-                          >
-                            <CardContent className="p-4">
-                              <div className="flex items-start gap-4">
-                                <div className={`w-12 h-12 rounded-xl ${colors.bg} flex items-center justify-center shrink-0`}>
-                                  <Icon className={`w-6 h-6 ${colors.text}`} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <h3 className="font-heading font-semibold">{int.name}</h3>
-                                    {int.status === "coming_soon" && (
-                                      <Badge variant="secondary" className="text-xs">
-                                        Bientôt
-                                      </Badge>
-                                    )}
-                                    {int.status === "premium" && (
-                                      <Badge className="bg-amber-500/20 text-amber-500 text-xs">
-                                        Premium
-                                      </Badge>
+                  if (availableInts.length === 0) return null;
+
+                  return (
+                    <div key={category}>
+                      <h2 className="text-sm font-medium text-muted-foreground mb-4 capitalize">
+                        {category}
+                      </h2>
+                      <div className="grid md:grid-cols-2 gap-4">
+                        {availableInts.map((int) => {
+                          const Icon = int.icon;
+                          const colors = colorClasses[int.color];
+                          const isAvailable = int.status === "available" && isIntegrationAvailable(int.provider);
+
+                          return (
+                            <Card
+                              key={int.id}
+                              className={`transition-all ${
+                                int.status === "coming_soon" || isLimitReached ? "opacity-60" : "hover:border-primary/50"
+                              }`}
+                              data-testid={`integration-${int.id}`}
+                            >
+                              <CardContent className="p-4">
+                                <div className="flex items-start gap-4">
+                                  <div className={`w-12 h-12 rounded-xl ${colors.bg} flex items-center justify-center shrink-0`}>
+                                    <Icon className={`w-6 h-6 ${colors.text}`} />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <h3 className="font-heading font-semibold">{int.name}</h3>
+                                      {int.status === "coming_soon" && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          Bientôt
+                                        </Badge>
+                                      )}
+                                      {int.status === "premium" && (
+                                        <Badge className="bg-amber-500/20 text-amber-500 text-xs">
+                                          Premium
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground mb-3">
+                                      {int.description}
+                                    </p>
+                                    {isLimitReached ? (
+                                      <Link to="/pricing">
+                                        <Button size="sm" variant="outline" className="text-amber-500 border-amber-500/30">
+                                          <Lock className="w-4 h-4 mr-2" />
+                                          Premium requis
+                                        </Button>
+                                      </Link>
+                                    ) : int.status === "available" ? (
+                                      isAvailable ? (
+                                        <Button
+                                          size="sm"
+                                          onClick={() => {
+                                            if (int.type === "url") setUrlDialogService(int);
+                                            else if (int.type === "token") setTokenDialogService(int);
+                                            else handleConnect(int.provider);
+                                          }}
+                                          data-testid={`connect-${int.id}-btn`}
+                                        >
+                                          Connecter
+                                          <ChevronRight className="w-4 h-4 ml-1" />
+                                        </Button>
+                                      ) : (
+                                        <div className="flex items-center gap-2 text-amber-500 text-sm">
+                                          <AlertCircle className="w-4 h-4" />
+                                          <span>Non configuré sur ce serveur</span>
+                                        </div>
+                                      )
+                                    ) : (
+                                      <Button size="sm" variant="secondary" disabled>
+                                        <Lock className="w-4 h-4 mr-2" />
+                                        Bientôt disponible
+                                      </Button>
                                     )}
                                   </div>
-                                  <p className="text-sm text-muted-foreground mb-3">
-                                    {int.description}
-                                  </p>
-                                  {int.status === "available" ? (
-                                    isAvailable ? (
-                                      <Button
-                                        size="sm"
-                                        onClick={() => {
-                                          if (int.type === "url") setUrlDialogService(int);
-                                          else if (int.type === "token") setTokenDialogService(int);
-                                          else handleConnect(int.provider);
-                                        }}
-                                        data-testid={`connect-${int.id}-btn`}
-                                      >
-                                        Connecter
-                                        <ChevronRight className="w-4 h-4 ml-1" />
-                                      </Button>
-                                    ) : (
-                                      <div className="flex items-center gap-2 text-amber-500 text-sm">
-                                        <AlertCircle className="w-4 h-4" />
-                                        <span>Non configuré sur ce serveur</span>
-                                      </div>
-                                    )
-                                  ) : (
-                                    <Button size="sm" variant="secondary" disabled>
-                                      <Lock className="w-4 h-4 mr-2" />
-                                      Bientôt disponible
-                                    </Button>
-                                  )}
                                 </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
 
               {/* Slot Detection Settings */}
               {slotSettings && (integrations.google_calendar?.connected || integrations.ical?.connected) && (
