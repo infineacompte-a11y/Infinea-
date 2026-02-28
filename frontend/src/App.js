@@ -19,6 +19,9 @@ import B2BDashboard from "@/pages/B2BDashboard";
 import IntegrationsPage from "@/pages/IntegrationsPage";
 import JournalPage from "@/pages/JournalPage";
 import OnboardingPage from "@/pages/OnboardingPage";
+import PrivacyPage from "@/pages/PrivacyPage";
+import CGUPage from "@/pages/CGUPage";
+import NotFound from "@/pages/NotFound";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
 export const API = `${BACKEND_URL}/api`;
@@ -226,6 +229,8 @@ function AppRouter() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/pricing" element={<PricingPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/cgu" element={<CGUPage />} />
       <Route
         path="/dashboard"
         element={
@@ -314,6 +319,7 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

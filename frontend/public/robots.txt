@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /profile
+Disallow: /actions
+Disallow: /session/
+Disallow: /progress
+Disallow: /badges
+Disallow: /notifications
+Disallow: /b2b
+Disallow: /integrations
+Disallow: /journal
+Disallow: /onboarding
+
+Sitemap: https://infinea.vercel.app/sitemap.xml

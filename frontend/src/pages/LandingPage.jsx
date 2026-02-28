@@ -169,8 +169,8 @@ export default function LandingPage() {
               <div className="text-sm text-muted-foreground mt-1">minutes/session</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl md:text-4xl font-heading font-bold text-foreground">+15%</div>
-              <div className="text-sm text-muted-foreground mt-1">productivité/an</div>
+              <div className="text-3xl md:text-4xl font-heading font-bold text-foreground">300+</div>
+              <div className="text-sm text-muted-foreground mt-1">micro-actions</div>
             </div>
             <div className="text-center">
               <div className="text-3xl md:text-4xl font-heading font-bold text-foreground">100%</div>
@@ -361,7 +361,7 @@ export default function LandingPage() {
               Prêt à investir vos instants perdus ?
             </h2>
             <p className="text-muted-foreground text-lg mb-8 max-w-xl mx-auto">
-              Rejoignez des milliers d'utilisateurs qui transforment leur temps en Capital-Temps.
+              Commencez dès maintenant à transformer votre temps en Capital-Temps.
             </p>
             <Link to="/register">
               <Button size="lg" className="rounded-full px-8 h-12 text-base btn-lift animate-pulse-glow" data-testid="final-cta-btn">
@@ -384,9 +384,9 @@ export default function LandingPage() {
               <span className="font-heading text-xl font-semibold">InFinea</span>
             </div>
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <span>© 2024 InFinea</span>
-              <a href="#" className="hover:text-foreground transition-colors">Confidentialité</a>
-              <a href="#" className="hover:text-foreground transition-colors">CGU</a>
+              <span>© 2025 InFinea</span>
+              <Link to="/privacy" className="hover:text-foreground transition-colors">Confidentialité</Link>
+              <Link to="/cgu" className="hover:text-foreground transition-colors">CGU</Link>
               <a href="mailto:Infinea.compte@gmail.com" className="hover:text-foreground transition-colors">Contact</a>
             </div>
           </div>

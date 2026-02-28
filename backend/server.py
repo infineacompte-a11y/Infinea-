@@ -1383,7 +1383,6 @@ async def stripe_webhook(request: Request):
 
 # ============== SEED DATA ==============
 
-@api_router.post("/admin/seed")
 async def seed_micro_actions():
     """Seed database with 300 micro-actions from seed_actions.py"""
     from seed_actions import SEED_ACTIONS
@@ -1812,7 +1811,7 @@ async def trigger_sync(service: str, user: dict = Depends(get_current_user)):
                 raise
             except Exception as e:
                 logger.error(f"Google Calendar iCal sync failed: {e}")
-                raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+                raise HTTPException(status_code=500, detail="Sync failed. Please try again.")
 
         # OAuth-based sync (legacy)
         try:
@@ -1872,7 +1871,7 @@ async def trigger_sync(service: str, user: dict = Depends(get_current_user)):
             }
         except Exception as e:
             logger.error(f"Google Calendar sync failed: {e}")
-            raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+            raise HTTPException(status_code=500, detail="Sync failed. Please try again.")
 
     # --- iCal: fetch events and detect free slots ---
     if service == "ical" and ICAL_AVAILABLE:
@@ -1941,7 +1940,7 @@ async def trigger_sync(service: str, user: dict = Depends(get_current_user)):
             raise
         except Exception as e:
             logger.error(f"iCal sync error: {e}")
-            raise HTTPException(status_code=500, detail=f"iCal sync failed: {str(e)[:200]}")
+            raise HTTPException(status_code=500, detail="iCal sync failed. Please check your URL and try again.")
 
     # --- Other services: sync recent sessions ---
     week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
@@ -2071,7 +2070,7 @@ async def trigger_sync(service: str, user: dict = Depends(get_current_user)):
 
     except Exception as e:
         logger.error(f"Sync error for {service}: {e}")
-        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Sync failed. Please try again.")
 
     await db.user_integrations.update_one(
         {"user_id": user["user_id"], "$or": [{"service": service}, {"provider": service}]},
@@ -2109,7 +2108,7 @@ async def connect_ical(request: ICalConnectRequest, user: dict = Depends(get_cur
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"URL invalide ou format iCal non reconnu: {str(e)[:100]}")
+        raise HTTPException(status_code=400, detail="URL invalide ou format iCal non reconnu.")
 
     # Store as integration (URL encrypted like a token)
     encrypted_url = encrypt_token(url)
@@ -2159,7 +2158,7 @@ async def connect_url(service: str, request: ICalConnectRequest, user: dict = De
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"URL invalide ou format iCal non reconnu: {str(e)[:100]}")
+        raise HTTPException(status_code=400, detail="URL invalide ou format iCal non reconnu.")
 
     encrypted_url = encrypt_token(url)
 
@@ -2277,7 +2276,7 @@ async def sync_ical(user: dict = Depends(get_current_user)):
         raise
     except Exception as e:
         logger.error(f"iCal sync error: {e}")
-        raise HTTPException(status_code=500, detail=f"iCal sync failed: {str(e)[:200]}")
+        raise HTTPException(status_code=500, detail="iCal sync failed. Please check your URL and try again.")
 
 # ============== TOKEN/URL CONNECT (Notion, Todoist, Slack) ==============
 
@@ -2350,7 +2349,7 @@ async def connect_via_token(service: str, request: TokenConnectRequest, user: di
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Impossible de valider le token: {str(e)[:100]}")
+        raise HTTPException(status_code=400, detail="Impossible de valider le token. V\u00e9rifiez et r\u00e9essayez.")
 
     # Store encrypted token
     encrypted_token = encrypt_token(token)
@@ -3193,7 +3192,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_origins=ALLOWED_ORIGINS,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
