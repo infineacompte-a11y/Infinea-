@@ -4110,6 +4110,17 @@ async def get_user_notes(
         "has_more": (skip + limit) < total,
     }
 
+@api_router.delete("/notes/{session_id}")
+async def delete_note(session_id: str, user: dict = Depends(get_current_user)):
+    """Clear the notes field from a session (does not delete the session itself)"""
+    result = await db.user_sessions_history.update_one(
+        {"session_id": session_id, "user_id": user["user_id"]},
+        {"$set": {"notes": None}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Note non trouvée")
+    return {"status": "success", "message": "Note supprimée"}
+
 # ============== ROOT ROUTE ==============
 
 @api_router.get("/")

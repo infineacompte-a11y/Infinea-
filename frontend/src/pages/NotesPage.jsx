@@ -28,10 +28,19 @@ import {
   Lock,
   Trophy,
   ChevronDown,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -81,6 +90,7 @@ export default function NotesPage() {
   const [skip, setSkip] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -168,6 +178,21 @@ export default function NotesPage() {
       }
     } catch (error) {
       toast.error("Erreur de chargement");
+    }
+  };
+
+  const handleDeleteNote = async () => {
+    if (!deleteTarget) return;
+    try {
+      const res = await authFetch(`${API}/notes/${deleteTarget}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setNotes((prev) => prev.filter((n) => n.session_id !== deleteTarget));
+      setStats((prev) => prev ? { ...prev, total_notes: Math.max(0, prev.total_notes - 1) } : prev);
+      toast.success("Note supprimée");
+    } catch {
+      toast.error("Erreur lors de la suppression");
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -588,6 +613,14 @@ export default function NotesPage() {
                                 <span>{note.actual_duration} min</span>
                               </div>
                             </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-red-500"
+                              onClick={() => setDeleteTarget(note.session_id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
                           </div>
                         </CardContent>
                       </Card>
@@ -624,6 +657,27 @@ export default function NotesPage() {
           )}
         </div>
       </main>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Supprimer cette note ?</DialogTitle>
+            <DialogDescription>
+              Cette action est irréversible. La note sera définitivement supprimée.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              Annuler
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteNote}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              Supprimer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

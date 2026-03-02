@@ -61,7 +61,7 @@ export default function ChallengesPage() {
       const response = await authFetch(`${API}/premium/challenges`);
       if (response.ok) {
         const data = await response.json();
-        setChallenges(data);
+        setChallenges(data.challenges || []);
       }
     } catch (error) {
       toast.error("Erreur de chargement des défis");
