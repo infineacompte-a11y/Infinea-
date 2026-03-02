@@ -79,14 +79,16 @@ export default function LandingPage() {
       price: "6,99€",
       period: "/mois",
       features: [
-        "Toutes les micro-actions",
-        "Suggestions IA illimitées",
-        "Statistiques avancées",
-        "Actions personnalisées",
-        "Support prioritaire",
+        "700+ actions (11 catégories)",
+        "IA avancée (Claude Sonnet)",
+        "Bouclier de Streak (1x/semaine)",
+        "Défis mensuels & récompenses",
+        "Analytics avancées & insights",
+        "20 badges Premium",
       ],
-      cta: "Essayer Premium",
+      cta: "Découvrir Premium",
       popular: true,
+      link: "/pricing",
     },
   ];
 
@@ -106,9 +108,9 @@ export default function LandingPage() {
               <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">
                 Fonctionnalités
               </a>
-              <a href="#pricing" className="text-muted-foreground hover:text-foreground transition-colors">
+              <Link to="/pricing" className="text-muted-foreground hover:text-foreground transition-colors">
                 Tarifs
-              </a>
+              </Link>
               <Link to="/login">
                 <Button variant="ghost" data-testid="nav-login-btn">Connexion</Button>
               </Link>
@@ -337,7 +339,7 @@ export default function LandingPage() {
                       </li>
                     ))}
                   </ul>
-                  <Link to="/register">
+                  <Link to={plan.link || "/register"}>
                     <Button
                       className={`w-full rounded-full ${plan.popular ? "" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"}`}
                       data-testid={`pricing-${plan.name.toLowerCase()}-btn`}
