@@ -83,20 +83,19 @@ export default function PricingPage() {
 
     setIsLoading(true);
     try {
-      const response = await authFetch(`${API}/payments/checkout`, {
+      // Temporary: activate premium directly (replace with Stripe checkout later)
+      const response = await authFetch(`${API}/premium/activate-free`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          origin_url: window.location.origin,
-        }),
       });
 
-      if (!response.ok) throw new Error("Erreur de paiement");
+      if (!response.ok) throw new Error("Erreur d'activation");
 
-      const data = await response.json();
-      window.location.href = data.url;
+      toast.success("Premium activé ! Bienvenue dans Premium !");
+      window.location.href = "/dashboard";
+      return;
     } catch (error) {
-      toast.error("Impossible de créer la session de paiement");
+      toast.error("Impossible d'activer Premium");
     } finally {
       setIsLoading(false);
     }
