@@ -15,6 +15,7 @@ import jwt
 import bcrypt
 import httpx
 import json
+import asyncio
 try:
     from icalendar import Calendar as ICalCalendar
     ICAL_AVAILABLE = True
@@ -696,7 +697,7 @@ async def get_actions(
     if energy:
         query["energy_level"] = energy
     
-    actions = await db.micro_actions.find(query, {"_id": 0}).to_list(500)
+    actions = await db.micro_actions.find(query, {"_id": 0}).to_list(5000)
     
     if duration:
         actions = [a for a in actions if a["duration_min"] <= duration <= a["duration_max"]]
@@ -1615,6 +1616,41 @@ async def redeem_promo_code(
     logger.info(f"Promo code redeemed by admin {user['user_id']} ({user['email']}) from IP {client_ip}")
 
     return {"status": "success", "message": "Premium activé avec succès"}
+
+# ============== ACTION GENERATION (admin) ==============
+
+@api_router.post("/admin/generate-actions")
+async def trigger_action_generation(user: dict = Depends(get_current_user)):
+    """Admin-only: trigger daily action generation manually."""
+    admin_emails = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+    if user.get("email", "").lower() not in admin_emails:
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
+
+    from services.action_generator import check_and_generate_daily_actions
+    result = await check_and_generate_daily_actions(db)
+    return result
+
+@api_router.get("/admin/actions-stats")
+async def get_actions_stats(user: dict = Depends(get_current_user)):
+    """Get action library statistics (count per category, generation logs)."""
+    pipeline = [
+        {"$group": {"_id": "$category", "count": {"$sum": 1}}},
+        {"$sort": {"_id": 1}}
+    ]
+    category_counts = await db.micro_actions.aggregate(pipeline).to_list(50)
+
+    total = sum(c["count"] for c in category_counts)
+
+    # Recent generation logs
+    recent_logs = await db.generation_logs.find(
+        {}, {"_id": 0}
+    ).sort("generated_at", -1).to_list(30)
+
+    return {
+        "total_actions": total,
+        "by_category": {c["_id"]: c["count"] for c in category_counts},
+        "recent_generations": recent_logs,
+    }
 
 # ============== SEED DATA ==============
 
@@ -3852,13 +3888,17 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """Auto-seed the database if empty or missing premium actions"""
+    """Auto-seed the database if empty or missing premium actions, then start daily generator"""
     count = await db.micro_actions.count_documents({})
     premium_count = await db.micro_actions.count_documents({"is_premium": True})
     if count == 0 or premium_count == 0:
         logger.info(f"Seeding needed (total={count}, premium={premium_count}), running seed...")
         await seed_micro_actions()
         logger.info("Database seeded successfully!")
+
+    # Start daily action generation background loop
+    from services.action_generator import daily_generation_loop
+    asyncio.create_task(daily_generation_loop(db))
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
