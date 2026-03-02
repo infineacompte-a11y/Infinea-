@@ -363,6 +363,14 @@ export default function IntegrationsPage() {
         <span>Journal</span>
       </Link>
       <Link
+        to="/notes"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <FileText className="w-5 h-5" />
+        <span>Mes Notes</span>
+      </Link>
+      <Link
         to="/integrations"
         className="nav-item active flex items-center gap-3 px-4 py-3 rounded-xl"
         onClick={() => mobile && setMobileMenuOpen(false)}

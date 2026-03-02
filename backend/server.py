@@ -3883,6 +3883,233 @@ async def get_past_summaries(
     
     return {"summaries": summaries}
 
+# ============== NOTES ROUTES ==============
+
+NOTES_QUERY = {
+    "completed": True,
+    "notes": {"$exists": True, "$nin": [None, ""]}
+}
+
+@api_router.get("/notes/stats")
+async def get_notes_stats(user: dict = Depends(get_current_user)):
+    """Quick stats about user's session notes"""
+    base_query = {"user_id": user["user_id"], **NOTES_QUERY}
+
+    total_notes = await db.user_sessions_history.count_documents(base_query)
+
+    week_start = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    notes_this_week = await db.user_sessions_history.count_documents({
+        **base_query,
+        "completed_at": {"$gte": week_start}
+    })
+
+    pipeline = [
+        {"$match": base_query},
+        {"$group": {"_id": "$category", "count": {"$sum": 1}}}
+    ]
+    category_stats = await db.user_sessions_history.aggregate(pipeline).to_list(15)
+    categories = {stat["_id"]: stat["count"] for stat in category_stats if stat["_id"]}
+
+    pipeline_avg = [
+        {"$match": base_query},
+        {"$project": {"note_length": {"$strLenCP": "$notes"}}},
+        {"$group": {"_id": None, "avg_length": {"$avg": "$note_length"}}}
+    ]
+    avg_result = await db.user_sessions_history.aggregate(pipeline_avg).to_list(1)
+    avg_note_length = int(avg_result[0]["avg_length"]) if avg_result else 0
+
+    return {
+        "total_notes": total_notes,
+        "notes_this_week": notes_this_week,
+        "categories": categories,
+        "avg_note_length": avg_note_length,
+    }
+
+@api_router.get("/notes/analysis")
+async def get_notes_analysis(
+    user: dict = Depends(get_current_user),
+    force: bool = False
+):
+    """AI-powered analysis of user's session notes with caching"""
+    user_id = user["user_id"]
+    is_premium = user.get("subscription_tier") == "premium"
+
+    # Check cache first (unless force refresh)
+    if not force:
+        cache_hours = 12 if is_premium else 24
+        cache_cutoff = (datetime.now(timezone.utc) - timedelta(hours=cache_hours)).isoformat()
+        cached = await db.notes_analysis_cache.find_one(
+            {"user_id": user_id, "generated_at": {"$gte": cache_cutoff}},
+            {"_id": 0}
+        )
+        if cached:
+            return {
+                "analysis": cached["analysis"],
+                "generated_at": cached["generated_at"],
+                "cached": True,
+                "note_count": cached.get("note_count", 0),
+            }
+
+    # Usage limit for free users (force refresh only)
+    if not is_premium and force:
+        usage = await check_usage_limit(user_id, "notes_analysis", 1, "daily")
+        if not usage["allowed"]:
+            return {
+                "analysis": None,
+                "error": "limit_reached",
+                "message": "Vous avez atteint la limite d'analyses aujourd'hui. Passez Premium pour des analyses illimitées !",
+                "usage": usage,
+            }
+
+    # Fetch notes
+    lookback_days = 90 if is_premium else 30
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).isoformat()
+
+    sessions_with_notes = await db.user_sessions_history.find(
+        {"user_id": user_id, **NOTES_QUERY, "completed_at": {"$gte": cutoff}},
+        {"_id": 0}
+    ).sort("completed_at", -1).to_list(50)
+
+    if len(sessions_with_notes) < 3:
+        return {
+            "analysis": None,
+            "message": "Complétez quelques sessions avec des notes pour générer une analyse.",
+            "note_count": len(sessions_with_notes),
+            "min_required": 3,
+        }
+
+    # Build notes context
+    notes_text = "\n".join([
+        f"[{s.get('completed_at', '')[:10]}] {s.get('action_title', 'Action')} ({s.get('category', 'autre')}): {s['notes']}"
+        for s in sessions_with_notes
+    ])
+
+    cat_counts = {}
+    for s in sessions_with_notes:
+        cat = s.get("category", "autre")
+        cat_counts[cat] = cat_counts.get(cat, 0) + 1
+
+    categories_fr = {
+        "learning": "apprentissage", "productivity": "productivité",
+        "well_being": "bien-être", "creativity": "créativité",
+        "fitness": "forme physique", "mindfulness": "pleine conscience",
+        "leadership": "leadership", "finance": "finance",
+        "relations": "relations", "mental_health": "santé mentale",
+        "entrepreneurship": "entrepreneuriat",
+    }
+    cat_summary = ", ".join([f"{categories_fr.get(k, k)}: {v} notes" for k, v in cat_counts.items()])
+
+    user_context = await build_user_context(user)
+
+    system_msg = """Tu es le compagnon cognitif InFinea. Tu analyses les notes de session de l'utilisateur
+pour identifier des patterns d'apprentissage, des progrès, et fournir des insights personnalisés.
+Tes analyses sont profondes, bienveillantes et actionables. Réponds toujours en français.
+Réponds UNIQUEMENT en JSON valide, sans texte autour."""
+
+    if is_premium:
+        prompt = f"""{user_context}
+
+Voici les notes de session de l'utilisateur sur les 3 derniers mois ({len(sessions_with_notes)} notes) :
+
+{notes_text}
+
+Répartition des catégories : {cat_summary}
+
+Fais une analyse approfondie et réponds en JSON :
+{{
+    "key_insight": "L'observation la plus importante sur le parcours de l'utilisateur (2-3 phrases)",
+    "patterns": ["Pattern 1 identifié dans les notes", "Pattern 2", "Pattern 3"],
+    "strengths": ["Point fort 1 observé", "Point fort 2"],
+    "growth_areas": ["Axe de progression 1", "Axe de progression 2"],
+    "emotional_trends": "Analyse de l'évolution émotionnelle à travers les notes (1-2 phrases)",
+    "connections": "Liens entre différentes sessions et thèmes (1-2 phrases)",
+    "personalized_recommendation": "Conseil personnalisé basé sur l'ensemble des notes (2-3 phrases)",
+    "focus_suggestion": "Suggestion de focus pour la semaine à venir (1 phrase)"
+}}"""
+    else:
+        prompt = f"""{user_context}
+
+Voici les notes de session récentes de l'utilisateur ({len(sessions_with_notes)} notes) :
+
+{notes_text}
+
+Répartition : {cat_summary}
+
+Fais une analyse et réponds en JSON :
+{{
+    "key_insight": "L'observation la plus importante (1-2 phrases)",
+    "patterns": ["Pattern 1", "Pattern 2"],
+    "strengths": ["Point fort observé"],
+    "growth_areas": ["Axe de progression"],
+    "personalized_recommendation": "Conseil personnalisé (1-2 phrases)"
+}}"""
+
+    ai_response = await call_ai(
+        f"notes_analysis_{user_id}",
+        system_msg,
+        prompt,
+        model=get_ai_model(user),
+    )
+    ai_result = parse_ai_json(ai_response)
+
+    # Fallback if AI fails
+    if not ai_result:
+        top_category = max(cat_counts, key=cat_counts.get) if cat_counts else "general"
+        ai_result = {
+            "key_insight": f"Vous avez écrit {len(sessions_with_notes)} notes, principalement en {categories_fr.get(top_category, top_category)}. Continuez à documenter vos sessions !",
+            "patterns": [],
+            "strengths": ["Régularité dans la prise de notes"],
+            "growth_areas": ["Essayez d'approfondir vos réflexions"],
+            "personalized_recommendation": "Notez ce que vous avez appris ET ce que vous ressentez pour des analyses plus riches.",
+        }
+
+    # Cache the result
+    await db.notes_analysis_cache.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "user_id": user_id,
+            "analysis": ai_result,
+            "note_count": len(sessions_with_notes),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+
+    return {
+        "analysis": ai_result,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "cached": False,
+        "note_count": len(sessions_with_notes),
+    }
+
+@api_router.get("/notes")
+async def get_user_notes(
+    user: dict = Depends(get_current_user),
+    skip: int = 0,
+    limit: int = 20,
+    category: Optional[str] = None,
+):
+    """Get all sessions with non-empty notes, paginated"""
+    query = {"user_id": user["user_id"], **NOTES_QUERY}
+    if category:
+        query["category"] = category
+
+    total = await db.user_sessions_history.count_documents(query)
+
+    notes = await db.user_sessions_history.find(
+        query,
+        {"_id": 0, "session_id": 1, "action_title": 1, "category": 1,
+         "notes": 1, "completed_at": 1, "actual_duration": 1}
+    ).sort("completed_at", -1).skip(skip).limit(limit).to_list(limit)
+
+    return {
+        "notes": notes,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "has_more": (skip + limit) < total,
+    }
+
 # ============== ROOT ROUTE ==============
 
 @api_router.get("/")

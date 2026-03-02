@@ -29,6 +29,7 @@ import {
   Medal,
   Wrench,
   HeartHandshake,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
@@ -119,6 +120,14 @@ export default function BadgesPage() {
       >
         <Sparkles className="w-5 h-5" />
         <span>Bibliothèque</span>
+      </Link>
+      <Link
+        to="/notes"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <FileText className="w-5 h-5" />
+        <span>Mes Notes</span>
       </Link>
       <Link
         to="/progress"
