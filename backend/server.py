@@ -1655,20 +1655,36 @@ async def get_actions_stats(user: dict = Depends(get_current_user)):
 # ============== SEED DATA ==============
 
 async def seed_micro_actions():
-    """Seed database with micro-actions from seed_actions.py + premium actions"""
+    """Seed database with micro-actions from seed_actions.py + premium actions.
+    Only inserts actions for categories that are missing — never deletes existing data."""
     from seed_actions import SEED_ACTIONS
     try:
         from seed_premium_actions import PREMIUM_ACTIONS
     except ImportError:
         PREMIUM_ACTIONS = []
 
-    all_actions = SEED_ACTIONS + PREMIUM_ACTIONS
+    all_seed_actions = SEED_ACTIONS + PREMIUM_ACTIONS
 
-    # Clear existing and insert new
-    await db.micro_actions.delete_many({})
-    await db.micro_actions.insert_many(all_actions)
+    # Check which categories already exist in DB
+    existing_categories = await db.micro_actions.distinct("category")
+    needed_categories = {a["category"] for a in all_seed_actions} - set(existing_categories)
 
-    return {"message": f"Seeded {len(all_actions)} micro-actions ({len(SEED_ACTIONS)} free + {len(PREMIUM_ACTIONS)} premium)"}
+    if not needed_categories and existing_categories:
+        logger.info(f"All seed categories already present: {existing_categories}")
+        return {"message": "All categories already seeded"}
+
+    if not existing_categories:
+        # Fresh DB — insert everything
+        await db.micro_actions.insert_many(all_seed_actions)
+        logger.info(f"Fresh seed: inserted {len(all_seed_actions)} actions")
+    else:
+        # Only insert actions for missing categories
+        actions_to_add = [a for a in all_seed_actions if a["category"] in needed_categories]
+        if actions_to_add:
+            await db.micro_actions.insert_many(actions_to_add)
+            logger.info(f"Partial seed: inserted {len(actions_to_add)} actions for categories {needed_categories}")
+
+    return {"message": f"Seeded actions for categories: {needed_categories or 'all'}"}
 
 # ============== GOOGLE CALENDAR INTEGRATION ==============
 
@@ -3888,11 +3904,13 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """Auto-seed the database if empty or missing premium actions, then start daily generator"""
+    """Auto-seed the database if empty or missing premium categories, then start daily generator"""
     count = await db.micro_actions.count_documents({})
-    premium_count = await db.micro_actions.count_documents({"is_premium": True})
-    if count == 0 or premium_count == 0:
-        logger.info(f"Seeding needed (total={count}, premium={premium_count}), running seed...")
+    existing_cats = await db.micro_actions.distinct("category")
+    premium_cats = {"creativity", "fitness", "mindfulness", "leadership", "finance", "relations", "mental_health", "entrepreneurship"}
+    missing_cats = premium_cats - set(existing_cats)
+    if count == 0 or missing_cats:
+        logger.info(f"Seeding needed (total={count}, missing categories={missing_cats})")
         await seed_micro_actions()
         logger.info("Database seeded successfully!")
 
