@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
   Timer,
   Sparkles,
+  LayoutGrid,
+  BarChart3,
+  User,
+  LogOut,
+  Menu,
   Award,
   Rocket,
   Flame,
@@ -26,7 +32,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
-import AppSidebar from "@/components/AppSidebar";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const badgeIcons = {
   rocket: Rocket,
@@ -55,6 +61,7 @@ export default function BadgesPage() {
   const [allBadges, setAllBadges] = useState([]);
   const [userBadges, setUserBadges] = useState({ earned: [], new_badges: [] });
   const [isLoading, setIsLoading] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     fetchBadges();
@@ -95,9 +102,101 @@ export default function BadgesPage() {
   const earnedBadgeIds = userBadges.earned?.map((b) => b.badge_id) || [];
   const progressPercentage = (userBadges.earned?.length / allBadges.length) * 100 || 0;
 
+  const NavLinks = ({ mobile = false }) => (
+    <>
+      <Link
+        to="/dashboard"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <LayoutGrid className="w-5 h-5" />
+        <span>Dashboard</span>
+      </Link>
+      <Link
+        to="/actions"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <Sparkles className="w-5 h-5" />
+        <span>Bibliothèque</span>
+      </Link>
+      <Link
+        to="/progress"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <BarChart3 className="w-5 h-5" />
+        <span>Progression</span>
+      </Link>
+      <Link
+        to="/badges"
+        className="nav-item active flex items-center gap-3 px-4 py-3 rounded-xl"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <Award className="w-5 h-5" />
+        <span>Badges</span>
+      </Link>
+      <Link
+        to="/profile"
+        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
+        onClick={() => mobile && setMobileMenuOpen(false)}
+      >
+        <User className="w-5 h-5" />
+        <span>Profil</span>
+      </Link>
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-background">
-      <AppSidebar activePage="badges" onLogout={handleLogout} />
+      {/* Desktop Sidebar */}
+      <aside className="hidden lg:flex fixed left-0 top-0 bottom-0 w-64 flex-col p-6 border-r border-border bg-card/50">
+        <div className="flex items-center gap-2 mb-8">
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
+            <Timer className="w-6 h-6 text-primary-foreground" />
+          </div>
+          <span className="font-heading text-xl font-semibold">InFinea</span>
+        </div>
+
+        <nav className="flex flex-col gap-1 flex-1">
+          <NavLinks />
+        </nav>
+
+        <div className="pt-4 border-t border-border">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Déconnexion</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Mobile Header */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 glass">
+        <div className="flex items-center justify-between px-4 h-16">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+              <Timer className="w-5 h-5 text-primary-foreground" />
+            </div>
+            <span className="font-heading text-lg font-semibold">InFinea</span>
+          </div>
+
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Menu className="w-6 h-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-72 bg-card p-6">
+              <nav className="flex flex-col gap-1 mt-8">
+                <NavLinks mobile />
+              </nav>
+            </SheetContent>
+          </Sheet>
+        </div>
+      </header>
 
       {/* Main Content */}
       <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
