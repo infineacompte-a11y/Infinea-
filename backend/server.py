@@ -3852,10 +3852,11 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    """Auto-seed the database if empty"""
+    """Auto-seed the database if empty or missing premium actions"""
     count = await db.micro_actions.count_documents({})
-    if count == 0:
-        logger.info("Database empty, seeding micro-actions...")
+    premium_count = await db.micro_actions.count_documents({"is_premium": True})
+    if count == 0 or premium_count == 0:
+        logger.info(f"Seeding needed (total={count}, premium={premium_count}), running seed...")
         await seed_micro_actions()
         logger.info("Database seeded successfully!")
 
