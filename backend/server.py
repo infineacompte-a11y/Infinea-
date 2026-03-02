@@ -155,8 +155,8 @@ Tes réponses doivent toujours être au format JSON quand demandé."""
 def get_ai_model(user: dict = None) -> str:
     """Return AI model based on user subscription tier."""
     if user and user.get("subscription_tier") == "premium":
-        return "claude-3-5-sonnet-20241022"
-    return "claude-3-haiku-20240307"
+        return "claude-sonnet-4-20250514"
+    return "claude-haiku-4-5-20251001"
 
 async def check_usage_limit(user_id: str, feature: str, limit: int, period: str = "daily") -> dict:
     """Check and increment usage counter for free-tier AI limits.
@@ -208,7 +208,7 @@ async def call_ai(session_suffix: str, system_message: str, prompt: str, model: 
     api_key = os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('OPENAI_API_KEY')
     if not api_key:
         return None
-    ai_model = model or "claude-3-haiku-20240307"
+    ai_model = model or "claude-haiku-4-5-20251001"
     try:
         async with httpx.AsyncClient(timeout=30.0) as client_http:
             resp = await client_http.post(
