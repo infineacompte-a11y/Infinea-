@@ -202,41 +202,62 @@ async def detect_free_slots(
 async def match_action_to_slot(
     slot: Dict,
     available_actions: List[Dict],
-    user_subscription: str = 'free'
+    user_subscription: str = 'free',
+    db=None,
+    user_id: Optional[str] = None,
 ) -> Optional[Dict]:
     """
     Find the best micro-action for a given slot.
-    
+    Uses behavioral scoring when user features are available,
+    falls back to duration-based matching otherwise.
+
     Args:
         slot: The free slot details
         available_actions: List of available micro-actions
         user_subscription: User's subscription tier
-    
+        db: Optional database handle for scoring
+        user_id: Optional user ID for scoring
+
     Returns:
         Best matching action or None
     """
     duration = slot['duration_minutes']
     category = slot['suggested_category']
-    
+
     # Filter actions by subscription
     if user_subscription == 'free':
         available_actions = [a for a in available_actions if not a.get('is_premium', False)]
-    
-    # Find actions that fit the duration and match category
+
+    # Try scoring-based matching if db and user_id are available
+    if db and user_id:
+        try:
+            from .scoring_engine import get_next_best_action
+            scored = await get_next_best_action(
+                db, user_id,
+                slot_duration=duration,
+                slot_start_time=slot.get('start_time'),
+            )
+            if scored:
+                # Strip internal scoring fields
+                return {k: v for k, v in scored.items() if not k.startswith("_")}
+        except Exception:
+            pass  # fall through to duration-based matching
+
+    # Fallback: duration + category matching
     matching_actions = []
     for action in available_actions:
         if action['duration_min'] <= duration and action.get('category') == category:
             matching_actions.append(action)
-    
+
     # If no category match, find any action that fits
     if not matching_actions:
         for action in available_actions:
             if action['duration_min'] <= duration:
                 matching_actions.append(action)
-    
+
     # Return the best match (prefer actions closer to slot duration)
     if matching_actions:
         matching_actions.sort(key=lambda a: abs(a['duration_min'] - duration))
         return matching_actions[0]
-    
+
     return None

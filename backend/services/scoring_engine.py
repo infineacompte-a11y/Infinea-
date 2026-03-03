@@ -5,7 +5,7 @@ using per-user behavioral features from user_features collection.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger("scoring_engine")
@@ -153,7 +153,6 @@ async def rank_actions_for_user(
         return actions
 
     # Fetch recent action_ids (last 7 days) for novelty
-    from datetime import timedelta
     seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     recent_sessions = await db.user_sessions_history.find(
         {"user_id": user_id, "started_at": {"$gte": seven_days_ago}},
@@ -181,3 +180,87 @@ async def rank_actions_for_user(
     # Sort by score descending
     scored.sort(key=lambda a: a["_score"], reverse=True)
     return scored
+
+
+def _time_bucket_from_iso(iso_timestamp: str) -> str:
+    """Extract time bucket from an ISO timestamp."""
+    try:
+        dt = datetime.fromisoformat(iso_timestamp)
+        hour = dt.hour
+    except (ValueError, TypeError):
+        return _current_time_bucket()
+    if 6 <= hour < 12:
+        return "morning"
+    elif 12 <= hour < 18:
+        return "afternoon"
+    elif 18 <= hour < 24:
+        return "evening"
+    return "night"
+
+
+async def get_next_best_action(
+    db,
+    user_id: str,
+    slot_duration: int,
+    slot_start_time: Optional[str] = None,
+    min_score: float = 0.0,
+) -> Optional[Dict[str, Any]]:
+    """
+    Find the best action for a given slot using behavioral scoring.
+
+    Parameters:
+        db: database handle
+        user_id: user identifier
+        slot_duration: available minutes in the slot
+        slot_start_time: ISO timestamp of slot start (for time bucket inference)
+        min_score: minimum score threshold (actions below are excluded)
+
+    Returns:
+        Best action dict with _score and _breakdown, or None.
+    """
+    features = await db.user_features.find_one(
+        {"user_id": user_id}, {"_id": 0}
+    )
+    if not features:
+        return None
+
+    # Fetch actions that fit in the slot
+    actions = await db.micro_actions.find(
+        {"duration_min": {"$lte": slot_duration}},
+        {"_id": 0},
+    ).to_list(100)
+    if not actions:
+        return None
+
+    # Infer energy from features contextual data
+    bucket = _time_bucket_from_iso(slot_start_time) if slot_start_time else _current_time_bucket()
+    energy_pref = features.get("energy_preference_by_time", {})
+    inferred_energy = energy_pref.get(bucket, "medium")
+
+    # Fetch recent action_ids for novelty
+    seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    recent_sessions = await db.user_sessions_history.find(
+        {"user_id": user_id, "started_at": {"$gte": seven_days_ago}},
+        {"_id": 0, "action_id": 1},
+    ).to_list(200)
+    recent_action_ids = {s["action_id"] for s in recent_sessions if s.get("action_id")}
+
+    context = {
+        "energy_level": inferred_energy,
+        "available_time": slot_duration,
+        "time_bucket": bucket,
+        "recent_action_ids": recent_action_ids,
+    }
+
+    # Score all actions, pick the best
+    best = None
+    best_score = -1
+    for action in actions:
+        result = score_action(action, features, context)
+        if result["score"] > best_score and result["score"] >= min_score:
+            best_score = result["score"]
+            best = dict(action)
+            best["_score"] = result["score"]
+            best["_breakdown"] = result["breakdown"]
+
+    return best

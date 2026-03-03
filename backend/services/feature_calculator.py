@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger("feature_calculator")
 
-FEATURE_VERSION = 1
+FEATURE_VERSION = 2
 
 
 def _time_of_day_bucket(iso_timestamp: str) -> str:
@@ -50,7 +50,7 @@ async def compute_user_features(db, user_id: str) -> Dict[str, Any]:
     """
     sessions = await db.user_sessions_history.find(
         {"user_id": user_id},
-        {"_id": 0, "completed": 1, "category": 1, "started_at": 1, "actual_duration": 1}
+        {"_id": 0, "completed": 1, "category": 1, "started_at": 1, "actual_duration": 1, "action_id": 1}
     ).to_list(5000)
 
     if not sessions:
@@ -117,6 +117,50 @@ async def compute_user_features(db, user_id: str) -> Dict[str, Any]:
     # 7. preferred_action_duration
     preferred_action_duration = _median(durations)
 
+    # 8. energy_preference_by_time — which energy level the user completes best per bucket
+    action_ids = list({s["action_id"] for s in completed if s.get("action_id")})
+    energy_map = {}
+    if action_ids:
+        actions_docs = await db.micro_actions.find(
+            {"action_id": {"$in": action_ids}},
+            {"_id": 0, "action_id": 1, "energy_level": 1}
+        ).to_list(len(action_ids))
+        energy_map = {a["action_id"]: a.get("energy_level", "medium") for a in actions_docs}
+
+    # Count completions by (bucket, energy)
+    bucket_energy_counts = {}
+    for s in completed:
+        bucket = _time_of_day_bucket(s.get("started_at", ""))
+        energy = energy_map.get(s.get("action_id", ""), "medium")
+        key = (bucket, energy)
+        bucket_energy_counts[key] = bucket_energy_counts.get(key, 0) + 1
+
+    # For each bucket, pick the energy with most completions
+    energy_preference_by_time = {}
+    buckets_seen = {k[0] for k in bucket_energy_counts}
+    for bucket in buckets_seen:
+        best_energy = "medium"
+        best_count = 0
+        for energy in ("low", "medium", "high"):
+            count = bucket_energy_counts.get((bucket, energy), 0)
+            if count > best_count:
+                best_count = count
+                best_energy = energy
+        energy_preference_by_time[bucket] = best_energy
+
+    # 9. best_performing_buckets — time buckets sorted by completion rate (above global)
+    best_performing_buckets = sorted(
+        [b for b, r in completion_rate_by_time_of_day.items() if r >= completion_rate_global],
+        key=lambda b: completion_rate_by_time_of_day[b],
+        reverse=True,
+    )
+
+    # 10. avg_sessions_per_active_day
+    avg_sessions_per_active_day = (
+        len(recent_completed) / active_days_last_30
+        if active_days_last_30 > 0 else 0.0
+    )
+
     return {
         "user_id": user_id,
         "completion_rate_global": round(completion_rate_global, 3),
@@ -126,6 +170,9 @@ async def compute_user_features(db, user_id: str) -> Dict[str, Any]:
         "consistency_index": round(consistency_index, 3),
         "preferred_action_duration": round(preferred_action_duration, 1),
         "active_days_last_30": active_days_last_30,
+        "energy_preference_by_time": energy_preference_by_time,
+        "best_performing_buckets": best_performing_buckets,
+        "avg_sessions_per_active_day": round(avg_sessions_per_active_day, 1),
         "total_sessions": total,
         "total_completed": completed_count,
         "computed_at": datetime.now(timezone.utc).isoformat(),
@@ -144,6 +191,9 @@ def _empty_features(user_id: str) -> Dict[str, Any]:
         "consistency_index": 0.0,
         "preferred_action_duration": 5.0,
         "active_days_last_30": 0,
+        "energy_preference_by_time": {},
+        "best_performing_buckets": [],
+        "avg_sessions_per_active_day": 0.0,
         "total_sessions": 0,
         "total_completed": 0,
         "computed_at": datetime.now(timezone.utc).isoformat(),

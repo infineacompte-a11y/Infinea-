@@ -145,9 +145,9 @@ async def schedule_slot_notifications(
         if existing:
             continue
         
-        # Find matching action
+        # Find matching action (scoring-enhanced when features available)
         suggested_action = await match_action_to_slot(
-            slot, actions, user_subscription
+            slot, actions, user_subscription, db=db, user_id=user_id
         )
         
         # Create notification

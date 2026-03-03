@@ -20,7 +20,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from services.event_tracker import track_event
-from services.scoring_engine import rank_actions_for_user
+from services.scoring_engine import rank_actions_for_user, get_next_best_action
 try:
     from icalendar import Calendar as ICalCalendar
     ICAL_AVAILABLE = True
@@ -876,6 +876,73 @@ Suggère les meilleures micro-actions en fonction du temps disponible et du nive
         }
 
     return result
+
+# ============== PROACTIVE SUGGEST-NOW ROUTE ==============
+
+@api_router.get("/suggest-now")
+async def suggest_now(user: dict = Depends(get_current_user)):
+    """
+    Proactive suggestion: infer time, energy, and ideal duration from features.
+    Returns top 3 actions without any user input required.
+    """
+    user_id = user["user_id"]
+    features = await db.user_features.find_one({"user_id": user_id}, {"_id": 0})
+
+    if not features:
+        return {
+            "suggestions": [],
+            "context": {"scored": False},
+            "message": "Pas assez de donnees pour une suggestion proactive. Completez quelques sessions d'abord.",
+        }
+
+    # Infer context from features
+    from services.scoring_engine import _current_time_bucket
+    bucket = _current_time_bucket()
+
+    # Inferred energy from user's pattern at this time
+    energy_pref = features.get("energy_preference_by_time", {})
+    inferred_energy = energy_pref.get(bucket, "medium")
+
+    # Inferred duration from user's preference
+    preferred_duration = features.get("preferred_action_duration", 5.0)
+    available_time = max(int(preferred_duration * 1.5), 10)
+
+    # Fetch & score actions
+    query = {"duration_min": {"$lte": available_time}}
+    if user.get("subscription_tier") == "free":
+        query["is_premium"] = False
+
+    actions = await db.micro_actions.find(query, {"_id": 0}).to_list(50)
+    if not actions:
+        return {
+            "suggestions": [],
+            "context": {"scored": False},
+            "message": "Aucune action disponible pour le moment.",
+        }
+
+    ranked = await rank_actions_for_user(
+        db, user_id, actions,
+        energy_level=inferred_energy,
+        available_time=available_time,
+    )
+
+    # Top 3, clean internal fields
+    top3 = []
+    for a in ranked[:3]:
+        clean = {k: v for k, v in a.items() if not k.startswith("_")}
+        clean["score"] = a.get("_score")
+        top3.append(clean)
+
+    return {
+        "suggestions": top3,
+        "context": {
+            "scored": True,
+            "time_bucket": bucket,
+            "inferred_energy": inferred_energy,
+            "available_time": available_time,
+            "preferred_duration": preferred_duration,
+        },
+    }
 
 # ============== AI COACH ROUTE ==============
 
@@ -2920,22 +2987,42 @@ async def get_week_slots(user: dict = Depends(get_current_user)):
 
 @api_router.get("/slots/next")
 async def get_next_slot(user: dict = Depends(get_current_user)):
-    """Get the next upcoming free slot."""
+    """Get the next upcoming free slot, enriched with scored suggestion."""
     now = datetime.now(timezone.utc)
-    
+
     slot = await db.detected_free_slots.find_one({
         "user_id": user["user_id"],
         "start_time": {"$gte": now.isoformat()},
         "action_taken": False
     }, {"_id": 0}, sort=[("start_time", 1)])
-    
+
     if slot and slot.get("suggested_action_id"):
         action = await db.micro_actions.find_one(
             {"action_id": slot["suggested_action_id"]},
             {"_id": 0}
         )
         slot["suggested_action"] = action
-    
+
+    # Enrich with scored suggestion if features are available
+    if slot and slot.get("duration_minutes"):
+        try:
+            scored = await get_next_best_action(
+                db, user["user_id"],
+                slot_duration=slot["duration_minutes"],
+                slot_start_time=slot.get("start_time"),
+                min_score=0.6,
+            )
+            if scored:
+                slot["scored_suggestion"] = {
+                    "action_id": scored.get("action_id"),
+                    "title": scored.get("title"),
+                    "category": scored.get("category"),
+                    "score": scored.get("_score"),
+                    "energy_level": scored.get("energy_level"),
+                }
+        except Exception:
+            pass  # scoring is best-effort, never break the route
+
     return {"slot": slot}
 
 @api_router.post("/slots/{slot_id}/dismiss")
