@@ -53,6 +53,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import SlotCard from "@/components/SlotCard";
 import AICoachCard from "@/components/AICoachCard";
+import SmartPredictionCard from "@/components/SmartPredictionCard";
 
 const categoryIcons = {
   learning: BookOpen,
@@ -342,6 +343,9 @@ export default function Dashboard() {
               Que pouvez-vous accomplir maintenant ?
             </p>
           </div>
+
+          {/* Smart Prediction Module */}
+          <SmartPredictionCard />
 
           {/* Next Slot Card */}
           {nextSlot && (

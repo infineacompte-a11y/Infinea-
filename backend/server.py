@@ -973,6 +973,125 @@ async def suggest_now(user: dict = Depends(get_current_user)):
         },
     }
 
+# ============== SMART PREDICTION ROUTE ==============
+
+@api_router.get("/smart-predict")
+async def smart_predict(user: dict = Depends(get_current_user)):
+    """
+    Intelligent prediction module: combines integrations data, detected slots,
+    and scoring engine to predict next available moments with best actions.
+    """
+    user_id = user["user_id"]
+    now = datetime.now(timezone.utc)
+
+    # 1. Connected integrations (without secrets)
+    integrations_raw = await db.user_integrations.find(
+        {"user_id": user_id},
+        {"_id": 0, "access_token": 0, "refresh_token": 0}
+    ).to_list(10)
+
+    integrations = []
+    for integ in integrations_raw:
+        integrations.append({
+            "service": integ.get("service") or integ.get("provider", "unknown"),
+            "status": "connected",
+            "last_sync": integ.get("last_sync_at") or integ.get("last_synced_at"),
+            "connected_at": integ.get("connected_at"),
+        })
+
+    # 2. Upcoming free slots (next 24h, max 5)
+    end_24h = (now + timedelta(hours=24)).isoformat()
+    raw_slots = await db.detected_free_slots.find({
+        "user_id": user_id,
+        "start_time": {"$gte": now.isoformat(), "$lte": end_24h},
+        "dismissed": {"$ne": True},
+        "action_taken": {"$ne": True},
+    }, {"_id": 0}).sort("start_time", 1).to_list(5)
+
+    # 3. Enrich each slot with scored suggestion
+    predictions = []
+    total_free_minutes = 0
+    for slot in raw_slots:
+        duration = slot.get("duration_minutes", 0)
+        total_free_minutes += duration
+
+        prediction = {
+            "slot_id": slot.get("slot_id"),
+            "start_time": slot.get("start_time"),
+            "end_time": slot.get("end_time"),
+            "duration_minutes": duration,
+            "suggested_category": slot.get("suggested_category"),
+        }
+
+        # Try to score a suggestion
+        if duration > 0:
+            try:
+                scored = await get_next_best_action(
+                    db, user_id,
+                    slot_duration=duration,
+                    slot_start_time=slot.get("start_time"),
+                    min_score=0.4,
+                )
+                if scored:
+                    prediction["suggested_action"] = {
+                        "action_id": scored.get("action_id"),
+                        "title": scored.get("title"),
+                        "category": scored.get("category"),
+                        "score": scored.get("_score"),
+                        "energy_level": scored.get("energy_level"),
+                        "duration_min": scored.get("duration_min"),
+                    }
+            except Exception:
+                pass  # scoring is best-effort
+
+        # Fallback: use the pre-assigned suggestion if no scoring
+        if "suggested_action" not in prediction and slot.get("suggested_action_id"):
+            action = await db.micro_actions.find_one(
+                {"action_id": slot["suggested_action_id"]}, {"_id": 0}
+            )
+            if action:
+                prediction["suggested_action"] = {
+                    "action_id": action.get("action_id"),
+                    "title": action.get("title"),
+                    "category": action.get("category"),
+                    "energy_level": action.get("energy_level"),
+                    "duration_min": action.get("duration_min"),
+                }
+
+        predictions.append(prediction)
+
+    # 4. Proactive best action (from behavioral features)
+    proactive = None
+    features = await db.user_features.find_one({"user_id": user_id}, {"_id": 0})
+    if features:
+        try:
+            from services.scoring_engine import _current_time_bucket
+            bucket = _current_time_bucket()
+            energy_pref = features.get("energy_preference_by_time", {})
+            inferred_energy = energy_pref.get(bucket, "medium")
+            preferred_duration = features.get("preferred_action_duration", 5.0)
+            proactive = {
+                "time_bucket": bucket,
+                "inferred_energy": inferred_energy,
+                "preferred_duration": round(preferred_duration, 1),
+                "consistency_index": features.get("consistency_index", 0),
+            }
+        except Exception:
+            pass
+
+    return {
+        "integrations": integrations,
+        "predictions": predictions,
+        "next_prediction": predictions[0] if predictions else None,
+        "proactive": proactive,
+        "context": {
+            "has_integrations": len(integrations) > 0,
+            "total_slots_today": len(predictions),
+            "total_free_minutes": total_free_minutes,
+            "scored": features is not None,
+        },
+    }
+
 # ============== AI COACH ROUTE ==============
 
 @api_router.get("/ai/coach")
