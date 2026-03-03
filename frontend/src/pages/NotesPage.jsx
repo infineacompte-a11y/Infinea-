@@ -1,38 +1,27 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Timer,
   Sparkles,
-  LayoutGrid,
-  BarChart3,
-  User,
-  LogOut,
-  Menu,
   Brain,
   Lightbulb,
   TrendingUp,
   Heart,
   FileText,
   RefreshCw,
-  Calendar,
-  Award,
-  Bell,
-  Building2,
   Loader2,
   Target,
   Zap,
   Crown,
   Lock,
-  Trophy,
   ChevronDown,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import Sidebar from "@/components/Sidebar";
 import {
   Dialog,
   DialogContent,
@@ -78,8 +67,7 @@ const categoryColors = {
 };
 
 export default function NotesPage() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const [notes, setNotes] = useState([]);
   const [stats, setStats] = useState(null);
   const [analysis, setAnalysis] = useState(null);
@@ -89,7 +77,6 @@ export default function NotesPage() {
   const [hasMore, setHasMore] = useState(false);
   const [skip, setSkip] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
@@ -196,11 +183,6 @@ export default function NotesPage() {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate("/");
-  };
-
   const formatDate = (dateStr) => {
     if (!dateStr) return "";
     const date = new Date(dateStr);
@@ -215,141 +197,9 @@ export default function NotesPage() {
 
   const isPremium = user?.subscription_tier === "premium";
 
-  const NavLinks = ({ mobile = false }) => (
-    <>
-      <Link
-        to="/dashboard"
-        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
-        onClick={() => mobile && setMobileMenuOpen(false)}
-      >
-        <LayoutGrid className="w-5 h-5" />
-        <span>Dashboard</span>
-      </Link>
-      <Link
-        to="/actions"
-        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
-        onClick={() => mobile && setMobileMenuOpen(false)}
-      >
-        <Sparkles className="w-5 h-5" />
-        <span>Bibliothèque</span>
-      </Link>
-      <Link
-        to="/journal"
-        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
-        onClick={() => mobile && setMobileMenuOpen(false)}
-      >
-        <Brain className="w-5 h-5" />
-        <span>Journal</span>
-      </Link>
-      <Link
-        to="/notes"
-        className="nav-item active flex items-center gap-3 px-4 py-3 rounded-xl"
-        onClick={() => mobile && setMobileMenuOpen(false)}
-      >
-        <FileText className="w-5 h-5" />
-        <span>Mes Notes</span>
-      </Link>
-      <Link
-        to="/challenges"
-        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
-        onClick={() => mobile && setMobileMenuOpen(false)}
-      >
-        <Trophy className="w-5 h-5" />
-        <span>Défis</span>
-      </Link>
-      <Link
-        to="/badges"
-        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
-        onClick={() => mobile && setMobileMenuOpen(false)}
-      >
-        <Award className="w-5 h-5" />
-        <span>Badges</span>
-      </Link>
-      <Link
-        to="/progress"
-        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
-        onClick={() => mobile && setMobileMenuOpen(false)}
-      >
-        <BarChart3 className="w-5 h-5" />
-        <span>Progression</span>
-      </Link>
-      <Link
-        to="/integrations"
-        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
-        onClick={() => mobile && setMobileMenuOpen(false)}
-      >
-        <Calendar className="w-5 h-5" />
-        <span>Intégrations</span>
-      </Link>
-      <Link
-        to="/profile"
-        className="nav-item flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
-        onClick={() => mobile && setMobileMenuOpen(false)}
-      >
-        <User className="w-5 h-5" />
-        <span>Profil</span>
-      </Link>
-    </>
-  );
-
   return (
     <div className="min-h-screen bg-background">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex fixed left-0 top-0 bottom-0 w-64 flex-col p-6 border-r border-border bg-card/50">
-        <div className="flex items-center gap-2 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-            <Timer className="w-6 h-6 text-primary-foreground" />
-          </div>
-          <span className="font-heading text-xl font-semibold">InFinea</span>
-        </div>
-
-        <nav className="flex flex-col gap-1 flex-1">
-          <NavLinks />
-        </nav>
-
-        <div className="pt-4 border-t border-border">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
-          >
-            <LogOut className="w-5 h-5" />
-            <span>Déconnexion</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-50 glass">
-        <div className="flex items-center justify-between px-4 h-16">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Timer className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="font-heading text-lg font-semibold">InFinea</span>
-          </div>
-          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <Menu className="w-5 h-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-72 p-6">
-              <nav className="flex flex-col gap-1 mt-8">
-                <NavLinks mobile />
-              </nav>
-              <div className="absolute bottom-6 left-6 right-6 pt-4 border-t border-border">
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
-                >
-                  <LogOut className="w-5 h-5" />
-                  <span>Déconnexion</span>
-                </button>
-              </div>
-            </SheetContent>
-          </Sheet>
-        </div>
-      </header>
+      <Sidebar />
 
       {/* Main Content */}
       <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
