@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 import { API, authFetch } from "@/App";
 import SessionDebrief from "@/components/SessionDebrief";
+import VoiceNoteButton from "@/components/VoiceNoteButton";
 
 const categoryIcons = {
   learning: BookOpen,
@@ -295,13 +296,19 @@ export default function ActiveSession() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-muted-foreground">Notes (optionnel)</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <Textarea
                 placeholder="Notez vos réflexions..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="min-h-20 resize-none"
                 data-testid="session-notes"
+              />
+              <VoiceNoteButton
+                onTranscript={(text) =>
+                  setNotes((prev) => (prev ? prev + " " + text : text))
+                }
+                disabled={isCompleting}
               />
             </CardContent>
           </Card>
