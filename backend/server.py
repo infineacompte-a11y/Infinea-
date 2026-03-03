@@ -1758,6 +1758,51 @@ async def get_event_stats(user: dict = Depends(get_current_user)):
         "recent_events": recent,
     }
 
+@api_router.get("/admin/features")
+async def get_feature_stats(
+    user: dict = Depends(get_current_user),
+    user_id: Optional[str] = None,
+):
+    """Admin-only: get feature store stats or a specific user's features."""
+    admin_emails = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+    if user.get("email", "").lower() not in admin_emails:
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
+
+    # If a specific user_id is requested
+    if user_id:
+        doc = await db.user_features.find_one({"user_id": user_id}, {"_id": 0})
+        return {"user_features": doc}
+
+    # Global stats
+    total_users = await db.user_features.count_documents({})
+
+    # Last computation log
+    last_log = await db.feature_computation_logs.find_one(
+        {}, {"_id": 0}, sort=[("computed_at", -1)]
+    )
+
+    # 5 sample user features (most recently computed)
+    samples = await db.user_features.find(
+        {}, {"_id": 0}
+    ).sort("computed_at", -1).to_list(5)
+
+    return {
+        "total_users_with_features": total_users,
+        "last_computation": last_log,
+        "sample_features": samples,
+    }
+
+@api_router.post("/admin/compute-features")
+async def trigger_feature_computation(user: dict = Depends(get_current_user)):
+    """Admin-only: trigger feature computation manually."""
+    admin_emails = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+    if user.get("email", "").lower() not in admin_emails:
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
+
+    from services.feature_calculator import compute_all_users_features
+    result = await compute_all_users_features(db)
+    return result
+
 # ============== SEED DATA ==============
 
 async def seed_micro_actions():
@@ -4268,9 +4313,18 @@ async def startup_event():
     await db.event_log.create_index("timestamp", expireAfterSeconds=90 * 24 * 3600)  # TTL: 90 days auto-cleanup
     logger.info("event_log indexes ensured")
 
+    # Create indexes for user_features collection (idempotent)
+    await db.user_features.create_index("user_id", unique=True)
+    await db.user_features.create_index("computed_at")
+    logger.info("user_features indexes ensured")
+
     # Start daily action generation background loop
     from services.action_generator import daily_generation_loop
     asyncio.create_task(daily_generation_loop(db))
+
+    # Start feature computation background loop
+    from services.feature_calculator import feature_computation_loop
+    asyncio.create_task(feature_computation_loop(db))
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
