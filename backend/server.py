@@ -787,7 +787,36 @@ async def get_ai_suggestions(
         for a in top_actions
     ])
 
-    if is_scored:
+    is_premium = user.get("subscription_tier") == "premium"
+
+    if is_scored and is_premium:
+        # Premium + scored: enrich prompt with behavioral insights for Sonnet
+        top = ranked_actions[0] if ranked_actions else {}
+        breakdown = top.get("_breakdown", {})
+        features_doc = await db.user_features.find_one({"user_id": user["user_id"]}, {"_id": 0})
+        consistency = features_doc.get("consistency_index", 0) if features_doc else 0
+        best_buckets = features_doc.get("best_performing_buckets", []) if features_doc else []
+
+        prompt = f"""L'utilisateur a {ai_request.available_time} minutes disponibles et un niveau d'énergie {ai_request.energy_level}.
+Catégories récentes: {', '.join(recent_categories) if recent_categories else 'Aucune'}
+Catégorie préférée: {ai_request.preferred_category or 'Aucune'}
+
+Profil comportemental :
+- Indice de régularité : {consistency:.0%}
+- Meilleurs créneaux : {', '.join(best_buckets) if best_buckets else 'pas assez de données'}
+- Score #1 : {breakdown.get('category_affinity', 0):.0%} affinité catégorie, {breakdown.get('duration_fit', 0):.0%} adéquation durée, {breakdown.get('energy_match', 0):.0%} match énergie
+
+Voici les micro-actions classées par pertinence (score comportemental) :
+{actions_text}
+
+La première action est la plus adaptée selon l'historique de l'utilisateur.
+Explique en 2-3 phrases pourquoi c'est le meilleur choix, en t'appuyant sur le profil comportemental.
+Propose aussi 2 alternatives avec un mot sur pourquoi chacune.
+Format JSON :
+- "top_pick": titre de la meilleure action
+- "reasoning": explication personnalisée (2-3 phrases)
+- "alternatives": liste de 2 autres titres"""
+    elif is_scored:
         prompt = f"""L'utilisateur a {ai_request.available_time} minutes disponibles et un niveau d'énergie {ai_request.energy_level}.
 Catégories récentes: {', '.join(recent_categories) if recent_categories else 'Aucune'}
 Catégorie préférée: {ai_request.preferred_category or 'Aucune'}

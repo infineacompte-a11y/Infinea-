@@ -529,6 +529,23 @@ export default function Dashboard() {
                 </Card>
               )}
 
+              {user?.subscription_tier !== "premium" && (
+                <Link to="/pricing" className="block">
+                  <Card className="bg-gradient-to-r from-amber-500/10 to-primary/10 border-amber-500/20 hover:border-amber-500/40 transition-colors cursor-pointer">
+                    <CardContent className="p-3 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Crown className="w-5 h-5 text-amber-500" />
+                        <p className="text-sm">
+                          <span className="font-medium">Passez Premium</span>
+                          <span className="text-muted-foreground"> — IA avancée qui apprend de vos habitudes</span>
+                        </p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </CardContent>
+                  </Card>
+                </Link>
+              )}
+
               <div className="grid gap-4">
                 {suggestions.recommended_actions?.map((action, i) => {
                   const Icon = categoryIcons[action.category] || Sparkles;
@@ -553,6 +570,9 @@ export default function Dashboard() {
                                 )}
                                 {i === 0 && (
                                   <Badge className="text-xs bg-primary">Recommandé</Badge>
+                                )}
+                                {suggestions.scoring_metadata?.scored && (
+                                  <Badge variant="outline" className="text-xs border-amber-500/40 text-amber-600">Personnalisé</Badge>
                                 )}
                               </div>
                               <p className="text-sm text-muted-foreground mb-2">{action.description}</p>

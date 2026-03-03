@@ -169,12 +169,12 @@ export default function PricingPage() {
       features: [
         "Tout le plan Gratuit +",
         "8 catégories exclusives (400+ actions)",
-        "IA avancée (analyses plus profondes)",
+        "IA avancée avec suggestions personnalisées",
+        "Suggestion proactive au bon moment",
         "Bouclier de Streak (1x/semaine)",
         "Défis mensuels & récompenses",
         "Analytics avancées & insights",
         "20 badges Premium",
-        "Intégrations illimitées",
       ],
       cta: isPremium ? "Déjà Premium" : "Passer à Premium",
       action: handleUpgrade,
@@ -188,6 +188,8 @@ export default function PricingPage() {
     { name: "Catégories", free: "Learning, Productivité, Bien-être", premium: "+ Créativité, Fitness, Mindfulness, Leadership, Finance, Relations, Santé mentale, Entrepreneuriat" },
     { name: "Coach IA", free: "Claude Haiku", premium: "Claude Sonnet (avancé)" },
     { name: "Suggestions IA", free: true, premium: true },
+    { name: "Suggestions personnalisées", free: "Basiques", premium: "IA comportementale avancée" },
+    { name: "Suggestion proactive", free: false, premium: "Au bon moment, sans rien demander" },
     { name: "Débrief post-session", free: true, premium: true },
     { name: "Analyse hebdomadaire", free: true, premium: true },
     { name: "Création d'actions custom", free: true, premium: true },
@@ -255,7 +257,7 @@ export default function PricingPage() {
               Choisissez votre plan
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Commencez gratuitement et passez à Premium pour accéder à 8 catégories exclusives et une IA avancée.
+              Commencez gratuitement et passez à Premium pour une IA qui apprend de vous et une bibliothèque de micro-actions en perpétuelle évolution.
             </p>
           </div>
 
@@ -409,9 +411,9 @@ export default function PricingPage() {
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                     <Sparkles className="w-6 h-6 text-primary" />
                   </div>
-                  <h3 className="font-heading text-lg font-medium mb-2">IA Avancée</h3>
+                  <h3 className="font-heading text-lg font-medium mb-2">IA qui vous connait</h3>
                   <p className="text-sm text-muted-foreground">
-                    Coach IA Sonnet pour des analyses plus profondes et des conseils personnalisés
+                    Suggestions personnalisées selon vos habitudes, votre énergie et le moment de la journée
                   </p>
                 </CardContent>
               </Card>
@@ -420,9 +422,9 @@ export default function PricingPage() {
                   <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
                     <Zap className="w-6 h-6 text-amber-500" />
                   </div>
-                  <h3 className="font-heading text-lg font-medium mb-2">11 Catégories</h3>
+                  <h3 className="font-heading text-lg font-medium mb-2">Bibliothèque infinie</h3>
                   <p className="text-sm text-muted-foreground">
-                    700+ micro-actions dans 11 catégories dont 8 exclusives Premium
+                    700+ micro-actions dans 11 catégories, enrichie en continu pour ne jamais manquer d'inspiration
                   </p>
                 </CardContent>
               </Card>
