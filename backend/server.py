@@ -20,6 +20,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from services.event_tracker import track_event
+from services.scoring_engine import rank_actions_for_user
 try:
     from icalendar import Calendar as ICalCalendar
     ICAL_AVAILABLE = True
@@ -761,6 +762,14 @@ async def get_ai_suggestions(
             "recommended_actions": []
         }
 
+    # Score and rank actions using behavioral features
+    ranked_actions = await rank_actions_for_user(
+        db, user["user_id"], available_actions,
+        energy_level=ai_request.energy_level or "medium",
+        available_time=ai_request.available_time,
+    )
+    is_scored = any("_score" in a for a in ranked_actions)
+
     # Get user's recent activity for personalization
     recent_sessions = await db.user_sessions_history.find(
         {"user_id": user["user_id"]},
@@ -769,13 +778,32 @@ async def get_ai_suggestions(
 
     recent_categories = [s.get("category", "") for s in recent_sessions]
 
-    # Build context for AI
+    # Build context for AI — top 10 scored actions
+    top_actions = ranked_actions[:10]
     actions_text = "\n".join([
-        f"- {a['title']} ({a['category']}, {a['duration_min']}-{a['duration_max']}min, énergie: {a['energy_level']}): {a['description']}"
-        for a in available_actions[:10]
+        f"- {a['title']} ({a['category']}, {a['duration_min']}-{a['duration_max']}min, énergie: {a['energy_level']})"
+        + (f" [score: {a['_score']:.2f}]" if is_scored else "")
+        + f": {a['description']}"
+        for a in top_actions
     ])
 
-    prompt = f"""L'utilisateur a {ai_request.available_time} minutes disponibles et un niveau d'énergie {ai_request.energy_level}.
+    if is_scored:
+        prompt = f"""L'utilisateur a {ai_request.available_time} minutes disponibles et un niveau d'énergie {ai_request.energy_level}.
+Catégories récentes: {', '.join(recent_categories) if recent_categories else 'Aucune'}
+Catégorie préférée: {ai_request.preferred_category or 'Aucune'}
+
+Voici les micro-actions classées par pertinence (score comportemental) :
+{actions_text}
+
+La première action est la plus adaptée selon l'historique de l'utilisateur.
+Explique en 1 phrase pourquoi c'est le meilleur choix pour ce moment.
+Propose aussi 2 alternatives parmi les suivantes.
+Format JSON :
+- "top_pick": titre de la meilleure action
+- "reasoning": explication courte pourquoi c'est le meilleur choix
+- "alternatives": liste de 2 autres titres"""
+    else:
+        prompt = f"""L'utilisateur a {ai_request.available_time} minutes disponibles et un niveau d'énergie {ai_request.energy_level}.
 Catégories récentes: {', '.join(recent_categories) if recent_categories else 'Aucune'}
 Catégorie préférée: {ai_request.preferred_category or 'Aucune'}
 
@@ -796,24 +824,31 @@ Suggère les meilleures micro-actions en fonction du temps disponible et du nive
     response = await call_ai(f"suggestion_{user['user_id']}", system_msg, prompt, model=get_ai_model(user))
     ai_result = parse_ai_json(response)
 
+    # 3.5 — Deterministic fallback: use top scored action instead of random first
     if not ai_result:
-        ai_result = {"top_pick": available_actions[0]["title"], "reasoning": "Basé sur vos préférences et le temps disponible.", "alternatives": []}
+        ai_result = {"top_pick": ranked_actions[0]["title"], "reasoning": "Basé sur votre profil comportemental et le temps disponible.", "alternatives": []}
 
     # Match recommended actions with full action data
     recommended_actions = []
-    for action in available_actions:
+    for action in ranked_actions:
         if action["title"] == ai_result.get("top_pick"):
             recommended_actions.insert(0, action)
         elif action["title"] in ai_result.get("alternatives", []):
             recommended_actions.append(action)
 
-    # Fill with remaining actions if needed
+    # Fill with remaining ranked actions if needed
     if len(recommended_actions) < 3:
-        for action in available_actions:
+        for action in ranked_actions:
             if action not in recommended_actions:
                 recommended_actions.append(action)
             if len(recommended_actions) >= 3:
                 break
+
+    # Strip internal scoring fields from response
+    clean_actions = []
+    for a in recommended_actions[:3]:
+        clean = {k: v for k, v in a.items() if not k.startswith("_")}
+        clean_actions.append(clean)
 
     await track_event(db, user["user_id"], "suggestion_generated", {
         "available_time": ai_request.available_time,
@@ -821,13 +856,26 @@ Suggère les meilleures micro-actions en fonction du temps disponible et du nive
         "category": ai_request.preferred_category,
         "top_pick": ai_result.get("top_pick"),
         "num_actions_available": len(available_actions),
+        "scoring_active": is_scored,
+        "top_score": ranked_actions[0].get("_score") if is_scored else None,
     })
 
-    return {
-        "suggestion": ai_result.get("top_pick", available_actions[0]["title"]),
+    result = {
+        "suggestion": ai_result.get("top_pick", ranked_actions[0]["title"]),
         "reasoning": ai_result.get("reasoning", "Cette action est parfaite pour le temps dont vous disposez."),
-        "recommended_actions": recommended_actions[:3]
+        "recommended_actions": clean_actions,
     }
+
+    # 3.4 — Scoring metadata (backward-compatible, frontend ignores it)
+    if is_scored:
+        result["scoring_metadata"] = {
+            "scored": True,
+            "top_score": ranked_actions[0].get("_score"),
+            "actions_scored": len(ranked_actions),
+            "feature_version": ranked_actions[0].get("_breakdown") is not None,
+        }
+
+    return result
 
 # ============== AI COACH ROUTE ==============
 
