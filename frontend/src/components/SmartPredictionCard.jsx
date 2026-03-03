@@ -35,8 +35,8 @@ const categoryColors = {
 
 const categoryLabels = {
   learning: "Apprentissage",
-  productivity: "Productivit\u00e9",
-  well_being: "Bien-\u00eatre",
+  productivity: "Productivité",
+  well_being: "Bien-être",
 };
 
 const serviceLabels = {
@@ -100,7 +100,7 @@ export default function SmartPredictionCard() {
       const session = await response.json();
       navigate(`/session/${session.session_id}`, { state: { session } });
     } catch (e) {
-      toast.error("Erreur lors du d\u00e9marrage");
+      toast.error("Erreur lors du démarrage");
     }
   };
 
@@ -133,9 +133,9 @@ export default function SmartPredictionCard() {
               <Plug className="w-5 h-5 text-muted-foreground" />
             </div>
             <div className="flex-1">
-              <h3 className="font-heading font-semibold text-sm mb-1">Pr\u00e9dictions intelligentes</h3>
+              <h3 className="font-heading font-semibold text-sm mb-1">Prédictions intelligentes</h3>
               <p className="text-sm text-muted-foreground mb-3">
-                Connectez votre calendrier pour que l'IA pr\u00e9dise vos prochains moments disponibles.
+                Connectez votre calendrier pour que l'IA prédise vos prochains moments disponibles.
               </p>
               <Link to="/integrations">
                 <Button variant="outline" size="sm" className="rounded-xl">
@@ -161,13 +161,13 @@ export default function SmartPredictionCard() {
             </div>
             <div className="flex-1">
               <div className="flex items-center justify-between mb-1">
-                <h3 className="font-heading font-semibold text-sm">Pr\u00e9dictions intelligentes</h3>
+                <h3 className="font-heading font-semibold text-sm">Prédictions intelligentes</h3>
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={fetchPredictions}>
                   <RefreshCw className="w-3.5 h-3.5" />
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground">
-                Aucun cr\u00e9neau d\u00e9tect\u00e9 pour les prochaines 24h. Synchronisez votre calendrier pour mettre \u00e0 jour.
+                Aucun créneau détecté pour les prochaines 24h. Synchronisez votre calendrier pour mettre à jour.
               </p>
               <div className="flex gap-2 mt-3">
                 {integrations.map((integ) => (
@@ -195,9 +195,9 @@ export default function SmartPredictionCard() {
               <Brain className="w-5 h-5 text-indigo-500" />
             </div>
             <div>
-              <h3 className="font-heading font-semibold text-sm">Pr\u00e9dictions intelligentes</h3>
+              <h3 className="font-heading font-semibold text-sm">Prédictions intelligentes</h3>
               <p className="text-xs text-muted-foreground">
-                {context.total_slots_today} cr\u00e9neau{context.total_slots_today > 1 ? "x" : ""} &bull; {context.total_free_minutes} min disponibles
+                {context.total_slots_today} {"créneau"}{context.total_slots_today > 1 ? "x" : ""} &bull; {context.total_free_minutes} min disponibles
               </p>
             </div>
           </div>
@@ -221,7 +221,7 @@ export default function SmartPredictionCard() {
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-indigo-500" />
                 <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
-                  Prochain moment : {formatCountdown(next_prediction.start_time)}
+                  {"Prochain moment : "}{formatCountdown(next_prediction.start_time)}
                 </span>
               </div>
               <Badge variant="secondary" className="font-mono text-xs">
@@ -263,7 +263,7 @@ export default function SmartPredictionCard() {
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                {categoryLabels[next_prediction.suggested_category] || "Cr\u00e9neau libre d\u00e9tect\u00e9"}
+                {categoryLabels[next_prediction.suggested_category] || "Créneau libre détecté"}
               </p>
             )}
           </div>
@@ -319,11 +319,10 @@ export default function SmartPredictionCard() {
           <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-2 text-xs text-muted-foreground">
             <Zap className="w-3.5 h-3.5 text-indigo-400" />
             <span>
-              Votre rythme actuel : sessions de ~{proactive.preferred_duration} min,
-              {" "}
-              {proactive.inferred_energy === "high" ? "\u00e9nergie haute" :
-               proactive.inferred_energy === "low" ? "\u00e9nergie basse" : "\u00e9nergie mod\u00e9r\u00e9e"}
-              {proactive.consistency_index > 0.5 && " \u2022 R\u00e9gularit\u00e9 solide"}
+              {"Votre rythme actuel : sessions de ~"}{proactive.preferred_duration}{" min, "}
+              {proactive.inferred_energy === "high" ? "énergie haute" :
+               proactive.inferred_energy === "low" ? "énergie basse" : "énergie modérée"}
+              {proactive.consistency_index > 0.5 && " • Régularité solide"}
             </span>
           </div>
         )}
