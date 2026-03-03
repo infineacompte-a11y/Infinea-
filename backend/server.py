@@ -16,6 +16,10 @@ import bcrypt
 import httpx
 import json
 import asyncio
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from services.event_tracker import track_event
 try:
     from icalendar import Calendar as ICalCalendar
     ICAL_AVAILABLE = True
@@ -31,13 +35,20 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'infinea')]
 
 # JWT Config
-JWT_SECRET = os.environ.get('JWT_SECRET', 'infinea-secret-key-change-in-production')
+JWT_SECRET = os.environ.get('JWT_SECRET')
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is required. Server cannot start without it.")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 168  # 7 days
 
 # Create the main app
 app = FastAPI(title="InFinea API")
 api_router = APIRouter(prefix="/api")
+
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,8 +58,8 @@ logger = logging.getLogger(__name__)
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str
-    name: str
+    password: str = Field(min_length=8)
+    name: str = Field(min_length=1)
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -354,7 +365,8 @@ def verify_password(password: str, hashed: str) -> bool:
 # ============== AUTH ROUTES ==============
 
 @api_router.post("/auth/register")
-async def register(user_data: UserCreate, response: Response):
+@limiter.limit("3/minute")
+async def register(request: Request, user_data: UserCreate, response: Response):
     # Check if user exists
     existing = await db.users.find_one({"email": user_data.email}, {"_id": 0})
     if existing:
@@ -396,7 +408,8 @@ async def register(user_data: UserCreate, response: Response):
     }
 
 @api_router.post("/auth/login")
-async def login(user_data: UserLogin, response: Response):
+@limiter.limit("5/minute")
+async def login(request: Request, user_data: UserLogin, response: Response):
     user = await db.users.find_one({"email": user_data.email}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -802,6 +815,14 @@ Suggère les meilleures micro-actions en fonction du temps disponible et du nive
             if len(recommended_actions) >= 3:
                 break
 
+    await track_event(db, user["user_id"], "suggestion_generated", {
+        "available_time": ai_request.available_time,
+        "energy_level": ai_request.energy_level,
+        "category": ai_request.preferred_category,
+        "top_pick": ai_result.get("top_pick"),
+        "num_actions_available": len(available_actions),
+    })
+
     return {
         "suggestion": ai_result.get("top_pick", available_actions[0]["title"]),
         "reasoning": ai_result.get("reasoning", "Cette action est parfaite pour le temps dont vous disposez."),
@@ -811,7 +832,8 @@ Suggère les meilleures micro-actions en fonction du temps disponible et du nive
 # ============== AI COACH ROUTE ==============
 
 @api_router.get("/ai/coach")
-async def get_ai_coach(user: dict = Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def get_ai_coach(request: Request, user: dict = Depends(get_current_user)):
     """Get personalized AI coach message for dashboard"""
     user_context = await build_user_context(user)
 
@@ -857,6 +879,11 @@ Réponds en JSON:
     actions = await db.micro_actions.find(query, {"_id": 0}).to_list(5)
     suggested_action_id = actions[0]["action_id"] if actions else None
 
+    await track_event(db, user["user_id"], "ai_coach_served", {
+        "ai_success": ai_result is not None,
+        "time_of_day": time_of_day,
+    })
+
     if ai_result:
         return {
             "greeting": ai_result.get("greeting", f"Bonjour {user.get('name', '')} !"),
@@ -875,7 +902,9 @@ Réponds en JSON:
 # ============== AI DEBRIEF ROUTE ==============
 
 @api_router.post("/ai/debrief")
+@limiter.limit("10/minute")
 async def get_ai_debrief(
+    request: Request,
     debrief_req: DebriefRequest,
     user: dict = Depends(get_current_user)
 ):
@@ -922,6 +951,13 @@ Réponds en JSON:
     next_actions = await db.micro_actions.find(query, {"_id": 0}).to_list(5)
     next_action_id = next_actions[0]["action_id"] if next_actions else None
 
+    await track_event(db, user["user_id"], "ai_debrief_generated", {
+        "action_title": action_title,
+        "category": action_category,
+        "duration": duration,
+        "ai_success": ai_result is not None,
+    })
+
     if ai_result:
         return {
             "feedback": ai_result.get("feedback", "Bravo pour cette session !"),
@@ -940,7 +976,8 @@ Réponds en JSON:
 # ============== AI WEEKLY ANALYSIS ROUTE ==============
 
 @api_router.get("/ai/weekly-analysis")
-async def get_weekly_analysis(user: dict = Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def get_weekly_analysis(request: Request, user: dict = Depends(get_current_user)):
     """Get AI-powered weekly progress analysis"""
     user_context = await build_user_context(user)
 
@@ -994,6 +1031,12 @@ Réponds en JSON:
     ai_response = await call_ai(f"analysis_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
     ai_result = parse_ai_json(ai_response)
 
+    await track_event(db, user["user_id"], "ai_weekly_analysis_generated", {
+        "total_sessions": len(all_sessions),
+        "total_duration": total_duration,
+        "ai_success": ai_result is not None,
+    })
+
     if ai_result:
         return {
             "summary": ai_result.get("summary", "Bonne progression globale."),
@@ -1014,7 +1057,8 @@ Réponds en JSON:
 # ============== AI STREAK CHECK ROUTE ==============
 
 @api_router.post("/ai/streak-check")
-async def check_streak_risk(user: dict = Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def check_streak_risk(request: Request, user: dict = Depends(get_current_user)):
     """Check if user's streak is at risk and send AI notification"""
     streak = user.get("streak_days", 0)
     if streak == 0:
@@ -1064,6 +1108,11 @@ Réponds en JSON: {{"title": "Titre court", "message": "Message motivant (1-2 ph
                     "created_at": datetime.now(timezone.utc).isoformat()
                 }
                 await db.notifications.insert_one(notification)
+                await track_event(db, user["user_id"], "ai_streak_check_served", {
+                    "streak_days": streak,
+                    "at_risk": True,
+                    "notification_sent": True,
+                })
                 return {"at_risk": True, "notification_sent": True, "message": message}
 
             return {"at_risk": True, "notification_sent": False, "message": message}
@@ -1073,7 +1122,9 @@ Réponds en JSON: {{"title": "Titre court", "message": "Message motivant (1-2 ph
 # ============== AI CUSTOM ACTION ROUTES ==============
 
 @api_router.post("/ai/create-action")
+@limiter.limit("10/minute")
 async def create_custom_action(
+    request: Request,
     action_req: CustomActionRequest,
     user: dict = Depends(get_current_user)
 ):
@@ -1141,6 +1192,13 @@ Réponds en JSON:
 
     doc = {**action}
     await db.user_custom_actions.insert_one(doc)
+
+    await track_event(db, user["user_id"], "ai_action_created", {
+        "action_id": action_id,
+        "category": action["category"],
+        "ai_success": ai_result is not None,
+    })
+
     return {"action": action}
 
 # ============== SESSION TRACKING ROUTES ==============
@@ -1179,7 +1237,14 @@ async def start_session(
     }
     
     await db.user_sessions_history.insert_one(session_doc)
-    
+
+    await track_event(db, user["user_id"], "action_started", {
+        "session_id": session_id,
+        "action_id": session_data.action_id,
+        "category": action["category"],
+        "action_title": action["title"],
+    })
+
     return {
         "session_id": session_id,
         "action": action,
@@ -1211,6 +1276,14 @@ async def complete_session(
         }}
     )
     
+    event_type = "action_completed" if completion.completed else "action_abandoned"
+    await track_event(db, user["user_id"], event_type, {
+        "session_id": completion.session_id,
+        "category": session.get("category"),
+        "action_title": session.get("action_title"),
+        "actual_duration": completion.actual_duration,
+    })
+
     if completion.completed:
         # Update user stats
         user_doc = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
@@ -1650,6 +1723,39 @@ async def get_actions_stats(user: dict = Depends(get_current_user)):
         "total_actions": total,
         "by_category": {c["_id"]: c["count"] for c in category_counts},
         "recent_generations": recent_logs,
+    }
+
+@api_router.get("/admin/events")
+async def get_event_stats(user: dict = Depends(get_current_user)):
+    """Admin-only: get event tracking stats to verify instrumentation works."""
+    admin_emails = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+    if user.get("email", "").lower() not in admin_emails:
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
+
+    # Count by event_type
+    pipeline = [
+        {"$group": {"_id": "$event_type", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    type_counts = await db.event_log.aggregate(pipeline).to_list(50)
+
+    # Total events
+    total = sum(c["count"] for c in type_counts)
+
+    # Last 20 events (most recent first)
+    recent = await db.event_log.find(
+        {}, {"_id": 0}
+    ).sort("timestamp", -1).to_list(20)
+
+    # Convert datetime to string for JSON serialization
+    for event in recent:
+        if hasattr(event.get("timestamp"), "isoformat"):
+            event["timestamp"] = event["timestamp"].isoformat()
+
+    return {
+        "total_events": total,
+        "by_type": {c["_id"]: c["count"] for c in type_counts},
+        "recent_events": recent,
     }
 
 # ============== SEED DATA ==============
@@ -2749,7 +2855,11 @@ async def dismiss_slot(slot_id: str, user: dict = Depends(get_current_user)):
     
     if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Slot not found")
-    
+
+    await track_event(db, user["user_id"], "slot_dismissed", {
+        "slot_id": slot_id,
+    })
+
     return {"message": "Slot dismissed"}
 
 @api_router.get("/slots/settings")
@@ -4137,7 +4247,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_origins=ALLOWED_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 @app.on_event("startup")
@@ -4151,6 +4261,12 @@ async def startup_event():
         logger.info(f"Seeding needed (total={count}, missing categories={missing_cats})")
         await seed_micro_actions()
         logger.info("Database seeded successfully!")
+
+    # Create indexes for event_log collection (idempotent — safe to run every startup)
+    await db.event_log.create_index("user_id")
+    await db.event_log.create_index([("event_type", 1), ("timestamp", -1)])
+    await db.event_log.create_index("timestamp", expireAfterSeconds=90 * 24 * 3600)  # TTL: 90 days auto-cleanup
+    logger.info("event_log indexes ensured")
 
     # Start daily action generation background loop
     from services.action_generator import daily_generation_loop
