@@ -22,17 +22,17 @@ export default function LandingPage() {
     {
       icon: Clock,
       title: "2-15 minutes",
-      description: "Micro-actions conçues pour vos temps morts quotidiens",
+      description: "Des micro-actions pour chaque instant libre, puisées dans une bibliothèque en perpétuelle évolution",
     },
     {
       icon: Zap,
-      title: "IA contextuelle",
-      description: "Suggestions adaptées à votre temps et niveau d'énergie",
+      title: "IA qui vous connait",
+      description: "Des suggestions personnalisées selon vos habitudes, votre énergie et le moment de la journée",
     },
     {
       icon: TrendingUp,
       title: "Capital-Temps",
-      description: "Transformez chaque minute en progrès mesurable",
+      description: "Chaque session enrichit votre profil. Plus vous agissez, plus l'IA devient pertinente",
     },
   ];
 
@@ -80,9 +80,9 @@ export default function LandingPage() {
       period: "/mois",
       features: [
         "700+ actions (11 catégories)",
-        "IA avancée (Claude Sonnet)",
+        "IA avancée avec suggestions personnalisées",
+        "Suggestion proactive au bon moment",
         "Bouclier de Streak (1x/semaine)",
-        "Défis mensuels & récompenses",
         "Analytics avancées & insights",
         "20 badges Premium",
       ],
@@ -136,7 +136,7 @@ export default function LandingPage() {
           <div className="text-center max-w-4xl mx-auto">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-8 animate-fade-in">
               <Sparkles className="w-4 h-4 text-primary" />
-              <span className="text-sm text-primary">Nouveau : Suggestions IA personnalisées</span>
+              <span className="text-sm text-primary">Une IA qui apprend de vous, une bibliothèque qui grandit sans cesse</span>
             </div>
             
             <h1 className="font-heading text-5xl md:text-7xl font-bold tracking-tight mb-6 animate-fade-in stagger-1">
@@ -145,8 +145,8 @@ export default function LandingPage() {
             </h1>
             
             <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto animate-fade-in stagger-2">
-              Transformez vos temps morts en micro-victoires. 2 à 15 minutes suffisent pour apprendre, 
-              avancer sur vos projets, ou prendre soin de vous.
+              Transformez vos temps morts en micro-victoires. Une bibliothèque de micro-actions en perpétuelle évolution,
+              portée par une IA qui s'adapte à vos habitudes, votre énergie et votre rythme.
             </p>
             
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in stagger-3">
@@ -171,8 +171,8 @@ export default function LandingPage() {
               <div className="text-sm text-muted-foreground mt-1">minutes/session</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl md:text-4xl font-heading font-bold text-foreground">300+</div>
-              <div className="text-sm text-muted-foreground mt-1">micro-actions</div>
+              <div className="text-3xl md:text-4xl font-heading font-bold text-foreground">700+</div>
+              <div className="text-sm text-muted-foreground mt-1">micro-actions et +</div>
             </div>
             <div className="text-center">
               <div className="text-3xl md:text-4xl font-heading font-bold text-foreground">100%</div>
@@ -232,7 +232,7 @@ export default function LandingPage() {
               La solution InFinea
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Une application qui répond à une question simple : "Que puis-je faire maintenant ?"
+              Une bibliothèque infinie de micro-actions, une IA qui apprend de vous. Que faire maintenant ? InFinea sait.
             </p>
           </div>
 
@@ -308,7 +308,7 @@ export default function LandingPage() {
               Tarifs simples et transparents
             </h2>
             <p className="text-muted-foreground text-lg">
-              Commencez gratuitement, passez en Premium quand vous êtes prêt
+              Commencez gratuitement, passez Premium pour une IA qui s'adapte à vous
             </p>
           </div>
 
