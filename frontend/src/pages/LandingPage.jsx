@@ -145,7 +145,7 @@ export default function LandingPage() {
             </h1>
             
             <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto animate-fade-in stagger-2">
-              Transformez vos temps morts en micro-victoires. Une bibliothèque de micro-actions en perpétuelle évolution,
+              Transformez votre temps disponible en micro-victoires. Une bibliothèque de micro-actions en perpétuelle évolution,
               portée par une IA qui s'adapte à vos habitudes, votre énergie et votre rythme.
             </p>
             
@@ -191,8 +191,8 @@ export default function LandingPage() {
                 Le temps, votre ressource la plus précieuse
               </h2>
               <p className="text-muted-foreground text-lg mb-8">
-                Chaque jour, nous perdons des dizaines de minutes en "temps morts" : transports, 
-                files d'attente, pauses entre réunions. Ces moments fragmentés semblent trop courts 
+                Chaque jour, des dizaines de minutes de temps disponible s'envolent : transports,
+                files d'attente, pauses entre réunions. Ces moments fragmentés semblent trop courts
                 pour être utiles.
               </p>
               <div className="space-y-4">
