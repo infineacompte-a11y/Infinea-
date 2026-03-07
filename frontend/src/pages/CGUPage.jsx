@@ -28,7 +28,7 @@ export default function CGUPage() {
       <main className="pt-24 pb-16 px-4">
         <div className="max-w-3xl mx-auto prose prose-invert prose-sm">
           <h1 className="font-heading text-3xl font-bold mb-2">Conditions Générales d'Utilisation</h1>
-          <p className="text-muted-foreground mb-8">Dernière mise à jour : 28 février 2025</p>
+          <p className="text-muted-foreground mb-8">Dernière mise à jour : 7 mars 2026</p>
 
           <section className="mb-8">
             <h2 className="font-heading text-xl font-semibold mb-3">1. Objet</h2>
@@ -169,7 +169,7 @@ export default function CGUPage() {
             <span className="font-heading text-xl font-semibold">InFinea</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <span>© 2025 InFinea</span>
+            <span>© 2025-2026 InFinea</span>
             <Link to="/privacy" className="hover:text-foreground transition-colors">Confidentialité</Link>
             <span className="text-primary">CGU</span>
             <a href="mailto:infinea.compte@gmail.com" className="hover:text-foreground transition-colors">Contact</a>

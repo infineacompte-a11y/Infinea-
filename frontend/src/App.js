@@ -235,6 +235,7 @@ function AppRouter() {
       <Route path="/pricing" element={<PricingPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/cgu" element={<CGUPage />} />
+      <Route path="/terms" element={<CGUPage />} />
       <Route
         path="/dashboard"
         element={
