@@ -2596,51 +2596,41 @@ async def trigger_sync(service: str, user: dict = Depends(get_current_user)):
 
                 for component in cal.walk("VEVENT"):
                     dtstart = component.get("dtstart")
-                    dtend = component.get("dtend")
-                    if dtstart and dtend:
-                        start = dtstart.dt
-                        end = dtend.dt
-                        if hasattr(start, 'hour'):
-                            if start.tzinfo is None:
-                                start = start.replace(tzinfo=timezone.utc)
-                            if end.tzinfo is None:
+                    if not dtstart or not hasattr(dtstart, "dt"):
+                        continue
+                    start = dtstart.dt
+                    if hasattr(start, 'hour'):
+                        if hasattr(start, "tzinfo") and start.tzinfo:
+                            start = start.astimezone(timezone.utc)
+                        else:
+                            start = start.replace(tzinfo=timezone.utc)
+                        if now <= start <= end_time:
+                            dtend = component.get("dtend")
+                            end = dtend.dt if dtend and hasattr(dtend, "dt") else start + timedelta(hours=1)
+                            if hasattr(end, "tzinfo") and end.tzinfo:
+                                end = end.astimezone(timezone.utc)
+                            else:
                                 end = end.replace(tzinfo=timezone.utc)
-                            if start < end_time and end > now:
-                                events.append({"start": start.isoformat(), "end": end.isoformat()})
+                            events.append({
+                                "summary": str(component.get("summary", "Événement")),
+                                "start": {"dateTime": start.isoformat()},
+                                "end": {"dateTime": end.isoformat()},
+                            })
 
-                events.sort(key=lambda e: e["start"])
-                slots = []
-                settings = await db.notification_preferences.find_one(
-                    {"user_id": user["user_id"]}, {"_id": 0}
-                )
-                min_dur = (settings or {}).get("min_slot_duration", 5)
-                max_dur = (settings or {}).get("max_slot_duration", 20)
-
-                prev_end = now
-                for event in events:
-                    event_start = datetime.fromisoformat(event["start"])
-                    gap_minutes = (event_start - prev_end).total_seconds() / 60
-                    if min_dur <= gap_minutes <= max_dur:
-                        slots.append({
-                            "user_id": user["user_id"],
-                            "start_time": prev_end.isoformat(),
-                            "end_time": event_start.isoformat(),
-                            "duration_minutes": int(gap_minutes),
-                            "source": "ical",
-                            "detected_at": now.isoformat(),
-                        })
-                    prev_end = max(prev_end, datetime.fromisoformat(event["end"]))
-
-                if slots:
-                    await db.detected_free_slots.delete_many({"user_id": user["user_id"], "source": "ical"})
-                    await db.detected_free_slots.insert_many(slots)
+                prefs = await db.notification_preferences.find_one({"user_id": user["user_id"]}, {"_id": 0}) or {}
+                settings = {**DEFAULT_SETTINGS, **prefs}
+                slots = await detect_free_slots(events, settings)
+                await cleanup_old_slots(db, user["user_id"])
+                actions = await db.micro_actions.find({}, {"_id": 0}).to_list(50)
+                await schedule_slot_notifications(db, user["user_id"], slots, actions, user.get("subscription_tier", "free"))
 
                 await db.user_integrations.update_one(
                     {"user_id": user["user_id"], "service": "ical"},
                     {"$set": {"last_synced_at": now.isoformat(), "metadata.event_count": len(events)}}
                 )
                 return {
-                    "synced_count": len(events), "events_found": len(events),
+                    "message": "Sync completed",
+                    "synced_count": len(slots), "events_found": len(events),
                     "slots_detected": len(slots), "service": "ical", "last_sync": now.isoformat()
                 }
         except HTTPException:
@@ -2929,51 +2919,34 @@ async def sync_ical(user: dict = Depends(get_current_user)):
 
             for component in cal.walk("VEVENT"):
                 dtstart = component.get("dtstart")
-                dtend = component.get("dtend")
-                if dtstart and dtend:
-                    start = dtstart.dt
-                    end = dtend.dt
-                    # Handle date vs datetime
-                    if hasattr(start, 'hour'):
-                        if start.tzinfo is None:
-                            start = start.replace(tzinfo=timezone.utc)
-                        if end.tzinfo is None:
+                if not dtstart or not hasattr(dtstart, "dt"):
+                    continue
+                start = dtstart.dt
+                if hasattr(start, 'hour'):
+                    if hasattr(start, "tzinfo") and start.tzinfo:
+                        start = start.astimezone(timezone.utc)
+                    else:
+                        start = start.replace(tzinfo=timezone.utc)
+                    if now <= start <= end_time:
+                        dtend = component.get("dtend")
+                        end = dtend.dt if dtend and hasattr(dtend, "dt") else start + timedelta(hours=1)
+                        if hasattr(end, "tzinfo") and end.tzinfo:
+                            end = end.astimezone(timezone.utc)
+                        else:
                             end = end.replace(tzinfo=timezone.utc)
-                        if start < end_time and end > now:
-                            events.append({
-                                "summary": str(component.get("summary", "Événement")),
-                                "start": start.isoformat(),
-                                "end": end.isoformat(),
-                            })
+                        events.append({
+                            "summary": str(component.get("summary", "Événement")),
+                            "start": {"dateTime": start.isoformat()},
+                            "end": {"dateTime": end.isoformat()},
+                        })
 
-            # Detect free slots between events (same logic as Google Calendar)
-            events.sort(key=lambda e: e["start"])
-            slots = []
-            settings = await db.notification_preferences.find_one(
-                {"user_id": user["user_id"]}, {"_id": 0}
-            )
-            min_dur = (settings or {}).get("min_slot_duration", 5)
-            max_dur = (settings or {}).get("max_slot_duration", 20)
-
-            prev_end = now
-            for event in events:
-                event_start = datetime.fromisoformat(event["start"])
-                gap_minutes = (event_start - prev_end).total_seconds() / 60
-                if min_dur <= gap_minutes <= max_dur:
-                    slots.append({
-                        "user_id": user["user_id"],
-                        "start_time": prev_end.isoformat(),
-                        "end_time": event_start.isoformat(),
-                        "duration_minutes": int(gap_minutes),
-                        "source": "ical",
-                        "detected_at": now.isoformat(),
-                    })
-                prev_end = max(prev_end, datetime.fromisoformat(event["end"]))
-
-            # Store detected slots
-            if slots:
-                await db.detected_free_slots.delete_many({"user_id": user["user_id"], "source": "ical"})
-                await db.detected_free_slots.insert_many(slots)
+            # Detect free slots using the proper slot detector (keywords, window, categories)
+            prefs = await db.notification_preferences.find_one({"user_id": user["user_id"]}, {"_id": 0}) or {}
+            settings = {**DEFAULT_SETTINGS, **prefs}
+            slots = await detect_free_slots(events, settings)
+            await cleanup_old_slots(db, user["user_id"])
+            actions = await db.micro_actions.find({}, {"_id": 0}).to_list(50)
+            await schedule_slot_notifications(db, user["user_id"], slots, actions, user.get("subscription_tier", "free"))
 
             await db.user_integrations.update_one(
                 {"user_id": user["user_id"], "service": "ical"},
@@ -2981,7 +2954,8 @@ async def sync_ical(user: dict = Depends(get_current_user)):
             )
 
             return {
-                "synced_count": len(events),
+                "message": "Sync completed",
+                "synced_count": len(slots),
                 "events_found": len(events),
                 "slots_detected": len(slots),
                 "service": "ical",

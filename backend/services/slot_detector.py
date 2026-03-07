@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_SETTINGS = {
     'slot_detection_enabled': True,
     'min_slot_duration': 5,  # minutes
-    'max_slot_duration': 20,  # minutes
+    'max_slot_duration': 45,  # minutes
     'detection_window_start': '09:00',
     'detection_window_end': '18:00',
     'excluded_keywords': ['focus', 'deep work', 'lunch', 'break', 'busy', 'blocked'],
