@@ -2236,7 +2236,7 @@ async def connect_integration(service: str, request: Request, user: dict = Depen
         "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
     })
 
-    backend_url = os.environ.get("BACKEND_URL", str(request.base_url).rstrip('/'))
+    backend_url = os.environ.get("BACKEND_URL", "https://infinea-api.onrender.com")
     redirect_uri = f"{backend_url}/api/integrations/callback/{service}"
 
     params = {"client_id": client_id, "state": state}
@@ -2294,7 +2294,7 @@ async def integration_callback(service: str, code: str = "", state: str = "", er
         return RedirectResponse(f"{HUB_FRONTEND_URL}/integrations?error=not_configured&service={service}")
 
     try:
-        backend_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
+        backend_url = os.environ.get("BACKEND_URL", "https://infinea-api.onrender.com")
         redirect_uri = f"{backend_url.rstrip('/')}/api/integrations/callback/{service}"
 
         async with httpx.AsyncClient() as http_client:
@@ -4564,12 +4564,12 @@ async def get_integrations_status(request: Request, user: dict = Depends(get_cur
         "google_calendar": {
             "name": "Google Calendar",
             "category": "calendrier",
-            "description": "Detecte automatiquement vos creneaux libres entre les reunions",
+            "description": "D\u00e9tecte automatiquement vos cr\u00e9neaux libres entre les r\u00e9unions",
         },
         "ical": {
             "name": "Apple Calendar",
             "category": "calendrier",
-            "description": "Importez votre calendrier Apple pour detecter vos creneaux libres",
+            "description": "Importez votre calendrier Apple pour d\u00e9tecter vos cr\u00e9neaux libres",
         },
         "notion": {
             "name": "Notion",
@@ -4578,17 +4578,18 @@ async def get_integrations_status(request: Request, user: dict = Depends(get_cur
         },
         "todoist": {
             "name": "Todoist",
-            "category": "taches",
-            "description": "Loguez vos sessions comme taches completees dans Todoist",
+            "category": "t\u00e2ches",
+            "description": "Loguez vos sessions comme t\u00e2ches compl\u00e9t\u00e9es dans Todoist",
         },
         "slack": {
             "name": "Slack",
             "category": "communication",
-            "description": "Recevez vos resumes hebdomadaires directement dans Slack",
+            "description": "Recevez vos r\u00e9sum\u00e9s hebdomadaires directement dans Slack",
         },
     }
 
-    backend_url = os.environ.get("BACKEND_URL", str(request.base_url).rstrip('/'))
+    # Use BACKEND_URL env var — critical for OAuth redirect_uri to match Google Console config
+    backend_url = os.environ.get("BACKEND_URL", "https://infinea-api.onrender.com")
 
     result = {}
     for service_key, meta in all_services.items():
@@ -4610,6 +4611,9 @@ async def get_integrations_status(request: Request, user: dict = Depends(get_cur
         if not connected:
             if service_key == "ical":
                 preferred_method = "guided"
+            elif service_key == "google_calendar" and has_url:
+                # Google Calendar: prefer iCal URL (simpler, no OAuth callback to configure)
+                preferred_method = "url"
             elif has_oauth:
                 preferred_method = "oauth"
                 # Pre-generate OAuth URL so frontend redirects in one click
