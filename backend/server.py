@@ -4535,7 +4535,7 @@ async def delete_note(session_id: str, user: dict = Depends(get_current_user)):
 
 # ============== FEATURE FLAGS ==============
 
-FEATURE_UNIFIED_INTEGRATIONS = os.environ.get("FEATURE_UNIFIED_INTEGRATIONS", "false") == "true"
+FEATURE_UNIFIED_INTEGRATIONS = os.environ.get("FEATURE_UNIFIED_INTEGRATIONS", "true") == "true"
 
 @api_router.get("/feature-flags")
 async def get_feature_flags():
@@ -4547,26 +4547,48 @@ async def get_feature_flags():
 # ============== UNIFIED INTEGRATION STATUS ==============
 
 @api_router.get("/integrations/status")
-async def get_integrations_status(user: dict = Depends(get_current_user)):
-    """Unified status of all integrations — health, last sync, errors."""
-    integrations = await db.user_integrations.find(
+async def get_integrations_status(request: Request, user: dict = Depends(get_current_user)):
+    """Unified status with smart connect routing — tells frontend exactly how to connect each service."""
+    integrations_docs = await db.user_integrations.find(
         {"user_id": user["user_id"]},
         {"_id": 0, "access_token": 0, "refresh_token": 0}
     ).to_list(20)
 
     connected_map = {}
-    for i in integrations:
+    for i in integrations_docs:
         key = i.get("service") or i.get("provider")
         if key:
             connected_map[key] = i
 
     all_services = {
-        "google_calendar": {"name": "Google Calendar", "mode": "oauth", "category": "calendrier"},
-        "ical": {"name": "Apple Calendar / iCal", "mode": "guided", "category": "calendrier"},
-        "notion": {"name": "Notion", "mode": "oauth", "category": "notes"},
-        "todoist": {"name": "Todoist", "mode": "token", "category": "tâches"},
-        "slack": {"name": "Slack", "mode": "token", "category": "communication"},
+        "google_calendar": {
+            "name": "Google Calendar",
+            "category": "calendrier",
+            "description": "Detecte automatiquement vos creneaux libres entre les reunions",
+        },
+        "ical": {
+            "name": "Apple Calendar",
+            "category": "calendrier",
+            "description": "Importez votre calendrier Apple pour detecter vos creneaux libres",
+        },
+        "notion": {
+            "name": "Notion",
+            "category": "notes",
+            "description": "Exportez vos sessions comme pages Notion automatiquement",
+        },
+        "todoist": {
+            "name": "Todoist",
+            "category": "taches",
+            "description": "Loguez vos sessions comme taches completees dans Todoist",
+        },
+        "slack": {
+            "name": "Slack",
+            "category": "communication",
+            "description": "Recevez vos resumes hebdomadaires directement dans Slack",
+        },
     }
+
+    backend_url = os.environ.get("BACKEND_URL", str(request.base_url).rstrip('/'))
 
     result = {}
     for service_key, meta in all_services.items():
@@ -4578,16 +4600,58 @@ async def get_integrations_status(user: dict = Depends(get_current_user)):
 
         status = "disconnected"
         if connected:
-            last_error = connected.get("last_error")
-            if last_error:
-                status = "error"
-            else:
-                status = "connected"
+            status = "error" if connected.get("last_error") else "connected"
+
+        # Smart connect routing: determine the best method and pre-generate URL if OAuth
+        preferred_method = None
+        connect_url = None
+        token_config = None
+
+        if not connected:
+            if service_key == "ical":
+                preferred_method = "guided"
+            elif has_oauth:
+                preferred_method = "oauth"
+                # Pre-generate OAuth URL so frontend redirects in one click
+                try:
+                    client_id = os.environ.get(config["env_client_id"])
+                    state = f"{user['user_id']}:{uuid.uuid4().hex[:16]}"
+                    await db.integration_states.insert_one({
+                        "state": state, "user_id": user["user_id"],
+                        "service": service_key,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
+                    })
+                    redirect_uri = f"{backend_url}/api/integrations/callback/{service_key}"
+                    params = {"client_id": client_id, "state": state}
+                    if service_key == "google_calendar":
+                        params.update({"redirect_uri": redirect_uri, "response_type": "code",
+                                       "scope": config["scopes"], "access_type": "offline", "prompt": "consent"})
+                    elif service_key == "notion":
+                        params.update({"redirect_uri": redirect_uri, "response_type": "code", "owner": "user"})
+                    elif service_key == "todoist":
+                        params.update({"scope": config["scopes"]})
+                    elif service_key == "slack":
+                        params.update({"scope": config["scopes"], "redirect_uri": redirect_uri})
+                    connect_url = f"{config['auth_url']}?{urllib.parse.urlencode(params)}"
+                except Exception as e:
+                    logger.warning(f"Failed to pre-generate OAuth URL for {service_key}: {e}")
+                    if has_token:
+                        preferred_method = "token"
+            elif has_token:
+                preferred_method = "token"
+                tc = TOKEN_CONNECT_VALIDATORS.get(service_key, {})
+                token_config = {
+                    "label": tc.get("description", f"Token {meta['name']}"),
+                    "placeholder": tc.get("placeholder", ""),
+                    "help_url": tc.get("help_url", ""),
+                    "service_name": tc.get("name", meta["name"]),
+                }
+            elif has_url:
+                preferred_method = "url"
 
         result[service_key] = {
-            "name": meta["name"],
-            "mode": meta["mode"],
-            "category": meta["category"],
+            **meta,
             "status": status,
             "connected": bool(connected),
             "connected_at": connected.get("connected_at") if connected else None,
@@ -4596,6 +4660,9 @@ async def get_integrations_status(user: dict = Depends(get_current_user)):
             "last_error": connected.get("last_error") if connected else None,
             "available": has_oauth or has_token or has_url,
             "connection_type": connected.get("connection_type", "oauth") if connected else None,
+            "preferred_method": preferred_method,
+            "connect_url": connect_url,
+            "token_config": token_config,
         }
 
     return result

@@ -121,7 +121,24 @@ const colorClasses = {
   orange: { bg: "bg-orange-500/10", text: "text-orange-500", border: "border-orange-500/30" },
 };
 
-// Service definitions for the unified UI
+// Icon and color maps for backend-driven rendering
+const ICON_MAP = {
+  google_calendar: Calendar,
+  ical: Link2,
+  notion: FileText,
+  todoist: ListTodo,
+  slack: MessageSquare,
+};
+
+const COLOR_MAP = {
+  google_calendar: "blue",
+  ical: "orange",
+  notion: "gray",
+  todoist: "red",
+  slack: "purple",
+};
+
+// Service definitions for the unified UI (fallback if status not loaded)
 const UNIFIED_SERVICES = [
   {
     id: "google_calendar",
@@ -361,25 +378,23 @@ export default function IntegrationsPage() {
   };
 
   const handleUnifiedConnect = async (service) => {
-    const svc = UNIFIED_SERVICES.find((s) => s.id === service);
-    if (!svc) return;
+    const status = unifiedStatus[service];
+    if (!status) return;
 
-    if (svc.connectMode === "guided") {
+    const method = status.preferred_method;
+
+    if (method === "guided") {
+      // Apple Calendar — open step-by-step guide
       setShowAppleGuide(true);
-    } else if (svc.connectMode === "oauth") {
-      // OAuth flow — redirect to backend auth URL
+    } else if (method === "oauth" && status.connect_url) {
+      // OAuth — redirect instantly using pre-generated URL (one click!)
+      window.location.href = status.connect_url;
+    } else if (method === "oauth") {
+      // OAuth without pre-generated URL — fetch it
       try {
         const response = await authFetch(`${API}/integrations/connect/${service}`);
         if (!response.ok) {
           const err = await response.json();
-          // If OAuth not configured, fall back to token dialog
-          if (err.detail?.includes("not configured")) {
-            const legacyService = AVAILABLE_INTEGRATIONS.find((i) => i.id === service);
-            if (legacyService?.type === "token") {
-              setTokenDialogService(legacyService);
-              return;
-            }
-          }
           throw new Error(err.detail || "Erreur");
         }
         const data = await response.json();
@@ -387,14 +402,27 @@ export default function IntegrationsPage() {
       } catch (error) {
         toast.error(error.message || "Erreur de connexion");
       }
-    } else if (svc.connectMode === "token") {
-      // Fall back to existing token dialog
-      const legacyService = AVAILABLE_INTEGRATIONS.find((i) => i.id === service);
-      if (legacyService) setTokenDialogService(legacyService);
-    } else if (svc.connectMode === "url") {
-      // Fall back to existing URL dialog
+    } else if (method === "token") {
+      // Token/webhook — open smart token dialog with backend config
+      const tc = status.token_config || {};
+      setTokenDialogService({
+        id: service,
+        name: status.name,
+        icon: ICON_MAP[service] || Plug,
+        color: COLOR_MAP[service] || "blue",
+        tokenLabel: tc.label || `Token ${status.name}`,
+        tokenPlaceholder: tc.placeholder || "",
+        tokenHelp: tc.help_url
+          ? `Obtenez votre token sur ${tc.service_name || status.name}. `
+          : `Entrez votre token ${status.name}.`,
+        type: "token",
+      });
+    } else if (method === "url") {
+      // URL — open URL dialog
       const legacyService = AVAILABLE_INTEGRATIONS.find((i) => i.id === service);
       if (legacyService) setUrlDialogService(legacyService);
+    } else {
+      toast.error("Ce service n'est pas disponible actuellement");
     }
   };
 
@@ -456,15 +484,18 @@ export default function IntegrationsPage() {
 
   // ==================== UNIFIED UI ====================
   if (useUnifiedUI) {
-    const connectedCount = UNIFIED_SERVICES.filter((s) => unifiedStatus[s.id]?.connected).length;
+    const serviceEntries = Object.entries(unifiedStatus);
+    const connectedCount = serviceEntries.filter(([, s]) => s.connected).length;
+    const totalCount = serviceEntries.length || UNIFIED_SERVICES.length;
     const isFreeUser = user?.subscription_tier !== "premium";
     const isLimitReached = isFreeUser && connectedCount >= 1;
 
-    // Group by category
+    // Group by category from backend data
     const categories = {};
-    UNIFIED_SERVICES.forEach((svc) => {
-      if (!categories[svc.category]) categories[svc.category] = [];
-      categories[svc.category].push(svc);
+    serviceEntries.forEach(([id, svc]) => {
+      const cat = svc.category || "autre";
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push({ id, ...svc });
     });
 
     return (
@@ -490,7 +521,7 @@ export default function IntegrationsPage() {
               {/* Connection summary */}
               <div className="flex items-center gap-3 mt-4">
                 <Badge variant="secondary" className="text-xs">
-                  {connectedCount}/{UNIFIED_SERVICES.length} connectés
+                  {connectedCount}/{totalCount} connectés
                 </Badge>
               </div>
             </div>
@@ -527,35 +558,32 @@ export default function IntegrationsPage() {
                       {category}
                     </h2>
                     <div className="grid gap-4">
-                      {services.map((svc) => {
-                        const status = unifiedStatus[svc.id] || {};
-                        return (
-                          <IntegrationCard
-                            key={svc.id}
-                            service={svc.id}
-                            name={svc.name}
-                            description={svc.description}
-                            icon={svc.icon}
-                            color={svc.color}
-                            status={status.status || "disconnected"}
-                            accountName={status.account_name}
-                            connectedAt={status.connected_at}
-                            lastSync={status.last_sync}
-                            lastError={status.last_error}
-                            isSyncing={isSyncing && syncingService === svc.id}
-                            isLimitReached={isLimitReached && !status.connected}
-                            onConnect={handleUnifiedConnect}
-                            onDisconnect={(s) => {
-                              setSelectedIntegration({ service: s, ...status });
-                            }}
-                            onSync={handleSync}
-                            onSettings={(s) => {
-                              setSelectedIntegration({ service: s, ...status });
-                            }}
-                            onTest={status.connected ? handleTestConnection : undefined}
-                          />
-                        );
-                      })}
+                      {services.map((svc) => (
+                        <IntegrationCard
+                          key={svc.id}
+                          service={svc.id}
+                          name={svc.name}
+                          description={svc.description}
+                          icon={ICON_MAP[svc.id] || Plug}
+                          color={COLOR_MAP[svc.id] || "blue"}
+                          status={svc.status || "disconnected"}
+                          accountName={svc.account_name}
+                          connectedAt={svc.connected_at}
+                          lastSync={svc.last_sync}
+                          lastError={svc.last_error}
+                          isSyncing={isSyncing && syncingService === svc.id}
+                          isLimitReached={isLimitReached && !svc.connected}
+                          onConnect={handleUnifiedConnect}
+                          onDisconnect={(s) => {
+                            setSelectedIntegration({ service: s, ...svc });
+                          }}
+                          onSync={handleSync}
+                          onSettings={(s) => {
+                            setSelectedIntegration({ service: s, ...svc });
+                          }}
+                          onTest={svc.connected ? handleTestConnection : undefined}
+                        />
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -674,7 +702,7 @@ export default function IntegrationsPage() {
               <DialogTitle>Paramètres de l'intégration</DialogTitle>
               <DialogDescription>
                 {selectedIntegration && (
-                  UNIFIED_SERVICES.find((s) => s.id === selectedIntegration.service)?.name ||
+                  unifiedStatus[selectedIntegration.service]?.name ||
                   selectedIntegration.service
                 )}
               </DialogDescription>
