@@ -4533,6 +4533,154 @@ async def delete_note(session_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Note non trouvée")
     return {"status": "success", "message": "Note supprimée"}
 
+# ============== FEATURE FLAGS ==============
+
+FEATURE_UNIFIED_INTEGRATIONS = os.environ.get("FEATURE_UNIFIED_INTEGRATIONS", "false") == "true"
+
+@api_router.get("/feature-flags")
+async def get_feature_flags():
+    """Public feature flags for frontend conditional rendering."""
+    return {
+        "unified_integrations": FEATURE_UNIFIED_INTEGRATIONS,
+    }
+
+# ============== UNIFIED INTEGRATION STATUS ==============
+
+@api_router.get("/integrations/status")
+async def get_integrations_status(user: dict = Depends(get_current_user)):
+    """Unified status of all integrations — health, last sync, errors."""
+    integrations = await db.user_integrations.find(
+        {"user_id": user["user_id"]},
+        {"_id": 0, "access_token": 0, "refresh_token": 0}
+    ).to_list(20)
+
+    connected_map = {}
+    for i in integrations:
+        key = i.get("service") or i.get("provider")
+        if key:
+            connected_map[key] = i
+
+    all_services = {
+        "google_calendar": {"name": "Google Calendar", "mode": "oauth", "category": "calendrier"},
+        "ical": {"name": "Apple Calendar / iCal", "mode": "guided", "category": "calendrier"},
+        "notion": {"name": "Notion", "mode": "oauth", "category": "notes"},
+        "todoist": {"name": "Todoist", "mode": "token", "category": "tâches"},
+        "slack": {"name": "Slack", "mode": "token", "category": "communication"},
+    }
+
+    result = {}
+    for service_key, meta in all_services.items():
+        connected = connected_map.get(service_key)
+        config = INTEGRATION_CONFIGS.get(service_key)
+        has_oauth = bool(os.environ.get(config["env_client_id"])) if config else False
+        has_token = service_key in TOKEN_CONNECT_VALIDATORS
+        has_url = service_key in ("ical", "google_calendar") and ICAL_AVAILABLE
+
+        status = "disconnected"
+        if connected:
+            last_error = connected.get("last_error")
+            if last_error:
+                status = "error"
+            else:
+                status = "connected"
+
+        result[service_key] = {
+            "name": meta["name"],
+            "mode": meta["mode"],
+            "category": meta["category"],
+            "status": status,
+            "connected": bool(connected),
+            "connected_at": connected.get("connected_at") if connected else None,
+            "account_name": connected.get("account_name") if connected else None,
+            "last_sync": connected.get("last_synced_at") if connected else None,
+            "last_error": connected.get("last_error") if connected else None,
+            "available": has_oauth or has_token or has_url,
+            "connection_type": connected.get("connection_type", "oauth") if connected else None,
+        }
+
+    return result
+
+@api_router.post("/integrations/{service}/test")
+async def test_integration(service: str, user: dict = Depends(get_current_user)):
+    """Test that a connected integration still works."""
+    integration = await db.user_integrations.find_one(
+        {"user_id": user["user_id"], "service": service}
+    )
+    if not integration:
+        integration = await db.user_integrations.find_one(
+            {"user_id": user["user_id"], "provider": service}
+        )
+    if not integration:
+        raise HTTPException(status_code=404, detail="Intégration non connectée")
+
+    encrypted_token = integration.get("access_token")
+    if not encrypted_token:
+        raise HTTPException(status_code=400, detail="Pas de token stocké")
+
+    try:
+        token = decrypt_token(encrypted_token)
+    except Exception:
+        await db.user_integrations.update_one(
+            {"user_id": user["user_id"], "service": service},
+            {"$set": {"last_error": "Token corrompu — reconnectez le service"}}
+        )
+        return {"ok": False, "error": "Token corrompu — reconnectez le service"}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http_client:
+            if service == "ical":
+                # iCal: test by fetching the URL
+                url = token
+                if url.startswith("webcal://"):
+                    url = "https://" + url[len("webcal://"):]
+                resp = await http_client.get(url, follow_redirects=True)
+                ok = resp.status_code == 200
+            elif service == "google_calendar":
+                resp = await http_client.get(
+                    "https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1",
+                    headers={"Authorization": f"Bearer {token}"}
+                )
+                ok = resp.status_code == 200
+            elif service == "notion":
+                resp = await http_client.get(
+                    "https://api.notion.com/v1/users/me",
+                    headers={"Authorization": f"Bearer {token}", "Notion-Version": "2022-06-28"}
+                )
+                ok = resp.status_code == 200
+            elif service == "todoist":
+                resp = await http_client.get(
+                    "https://api.todoist.com/rest/v2/projects",
+                    headers={"Authorization": f"Bearer {token}"}
+                )
+                ok = resp.status_code == 200
+            elif service == "slack":
+                # Slack webhook: can't test without sending a message, just check format
+                ok = token.startswith("https://hooks.slack.com/")
+            else:
+                raise HTTPException(status_code=400, detail="Service inconnu")
+
+        error_msg = None if ok else f"Service {service} a répondu avec une erreur (HTTP {resp.status_code})"
+        await db.user_integrations.update_one(
+            {"user_id": user["user_id"], "service": service},
+            {"$set": {"last_tested_at": datetime.now(timezone.utc).isoformat(), "last_error": error_msg}}
+        )
+        return {"ok": ok, "error": error_msg}
+
+    except httpx.TimeoutException:
+        error_msg = "Timeout — le service ne répond pas"
+        await db.user_integrations.update_one(
+            {"user_id": user["user_id"], "service": service},
+            {"$set": {"last_error": error_msg}}
+        )
+        return {"ok": False, "error": error_msg}
+    except Exception as e:
+        error_msg = f"Erreur de connexion : {str(e)[:100]}"
+        await db.user_integrations.update_one(
+            {"user_id": user["user_id"], "service": service},
+            {"$set": {"last_error": error_msg}}
+        )
+        return {"ok": False, "error": error_msg}
+
 # ============== ROOT ROUTE ==============
 
 @api_router.get("/")

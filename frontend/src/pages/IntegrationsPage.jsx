@@ -22,10 +22,13 @@ import {
   ChevronRight,
   Lock,
   Link2,
+  Wifi,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 import Sidebar from "@/components/Sidebar";
+import IntegrationCard from "@/components/IntegrationCard";
+import AppleCalendarGuide from "@/components/AppleCalendarGuide";
 import {
   Dialog,
   DialogContent,
@@ -118,6 +121,55 @@ const colorClasses = {
   orange: { bg: "bg-orange-500/10", text: "text-orange-500", border: "border-orange-500/30" },
 };
 
+// Service definitions for the unified UI
+const UNIFIED_SERVICES = [
+  {
+    id: "google_calendar",
+    name: "Google Calendar",
+    description: "Détecte automatiquement vos créneaux libres entre les réunions",
+    icon: Calendar,
+    color: "blue",
+    category: "calendrier",
+    connectMode: "url", // Falls back to existing URL dialog
+  },
+  {
+    id: "ical",
+    name: "Apple Calendar",
+    description: "Importez votre calendrier Apple pour détecter vos créneaux libres",
+    icon: Link2,
+    color: "orange",
+    category: "calendrier",
+    connectMode: "guided", // Opens the step-by-step guide
+  },
+  {
+    id: "notion",
+    name: "Notion",
+    description: "Exportez vos sessions comme pages Notion automatiquement",
+    icon: FileText,
+    color: "gray",
+    category: "notes",
+    connectMode: "oauth", // Uses OAuth popup
+  },
+  {
+    id: "todoist",
+    name: "Todoist",
+    description: "Loguez vos sessions comme tâches complétées dans Todoist",
+    icon: ListTodo,
+    color: "red",
+    category: "tâches",
+    connectMode: "token", // Falls back to existing token dialog
+  },
+  {
+    id: "slack",
+    name: "Slack",
+    description: "Recevez vos résumés hebdomadaires directement dans Slack",
+    icon: MessageSquare,
+    color: "purple",
+    category: "communication",
+    connectMode: "token", // Falls back to existing token dialog
+  },
+];
+
 export default function IntegrationsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -126,6 +178,7 @@ export default function IntegrationsPage() {
   const [slotSettings, setSlotSettings] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncingService, setSyncingService] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedIntegration, setSelectedIntegration] = useState(null);
   const [urlDialogService, setUrlDialogService] = useState(null);
@@ -134,13 +187,18 @@ export default function IntegrationsPage() {
   const [tokenDialogService, setTokenDialogService] = useState(null);
   const [tokenValue, setTokenValue] = useState("");
   const [isConnectingToken, setIsConnectingToken] = useState(false);
+  const [useUnifiedUI, setUseUnifiedUI] = useState(false);
+  const [showAppleGuide, setShowAppleGuide] = useState(false);
+  const [unifiedStatus, setUnifiedStatus] = useState({});
+  const [testingService, setTestingService] = useState(null);
 
   useEffect(() => {
     // Check for OAuth callback results (supports all services)
     const success = searchParams.get("success");
     const error = searchParams.get("error");
     const service = searchParams.get("service");
-    const serviceName = AVAILABLE_INTEGRATIONS.find((i) => i.id === service)?.name || service;
+    const serviceName = AVAILABLE_INTEGRATIONS.find((i) => i.id === service)?.name ||
+      UNIFIED_SERVICES.find((i) => i.id === service)?.name || service;
 
     if (success) {
       toast.success(`${serviceName || "Service"} connecté avec succès!`);
@@ -161,6 +219,12 @@ export default function IntegrationsPage() {
       navigate("/integrations", { replace: true });
     }
 
+    // Fetch feature flag
+    authFetch(`${API}/feature-flags`)
+      .then((res) => res.ok ? res.json() : { unified_integrations: false })
+      .then((flags) => setUseUnifiedUI(flags.unified_integrations))
+      .catch(() => {});
+
     fetchData();
   }, [searchParams, navigate]);
 
@@ -173,10 +237,15 @@ export default function IntegrationsPage() {
 
       if (intRes.ok) {
         const data = await intRes.json();
-        // Backend returns { google_calendar: { connected, available, ... }, notion: {...}, ... }
         setIntegrations(data);
       }
       if (settingsRes.ok) setSlotSettings(await settingsRes.json());
+
+      // Also fetch unified status if available
+      try {
+        const statusRes = await authFetch(`${API}/integrations/status`);
+        if (statusRes.ok) setUnifiedStatus(await statusRes.json());
+      } catch {}
     } catch (error) {
       toast.error("Erreur de chargement");
     } finally {
@@ -269,6 +338,7 @@ export default function IntegrationsPage() {
 
   const handleSync = async (service) => {
     setIsSyncing(true);
+    setSyncingService(service);
     try {
       const response = await authFetch(`${API}/integrations/${service}/sync`, {
         method: "POST",
@@ -286,6 +356,65 @@ export default function IntegrationsPage() {
       toast.error("Erreur lors de la synchronisation");
     } finally {
       setIsSyncing(false);
+      setSyncingService(null);
+    }
+  };
+
+  const handleUnifiedConnect = async (service) => {
+    const svc = UNIFIED_SERVICES.find((s) => s.id === service);
+    if (!svc) return;
+
+    if (svc.connectMode === "guided") {
+      setShowAppleGuide(true);
+    } else if (svc.connectMode === "oauth") {
+      // OAuth flow — redirect to backend auth URL
+      try {
+        const response = await authFetch(`${API}/integrations/connect/${service}`);
+        if (!response.ok) {
+          const err = await response.json();
+          // If OAuth not configured, fall back to token dialog
+          if (err.detail?.includes("not configured")) {
+            const legacyService = AVAILABLE_INTEGRATIONS.find((i) => i.id === service);
+            if (legacyService?.type === "token") {
+              setTokenDialogService(legacyService);
+              return;
+            }
+          }
+          throw new Error(err.detail || "Erreur");
+        }
+        const data = await response.json();
+        window.location.href = data.auth_url;
+      } catch (error) {
+        toast.error(error.message || "Erreur de connexion");
+      }
+    } else if (svc.connectMode === "token") {
+      // Fall back to existing token dialog
+      const legacyService = AVAILABLE_INTEGRATIONS.find((i) => i.id === service);
+      if (legacyService) setTokenDialogService(legacyService);
+    } else if (svc.connectMode === "url") {
+      // Fall back to existing URL dialog
+      const legacyService = AVAILABLE_INTEGRATIONS.find((i) => i.id === service);
+      if (legacyService) setUrlDialogService(legacyService);
+    }
+  };
+
+  const handleTestConnection = async (service) => {
+    setTestingService(service);
+    try {
+      const response = await authFetch(`${API}/integrations/${service}/test`, {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (data.ok) {
+        toast.success("Connexion vérifiée — tout fonctionne !");
+      } else {
+        toast.error(data.error || "La connexion ne fonctionne plus");
+      }
+      fetchData();
+    } catch (error) {
+      toast.error("Impossible de tester la connexion");
+    } finally {
+      setTestingService(null);
     }
   };
 
@@ -325,6 +454,355 @@ export default function IntegrationsPage() {
     return acc;
   }, {});
 
+  // ==================== UNIFIED UI ====================
+  if (useUnifiedUI) {
+    const connectedCount = UNIFIED_SERVICES.filter((s) => unifiedStatus[s.id]?.connected).length;
+    const isFreeUser = user?.subscription_tier !== "premium";
+    const isLimitReached = isFreeUser && connectedCount >= 1;
+
+    // Group by category
+    const categories = {};
+    UNIFIED_SERVICES.forEach((svc) => {
+      if (!categories[svc.category]) categories[svc.category] = [];
+      categories[svc.category].push(svc);
+    });
+
+    return (
+      <div className="min-h-screen bg-background">
+        <Sidebar />
+        <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
+          <div className="max-w-4xl mx-auto">
+            {/* Header */}
+            <div className="mb-8">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Plug className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <h1 className="font-heading text-3xl font-semibold" data-testid="integrations-title">
+                    Hub d'Intégrations
+                  </h1>
+                  <p className="text-muted-foreground">
+                    Connectez vos outils pour des suggestions plus intelligentes
+                  </p>
+                </div>
+              </div>
+              {/* Connection summary */}
+              <div className="flex items-center gap-3 mt-4">
+                <Badge variant="secondary" className="text-xs">
+                  {connectedCount}/{UNIFIED_SERVICES.length} connectés
+                </Badge>
+              </div>
+            </div>
+
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {/* Free tier limit banner */}
+                {isLimitReached && (
+                  <Card className="border-amber-500/30 bg-amber-500/5">
+                    <CardContent className="p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Lock className="w-5 h-5 text-amber-500" />
+                        <p className="text-sm">
+                          Plan gratuit : 1 intégration max. Passez à Premium pour connecter tous vos outils.
+                        </p>
+                      </div>
+                      <Link to="/pricing">
+                        <Button size="sm" variant="outline" className="shrink-0">
+                          Voir Premium
+                        </Button>
+                      </Link>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Integration cards by category */}
+                {Object.entries(categories).map(([category, services]) => (
+                  <div key={category}>
+                    <h2 className="text-sm font-medium text-muted-foreground mb-4 capitalize">
+                      {category}
+                    </h2>
+                    <div className="grid gap-4">
+                      {services.map((svc) => {
+                        const status = unifiedStatus[svc.id] || {};
+                        return (
+                          <IntegrationCard
+                            key={svc.id}
+                            service={svc.id}
+                            name={svc.name}
+                            description={svc.description}
+                            icon={svc.icon}
+                            color={svc.color}
+                            status={status.status || "disconnected"}
+                            accountName={status.account_name}
+                            connectedAt={status.connected_at}
+                            lastSync={status.last_sync}
+                            lastError={status.last_error}
+                            isSyncing={isSyncing && syncingService === svc.id}
+                            isLimitReached={isLimitReached && !status.connected}
+                            onConnect={handleUnifiedConnect}
+                            onDisconnect={(s) => {
+                              setSelectedIntegration({ service: s, ...status });
+                            }}
+                            onSync={handleSync}
+                            onSettings={(s) => {
+                              setSelectedIntegration({ service: s, ...status });
+                            }}
+                            onTest={status.connected ? handleTestConnection : undefined}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Slot Detection Settings */}
+                {slotSettings && (unifiedStatus.google_calendar?.connected || unifiedStatus.ical?.connected) && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="font-heading text-lg flex items-center gap-2">
+                        <Clock className="w-5 h-5" />
+                        Détection des créneaux
+                      </CardTitle>
+                      <CardDescription>
+                        Configurez comment InFinea détecte vos moments libres
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label>Activer la détection automatique</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Analyse votre calendrier pour trouver des créneaux libres
+                          </p>
+                        </div>
+                        <Switch
+                          checked={slotSettings.slot_detection_enabled}
+                          onCheckedChange={(v) =>
+                            handleUpdateSettings({ ...slotSettings, slot_detection_enabled: v })
+                          }
+                        />
+                      </div>
+                      {slotSettings.slot_detection_enabled && (
+                        <>
+                          <div>
+                            <Label className="mb-3 block">
+                              Durée des créneaux : {slotSettings.min_slot_duration} - {slotSettings.max_slot_duration} min
+                            </Label>
+                            <div className="flex items-center gap-4">
+                              <Input
+                                type="number"
+                                value={slotSettings.min_slot_duration}
+                                onChange={(e) =>
+                                  handleUpdateSettings({
+                                    ...slotSettings,
+                                    min_slot_duration: parseInt(e.target.value) || 5,
+                                  })
+                                }
+                                className="w-20" min={2} max={15}
+                              />
+                              <span className="text-muted-foreground">à</span>
+                              <Input
+                                type="number"
+                                value={slotSettings.max_slot_duration}
+                                onChange={(e) =>
+                                  handleUpdateSettings({
+                                    ...slotSettings,
+                                    max_slot_duration: parseInt(e.target.value) || 20,
+                                  })
+                                }
+                                className="w-20" min={5} max={30}
+                              />
+                              <span className="text-muted-foreground">minutes</span>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label>Début de la fenêtre</Label>
+                              <Input
+                                type="time"
+                                value={slotSettings.detection_window_start}
+                                onChange={(e) =>
+                                  handleUpdateSettings({ ...slotSettings, detection_window_start: e.target.value })
+                                }
+                              />
+                            </div>
+                            <div>
+                              <Label>Fin de la fenêtre</Label>
+                              <Input
+                                type="time"
+                                value={slotSettings.detection_window_end}
+                                onChange={(e) =>
+                                  handleUpdateSettings({ ...slotSettings, detection_window_end: e.target.value })
+                                }
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <Label>Minutes d'avance pour la notification</Label>
+                            <Input
+                              type="number"
+                              value={slotSettings.advance_notification_minutes}
+                              onChange={(e) =>
+                                handleUpdateSettings({
+                                  ...slotSettings,
+                                  advance_notification_minutes: parseInt(e.target.value) || 5,
+                                })
+                              }
+                              className="w-24 mt-2" min={1} max={30}
+                            />
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+          </div>
+        </main>
+
+        {/* Reuse existing dialogs for fallback */}
+        {/* Integration Settings Dialog */}
+        <Dialog open={!!selectedIntegration} onOpenChange={() => setSelectedIntegration(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Paramètres de l'intégration</DialogTitle>
+              <DialogDescription>
+                {selectedIntegration && (
+                  UNIFIED_SERVICES.find((s) => s.id === selectedIntegration.service)?.name ||
+                  selectedIntegration.service
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              {selectedIntegration && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Connecté le</p>
+                      <p className="font-medium">
+                        {selectedIntegration.connected_at
+                          ? new Date(selectedIntegration.connected_at).toLocaleString("fr-FR")
+                          : "—"}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSync(selectedIntegration.service)}
+                      disabled={isSyncing}
+                    >
+                      {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                      Synchroniser
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSelectedIntegration(null)}>
+                Fermer
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => handleDisconnect(selectedIntegration?.service)}
+              >
+                <Unplug className="w-4 h-4 mr-2" />
+                Déconnecter
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* URL Connect Dialog (fallback for Google Calendar) */}
+        <Dialog open={!!urlDialogService} onOpenChange={() => { setUrlDialogService(null); setUrlValue(""); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {urlDialogService && (() => {
+                  const Icon = urlDialogService.icon;
+                  const colors = colorClasses[urlDialogService.color];
+                  return <div className={`w-8 h-8 rounded-lg ${colors?.bg} flex items-center justify-center`}>
+                    <Icon className={`w-4 h-4 ${colors?.text}`} />
+                  </div>;
+                })()}
+                Connecter {urlDialogService?.name}
+              </DialogTitle>
+              <DialogDescription>{urlDialogService?.urlHelp}</DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Label htmlFor="url-input">{urlDialogService?.urlLabel || "URL du calendrier"}</Label>
+              <Input
+                id="url-input" type="url"
+                placeholder={urlDialogService?.urlPlaceholder || "https://..."}
+                value={urlValue} onChange={(e) => setUrlValue(e.target.value)}
+                className="mt-2" data-testid="url-connect-input"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setUrlDialogService(null); setUrlValue(""); }}>Annuler</Button>
+              <Button onClick={handleConnectUrl} disabled={isConnectingUrl || !urlValue.trim()}>
+                {isConnectingUrl ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Link2 className="w-4 h-4 mr-2" />}
+                Connecter
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Token Connect Dialog (fallback for Todoist, Slack) */}
+        <Dialog open={!!tokenDialogService} onOpenChange={() => { setTokenDialogService(null); setTokenValue(""); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {tokenDialogService && (() => {
+                  const Icon = tokenDialogService.icon;
+                  const colors = colorClasses[tokenDialogService.color];
+                  return <div className={`w-8 h-8 rounded-lg ${colors?.bg} flex items-center justify-center`}>
+                    <Icon className={`w-4 h-4 ${colors?.text}`} />
+                  </div>;
+                })()}
+                Connecter {tokenDialogService?.name}
+              </DialogTitle>
+              <DialogDescription>{tokenDialogService?.tokenHelp}</DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Label htmlFor="token-input">{tokenDialogService?.tokenLabel}</Label>
+              <Input
+                id="token-input" type="text"
+                placeholder={tokenDialogService?.tokenPlaceholder}
+                value={tokenValue} onChange={(e) => setTokenValue(e.target.value)}
+                className="mt-2 font-mono text-sm" data-testid="token-input"
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                Votre token est chiffré et stocké de manière sécurisée.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setTokenDialogService(null); setTokenValue(""); }}>Annuler</Button>
+              <Button onClick={handleConnectToken} disabled={isConnectingToken || !tokenValue.trim()}>
+                {isConnectingToken ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plug className="w-4 h-4 mr-2" />}
+                Connecter
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Apple Calendar Guide */}
+        <AppleCalendarGuide
+          open={showAppleGuide}
+          onOpenChange={setShowAppleGuide}
+          onConnected={fetchData}
+        />
+      </div>
+    );
+  }
+
+  // ==================== LEGACY UI (flag off) ====================
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
