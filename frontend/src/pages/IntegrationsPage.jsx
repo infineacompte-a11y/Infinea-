@@ -147,7 +147,7 @@ const UNIFIED_SERVICES = [
     icon: Calendar,
     color: "blue",
     category: "calendrier",
-    connectMode: "url", // Falls back to existing URL dialog
+    connectMode: "oauth",
   },
   {
     id: "ical",
@@ -213,7 +213,7 @@ export default function IntegrationsPage() {
     // Check for OAuth callback results (supports all services)
     const success = searchParams.get("success");
     const error = searchParams.get("error");
-    const service = searchParams.get("service");
+    const service = searchParams.get("service") || success;
     const serviceName = AVAILABLE_INTEGRATIONS.find((i) => i.id === service)?.name ||
       UNIFIED_SERVICES.find((i) => i.id === service)?.name || service;
 

@@ -464,10 +464,93 @@ async def google_oauth_start():
 
 
 @api_router.get("/auth/google/callback")
-async def google_oauth_callback(request: Request, response: Response, code: str = None, error: str = None):
-    """Reçoit le code Google OAuth, échange contre les tokens et crée la session"""
+async def google_oauth_callback(request: Request, response: Response, code: str = None, error: str = None, state: str = None):
+    """Reçoit le code Google OAuth, échange contre les tokens et crée la session.
+    Also handles Google Calendar integration OAuth when state starts with 'gcal_integrate:'."""
     frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
+    # --- Google Calendar integration flow ---
+    if state and state.startswith("gcal_integrate:"):
+        if error or not code:
+            return RedirectResponse(f"{frontend_url}/integrations?error=oauth_annulé&service=google_calendar")
+
+        state_doc = await db.integration_states.find_one_and_delete({"state": state, "service": "google_calendar"})
+        if not state_doc:
+            return RedirectResponse(f"{frontend_url}/integrations?error=invalid_state&service=google_calendar")
+
+        expires_at = datetime.fromisoformat(state_doc["expires_at"])
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc):
+            return RedirectResponse(f"{frontend_url}/integrations?error=expired&service=google_calendar")
+
+        user_id = state_doc["user_id"]
+        backend_url = os.environ.get("BACKEND_URL", "http://localhost:8001")
+        redirect_uri = f"{backend_url}/api/auth/google/callback"
+
+        try:
+            async with httpx.AsyncClient() as http_client:
+                token_resp = await http_client.post("https://oauth2.googleapis.com/token", data={
+                    "client_id": os.environ.get("GOOGLE_CLIENT_ID"),
+                    "client_secret": os.environ.get("GOOGLE_CLIENT_SECRET"),
+                    "code": code, "grant_type": "authorization_code",
+                    "redirect_uri": redirect_uri,
+                })
+                if token_resp.status_code != 200:
+                    logger.error(f"Google Calendar token exchange failed: {token_resp.text}")
+                    return RedirectResponse(f"{frontend_url}/integrations?error=token_failed&service=google_calendar")
+
+                token_data = token_resp.json()
+                access_token = token_data.get("access_token")
+                refresh_token = token_data.get("refresh_token")
+                expires_in = token_data.get("expires_in", 3600)
+
+                if not access_token:
+                    logger.error(f"Google Calendar: no access_token in response: {token_data}")
+                    return RedirectResponse(f"{frontend_url}/integrations?error=token_failed&service=google_calendar")
+
+                # Get account email
+                account_name = "Google Calendar"
+                try:
+                    info_resp = await http_client.get(
+                        "https://www.googleapis.com/oauth2/v2/userinfo",
+                        headers={"Authorization": f"Bearer {access_token}"}
+                    )
+                    if info_resp.status_code == 200:
+                        account_name = info_resp.json().get("email", "Google Calendar")
+                except Exception:
+                    pass
+
+                encrypted_access = encrypt_token(access_token)
+                encrypted_refresh = encrypt_token(refresh_token) if refresh_token else None
+
+                integration_doc = {
+                    "user_id": user_id,
+                    "service": "google_calendar",
+                    "provider": "google_calendar",
+                    "access_token": encrypted_access,
+                    "refresh_token": encrypted_refresh,
+                    "expires_in": expires_in,
+                    "token_expires_at": (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat(),
+                    "token_obtained_at": datetime.now(timezone.utc).isoformat(),
+                    "account_name": account_name,
+                    "connected_at": datetime.now(timezone.utc).isoformat(),
+                    "enabled": True,
+                    "sync_enabled": True,
+                }
+                await db.integrations.update_one(
+                    {"user_id": user_id, "service": "google_calendar"},
+                    {"$set": integration_doc},
+                    upsert=True,
+                )
+                logger.info(f"Google Calendar integration connected for user {user_id} ({account_name})")
+                return RedirectResponse(f"{frontend_url}/integrations?success=google_calendar")
+
+        except Exception as e:
+            logger.error(f"Google Calendar integration error: {e}")
+            return RedirectResponse(f"{frontend_url}/integrations?error=connection_failed&service=google_calendar")
+
+    # --- Normal login flow ---
     if error or not code:
         return RedirectResponse(url=f"{frontend_url}/login?error=oauth_annulé")
 
@@ -2227,7 +2310,17 @@ async def connect_integration(service: str, request: Request, user: dict = Depen
     if not client_id:
         raise HTTPException(status_code=503, detail=f"{config['name']} integration not configured")
 
-    state = f"{user['user_id']}:{uuid.uuid4().hex[:16]}"
+    base_state = f"{user['user_id']}:{uuid.uuid4().hex[:16]}"
+    backend_url = os.environ.get("BACKEND_URL", "https://infinea-api.onrender.com")
+
+    if service == "google_calendar":
+        # Reuse the login callback URI (already registered in Google Console)
+        state = f"gcal_integrate:{base_state}"
+        redirect_uri = f"{backend_url}/api/auth/google/callback"
+    else:
+        state = base_state
+        redirect_uri = f"{backend_url}/api/integrations/callback/{service}"
+
     await db.integration_states.insert_one({
         "state": state,
         "user_id": user["user_id"],
@@ -2235,9 +2328,6 @@ async def connect_integration(service: str, request: Request, user: dict = Depen
         "created_at": datetime.now(timezone.utc).isoformat(),
         "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
     })
-
-    backend_url = os.environ.get("BACKEND_URL", "https://infinea-api.onrender.com")
-    redirect_uri = f"{backend_url}/api/integrations/callback/{service}"
 
     params = {"client_id": client_id, "state": state}
 
@@ -4611,9 +4701,6 @@ async def get_integrations_status(request: Request, user: dict = Depends(get_cur
         if not connected:
             if service_key == "ical":
                 preferred_method = "guided"
-            elif service_key == "google_calendar" and has_url:
-                # Google Calendar: prefer iCal URL (simpler, no OAuth callback to configure)
-                preferred_method = "url"
             elif has_oauth:
                 preferred_method = "oauth"
                 # Pre-generate OAuth URL so frontend redirects in one click
@@ -4626,17 +4713,25 @@ async def get_integrations_status(request: Request, user: dict = Depends(get_cur
                         "created_at": datetime.now(timezone.utc).isoformat(),
                         "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
                     })
-                    redirect_uri = f"{backend_url}/api/integrations/callback/{service_key}"
-                    params = {"client_id": client_id, "state": state}
                     if service_key == "google_calendar":
+                        # Reuse the login callback URI (already registered in Google Console)
+                        redirect_uri = f"{backend_url}/api/auth/google/callback"
+                        gcal_state = f"gcal_integrate:{state}"
+                        await db.integration_states.update_one(
+                            {"state": state}, {"$set": {"state": gcal_state}}
+                        )
+                        params = {"client_id": client_id, "state": gcal_state}
                         params.update({"redirect_uri": redirect_uri, "response_type": "code",
                                        "scope": config["scopes"], "access_type": "offline", "prompt": "consent"})
-                    elif service_key == "notion":
-                        params.update({"redirect_uri": redirect_uri, "response_type": "code", "owner": "user"})
-                    elif service_key == "todoist":
-                        params.update({"scope": config["scopes"]})
-                    elif service_key == "slack":
-                        params.update({"scope": config["scopes"], "redirect_uri": redirect_uri})
+                    else:
+                        redirect_uri = f"{backend_url}/api/integrations/callback/{service_key}"
+                        params = {"client_id": client_id, "state": state}
+                        if service_key == "notion":
+                            params.update({"redirect_uri": redirect_uri, "response_type": "code", "owner": "user"})
+                        elif service_key == "todoist":
+                            params.update({"scope": config["scopes"]})
+                        elif service_key == "slack":
+                            params.update({"scope": config["scopes"], "redirect_uri": redirect_uri})
                     connect_url = f"{config['auth_url']}?{urllib.parse.urlencode(params)}"
                 except Exception as e:
                     logger.warning(f"Failed to pre-generate OAuth URL for {service_key}: {e}")
