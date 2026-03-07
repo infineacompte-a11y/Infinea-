@@ -30,6 +30,9 @@ import Sidebar from "@/components/Sidebar";
 import IntegrationCard from "@/components/IntegrationCard";
 import AppleCalendarGuide from "@/components/AppleCalendarGuide";
 import GoogleCalendarGuide from "@/components/GoogleCalendarGuide";
+import NotionGuide from "@/components/NotionGuide";
+import TodoistGuide from "@/components/TodoistGuide";
+import SlackGuide from "@/components/SlackGuide";
 import {
   Dialog,
   DialogContent,
@@ -208,6 +211,9 @@ export default function IntegrationsPage() {
   const [useUnifiedUI, setUseUnifiedUI] = useState(false);
   const [showAppleGuide, setShowAppleGuide] = useState(false);
   const [showGoogleGuide, setShowGoogleGuide] = useState(false);
+  const [showNotionGuide, setShowNotionGuide] = useState(false);
+  const [showTodoistGuide, setShowTodoistGuide] = useState(false);
+  const [showSlackGuide, setShowSlackGuide] = useState(false);
   const [unifiedStatus, setUnifiedStatus] = useState({});
   const [testingService, setTestingService] = useState(null);
 
@@ -386,11 +392,11 @@ export default function IntegrationsPage() {
     const method = status.preferred_method;
 
     if (method === "guided") {
-      if (service === "google_calendar") {
-        setShowGoogleGuide(true);
-      } else {
-        setShowAppleGuide(true);
-      }
+      if (service === "google_calendar") setShowGoogleGuide(true);
+      else if (service === "notion") setShowNotionGuide(true);
+      else if (service === "todoist") setShowTodoistGuide(true);
+      else if (service === "slack") setShowSlackGuide(true);
+      else setShowAppleGuide(true);
     } else if (method === "oauth" && status.connect_url) {
       // OAuth — redirect instantly using pre-generated URL (one click!)
       window.location.href = status.connect_url;
@@ -836,6 +842,27 @@ export default function IntegrationsPage() {
         <GoogleCalendarGuide
           open={showGoogleGuide}
           onOpenChange={setShowGoogleGuide}
+          onConnected={fetchData}
+        />
+
+        {/* Notion Guide */}
+        <NotionGuide
+          open={showNotionGuide}
+          onOpenChange={setShowNotionGuide}
+          onConnected={fetchData}
+        />
+
+        {/* Todoist Guide */}
+        <TodoistGuide
+          open={showTodoistGuide}
+          onOpenChange={setShowTodoistGuide}
+          onConnected={fetchData}
+        />
+
+        {/* Slack Guide */}
+        <SlackGuide
+          open={showSlackGuide}
+          onOpenChange={setShowSlackGuide}
           onConnected={fetchData}
         />
       </div>
