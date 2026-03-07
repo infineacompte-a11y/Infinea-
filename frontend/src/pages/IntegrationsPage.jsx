@@ -29,6 +29,7 @@ import { API, useAuth, authFetch } from "@/App";
 import Sidebar from "@/components/Sidebar";
 import IntegrationCard from "@/components/IntegrationCard";
 import AppleCalendarGuide from "@/components/AppleCalendarGuide";
+import GoogleCalendarGuide from "@/components/GoogleCalendarGuide";
 import {
   Dialog,
   DialogContent,
@@ -206,6 +207,7 @@ export default function IntegrationsPage() {
   const [isConnectingToken, setIsConnectingToken] = useState(false);
   const [useUnifiedUI, setUseUnifiedUI] = useState(false);
   const [showAppleGuide, setShowAppleGuide] = useState(false);
+  const [showGoogleGuide, setShowGoogleGuide] = useState(false);
   const [unifiedStatus, setUnifiedStatus] = useState({});
   const [testingService, setTestingService] = useState(null);
 
@@ -384,8 +386,11 @@ export default function IntegrationsPage() {
     const method = status.preferred_method;
 
     if (method === "guided") {
-      // Apple Calendar — open step-by-step guide
-      setShowAppleGuide(true);
+      if (service === "google_calendar") {
+        setShowGoogleGuide(true);
+      } else {
+        setShowAppleGuide(true);
+      }
     } else if (method === "oauth" && status.connect_url) {
       // OAuth — redirect instantly using pre-generated URL (one click!)
       window.location.href = status.connect_url;
@@ -824,6 +829,13 @@ export default function IntegrationsPage() {
         <AppleCalendarGuide
           open={showAppleGuide}
           onOpenChange={setShowAppleGuide}
+          onConnected={fetchData}
+        />
+
+        {/* Google Calendar Guide */}
+        <GoogleCalendarGuide
+          open={showGoogleGuide}
+          onOpenChange={setShowGoogleGuide}
           onConnected={fetchData}
         />
       </div>

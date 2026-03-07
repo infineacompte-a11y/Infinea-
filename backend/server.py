@@ -4699,7 +4699,7 @@ async def get_integrations_status(request: Request, user: dict = Depends(get_cur
         token_config = None
 
         if not connected:
-            if service_key == "ical":
+            if service_key in ("ical", "google_calendar"):
                 preferred_method = "guided"
             elif has_oauth:
                 preferred_method = "oauth"
