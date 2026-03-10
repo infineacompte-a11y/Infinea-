@@ -191,7 +191,11 @@ export default function ActiveSession() {
                 });
                 if (!res.ok) throw new Error("Erreur");
                 const data = await res.json();
-                navigate(`/session/${data.session_id}`, { state: { session: data } });
+                // Navigate away first, then to new session — forces React to remount
+                navigate("/dashboard", { replace: true });
+                setTimeout(() => {
+                  navigate(`/session/${data.session_id}`, { state: { session: data }, replace: true });
+                }, 50);
               } catch {
                 navigate("/dashboard");
               }
