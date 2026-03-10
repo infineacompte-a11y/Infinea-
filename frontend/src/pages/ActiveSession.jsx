@@ -182,6 +182,20 @@ export default function ActiveSession() {
             sessionId={sessionId}
             duration={Math.ceil(elapsedTime / 60)}
             notes={notes}
+            onStartAction={async (actionId) => {
+              try {
+                const res = await authFetch(`${API}/sessions/start`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action_id: actionId }),
+                });
+                if (!res.ok) throw new Error("Erreur");
+                const data = await res.json();
+                navigate(`/session/${data.session_id}`, { state: { session: data } });
+              } catch {
+                navigate("/dashboard");
+              }
+            }}
             onContinue={() => navigate("/dashboard")}
           />
         </div>
