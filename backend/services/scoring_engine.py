@@ -70,11 +70,19 @@ def score_action(
     Returns:
         {"score": float 0-1, "breakdown": {...component scores...}}
     """
-    # --- 1. Category affinity (0.30) ---
+    # --- 1. Category affinity (0.25) ---
     cat = action.get("category", "unknown")
     cat_rates = features.get("completion_rate_by_category", {})
     global_rate = features.get("completion_rate_global", 0.5)
     category_affinity = cat_rates.get(cat, global_rate)
+
+    # Apply category fatigue penalty: if this category has rising abandonment,
+    # reduce affinity proportionally. Fatigue value is 0.1-1.0 (delta in abandon rate).
+    # Penalty: multiply affinity by (1 - fatigue), so fatigue=0.3 → affinity * 0.7
+    fatigue_map = features.get("category_fatigue", {})
+    fatigue_penalty = fatigue_map.get(cat, 0.0)
+    if fatigue_penalty > 0:
+        category_affinity *= (1.0 - min(fatigue_penalty, 0.8))  # cap at 80% reduction
 
     # --- 2. Duration fit (0.25) ---
     preferred = features.get("preferred_action_duration", 5.0)
