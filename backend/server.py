@@ -1206,14 +1206,14 @@ async def get_ai_coach(request: Request, user: dict = Depends(get_current_user))
     day_of_week = day_names[datetime.now().weekday()]
 
     # Fetch engagement features for coaching tone
-    user_features = await db.user_features.find_one(
+    user_features_doc = await db.user_features.find_one(
         {"user_id": user["user_id"]}, {"_id": 0, "engagement_trend": 1, "session_momentum": 1, "abandonment_rate": 1}
     )
     engagement_context = ""
-    if user_features:
-        trend = user_features.get("engagement_trend", 0.0)
-        momentum = user_features.get("session_momentum", 0)
-        abandon = user_features.get("abandonment_rate", 0.0)
+    if user_features_doc:
+        trend = user_features_doc.get("engagement_trend", 0.0)
+        momentum = user_features_doc.get("session_momentum", 0)
+        abandon = user_features_doc.get("abandonment_rate", 0.0)
         if trend > 0.1:
             engagement_context = f"\nL'utilisateur est en progression (+{trend:.0%} cette semaine). Encourage et félicite."
         elif trend < -0.1:
@@ -1223,24 +1223,7 @@ async def get_ai_coach(request: Request, user: dict = Depends(get_current_user))
         if abandon > 0.4:
             engagement_context += "\nIl abandonne souvent ses sessions — propose des actions courtes et faciles."
 
-    prompt = f"""{user_context}{recent_info}{engagement_context}
-
-Il est actuellement le {time_of_day} ({day_of_week}).
-Le streak actuel est de {user.get('streak_days', 0)} jours.
-
-Génère un message de coach personnalisé pour l'accueillir sur son dashboard.
-Propose proactivement une action adaptée au moment de la journée et à son profil.
-Réponds en JSON:
-{{
-    "greeting": "Message d'accueil personnalisé (1-2 phrases)",
-    "suggestion": "Suggestion d'action concrète (1 phrase)",
-    "context_note": "Note contextuelle courte liée au moment/streak (1 phrase)"
-}}"""
-
-    ai_response = await call_ai(f"coach_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
-    ai_result = parse_ai_json(ai_response)
-
-    # Find a suggested action — try goals-filtered first, then fallback to all
+    # --- Fetch & rank candidate actions BEFORE AI call ---
     profile = user.get("user_profile", {}) or {}
     goals = profile.get("goals", [])
     query = {}
@@ -1248,26 +1231,68 @@ Réponds en JSON:
         query["category"] = {"$in": goals}
     if user.get("subscription_tier") == "free":
         query["is_premium"] = False
-    actions = await db.micro_actions.find(query, {"_id": 0}).to_list(10)
-    # Fallback: if goals filter returned nothing, try without category filter
-    if not actions and goals:
+    candidate_actions = await db.micro_actions.find(query, {"_id": 0}).to_list(20)
+    if not candidate_actions and goals:
         fallback_query = {}
         if user.get("subscription_tier") == "free":
             fallback_query["is_premium"] = False
-        actions = await db.micro_actions.find(fallback_query, {"_id": 0}).to_list(10)
-    # Use scoring engine to pick the best action if features exist
+        candidate_actions = await db.micro_actions.find(fallback_query, {"_id": 0}).to_list(20)
+
+    # Rank with scoring engine
+    top_actions = candidate_actions[:5]
+    try:
+        from services.scoring_engine import rank_actions_for_user
+        ranked = await rank_actions_for_user(db, user["user_id"], candidate_actions)
+        top_actions = ranked[:5] if ranked else candidate_actions[:5]
+    except Exception:
+        pass
+
+    # Build action menu for the AI prompt
+    actions_menu = ""
+    if top_actions:
+        action_lines = []
+        for i, a in enumerate(top_actions):
+            dur = f"{a.get('duration_min', '?')}-{a.get('duration_max', '?')} min"
+            action_lines.append(f"  {i}: \"{a.get('title', 'Action')}\" ({a.get('category', '')}, {dur})")
+        actions_menu = "\n\nActions disponibles (classées par pertinence pour cet utilisateur):\n" + "\n".join(action_lines)
+
+    prompt = f"""{user_context}{recent_info}{engagement_context}
+
+Il est actuellement le {time_of_day} ({day_of_week}).
+Le streak actuel est de {user.get('streak_days', 0)} jours.{actions_menu}
+
+Génère un message de coach personnalisé pour l'accueillir sur son dashboard.
+Ta suggestion DOIT correspondre à une des actions disponibles ci-dessus (indique son numéro dans chosen_action).
+Réponds en JSON:
+{{
+    "greeting": "Message d'accueil personnalisé (1-2 phrases)",
+    "suggestion": "Suggestion basée sur l'action choisie — explique POURQUOI cette action est idéale maintenant (1-2 phrases)",
+    "chosen_action": 0,
+    "context_note": "Note contextuelle courte liée au moment/streak (1 phrase)"
+}}"""
+
+    ai_response = await call_ai(f"coach_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
+    ai_result = parse_ai_json(ai_response)
+
+    # Resolve suggested_action_id from AI choice
     suggested_action_id = None
-    if actions:
-        try:
-            from services.scoring_engine import rank_actions_for_user
-            ranked = await rank_actions_for_user(db, user["user_id"], actions)
-            suggested_action_id = ranked[0].get("action_id") if ranked else actions[0].get("action_id")
-        except Exception:
-            suggested_action_id = actions[0].get("action_id")
+    suggested_title = None
+    if ai_result and top_actions:
+        chosen_idx = ai_result.get("chosen_action", 0)
+        if isinstance(chosen_idx, int) and 0 <= chosen_idx < len(top_actions):
+            suggested_action_id = top_actions[chosen_idx].get("action_id")
+            suggested_title = top_actions[chosen_idx].get("title")
+        else:
+            suggested_action_id = top_actions[0].get("action_id")
+            suggested_title = top_actions[0].get("title")
+    elif top_actions:
+        suggested_action_id = top_actions[0].get("action_id")
+        suggested_title = top_actions[0].get("title")
 
     await track_event(db, user["user_id"], "ai_coach_served", {
         "ai_success": ai_result is not None,
         "time_of_day": time_of_day,
+        "suggested_action_id": suggested_action_id,
     })
 
     if ai_result:
@@ -1275,13 +1300,15 @@ Réponds en JSON:
             "greeting": ai_result.get("greeting", f"Bonjour {user.get('name', '')} !"),
             "suggestion": ai_result.get("suggestion", "Commencez une micro-action pour avancer."),
             "suggested_action_id": suggested_action_id,
+            "suggested_action_title": suggested_title,
             "context_note": ai_result.get("context_note", f"C'est le {time_of_day}, bon moment pour progresser.")
         }
 
     return {
         "greeting": f"Bonjour {user.get('name', '').split(' ')[0]} ! Prêt(e) pour une micro-victoire ?",
-        "suggestion": "Profitez de quelques minutes pour progresser vers vos objectifs.",
+        "suggestion": f"Que dirais-tu de : {suggested_title}" if suggested_title else "Profitez de quelques minutes pour progresser vers vos objectifs.",
         "suggested_action_id": suggested_action_id,
+        "suggested_action_title": suggested_title,
         "context_note": f"C'est le {time_of_day}, idéal pour une micro-action."
     }
 
@@ -1314,34 +1341,68 @@ async def get_ai_debrief(
 
     notes_info = f"\nNotes de l'utilisateur: {debrief_req.notes}" if debrief_req.notes else ""
 
+    # --- Fetch & rank next actions BEFORE AI call ---
+    next_query = {}
+    if user.get("subscription_tier") == "free":
+        next_query["is_premium"] = False
+    next_candidates = await db.micro_actions.find(next_query, {"_id": 0}).to_list(20)
+    top_next = next_candidates[:5]
+    try:
+        from services.scoring_engine import rank_actions_for_user
+        ranked = await rank_actions_for_user(db, user["user_id"], next_candidates)
+        top_next = ranked[:5] if ranked else next_candidates[:5]
+    except Exception:
+        pass
+
+    # Build action menu for AI
+    actions_menu = ""
+    if top_next:
+        action_lines = []
+        for i, a in enumerate(top_next):
+            dur = f"{a.get('duration_min', '?')}-{a.get('duration_max', '?')} min"
+            action_lines.append(f"  {i}: \"{a.get('title', 'Action')}\" ({a.get('category', '')}, {dur})")
+        actions_menu = "\n\nProchaines actions possibles (classées par pertinence):\n" + "\n".join(action_lines)
+
     prompt = f"""{user_context}
 
 L'utilisateur vient de terminer une session:
 - Action: {action_title} (catégorie: {action_category})
-- Durée réelle: {duration} minutes{notes_info}
+- Durée réelle: {duration} minutes{notes_info}{actions_menu}
 
-Génère un débrief personnalisé et motivant. Suggère aussi une prochaine action.
+Génère un débrief personnalisé et motivant.
+Ta next_suggestion DOIT correspondre à une des actions ci-dessus (indique son numéro dans chosen_action).
 Réponds en JSON:
 {{
     "feedback": "Feedback personnalisé sur la session (1-2 phrases)",
     "encouragement": "Message de motivation (1 phrase)",
-    "next_suggestion": "Suggestion pour la prochaine action (1 phrase)"
+    "next_suggestion": "Suggestion pour la prochaine action basée sur l'action choisie (1 phrase)",
+    "chosen_action": 0
 }}"""
 
     ai_response = await call_ai(f"debrief_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
     ai_result = parse_ai_json(ai_response)
 
-    query = {}
-    if user.get("subscription_tier") == "free":
-        query["is_premium"] = False
-    next_actions = await db.micro_actions.find(query, {"_id": 0}).to_list(5)
-    next_action_id = next_actions[0]["action_id"] if next_actions else None
+    # Resolve next_action_id from AI choice
+    next_action_id = None
+    next_action_title = None
+    if ai_result and top_next:
+        chosen_idx = ai_result.get("chosen_action", 0)
+        if isinstance(chosen_idx, int) and 0 <= chosen_idx < len(top_next):
+            next_action_id = top_next[chosen_idx].get("action_id")
+            next_action_title = top_next[chosen_idx].get("title")
+        else:
+            next_action_id = top_next[0].get("action_id")
+            next_action_title = top_next[0].get("title")
+    elif top_next:
+        next_action_id = top_next[0].get("action_id")
+        next_action_title = top_next[0].get("title")
 
     await track_event(db, user["user_id"], "ai_debrief_generated", {
         "action_title": action_title,
         "category": action_category,
         "duration": duration,
         "ai_success": ai_result is not None,
+        "next_action_id": next_action_id,
     })
 
     if ai_result:
@@ -1349,14 +1410,16 @@ Réponds en JSON:
             "feedback": ai_result.get("feedback", "Bravo pour cette session !"),
             "encouragement": ai_result.get("encouragement", "Chaque minute compte."),
             "next_suggestion": ai_result.get("next_suggestion", "Continuez sur cette lancée !"),
-            "next_action_id": next_action_id
+            "next_action_id": next_action_id,
+            "next_action_title": next_action_title,
         }
 
     return {
         "feedback": f"Excellente session de {duration} min sur {action_title} !",
         "encouragement": "Chaque micro-action vous rapproche de vos objectifs.",
-        "next_suggestion": "Prenez une pause et revenez quand vous êtes prêt(e) pour la suite.",
-        "next_action_id": next_action_id
+        "next_suggestion": f"Pour continuer, essayez : {next_action_title}" if next_action_title else "Prenez une pause et revenez quand vous êtes prêt(e).",
+        "next_action_id": next_action_id,
+        "next_action_title": next_action_title,
     }
 
 # ============== AI WEEKLY ANALYSIS ROUTE ==============
