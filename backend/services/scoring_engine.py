@@ -129,17 +129,27 @@ def score_action(
     feedback_score = (raw_signal + 1.0) / 2.0  # -1→0, 0→0.5, +1→1.0
 
     # --- Weighted total ---
+    # Use per-user adaptive weights if available, otherwise global defaults
+    aw = features.get("adaptive_weights")
+    w_cat = aw["category_affinity"] if aw else W_CATEGORY_AFFINITY
+    w_dur = aw["duration_fit"] if aw else W_DURATION_FIT
+    w_ene = aw["energy_match"] if aw else W_ENERGY_MATCH
+    w_tim = aw["time_performance"] if aw else W_TIME_PERFORMANCE
+    w_nov = aw["novelty_bonus"] if aw else W_NOVELTY_BONUS
+    w_fb = aw["feedback_signal"] if aw else W_FEEDBACK_SIGNAL
+
     total = (
-        W_CATEGORY_AFFINITY * category_affinity
-        + W_DURATION_FIT * duration_fit
-        + W_ENERGY_MATCH * energy_match
-        + W_TIME_PERFORMANCE * time_performance
-        + W_NOVELTY_BONUS * novelty_bonus
-        + W_FEEDBACK_SIGNAL * feedback_score
+        w_cat * category_affinity
+        + w_dur * duration_fit
+        + w_ene * energy_match
+        + w_tim * time_performance
+        + w_nov * novelty_bonus
+        + w_fb * feedback_score
     )
 
     return {
         "score": round(total, 4),
+        "adaptive": aw is not None,
         "breakdown": {
             "category_affinity": round(category_affinity, 3),
             "duration_fit": round(duration_fit, 3),
@@ -147,6 +157,14 @@ def score_action(
             "time_performance": round(time_performance, 3),
             "novelty_bonus": round(novelty_bonus, 3),
             "feedback_signal": round(feedback_score, 3),
+        },
+        "weights_used": {
+            "category_affinity": round(w_cat, 4),
+            "duration_fit": round(w_dur, 4),
+            "energy_match": round(w_ene, 4),
+            "time_performance": round(w_tim, 4),
+            "novelty_bonus": round(w_nov, 4),
+            "feedback_signal": round(w_fb, 4),
         },
     }
 
