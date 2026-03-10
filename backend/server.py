@@ -148,6 +148,9 @@ class DebriefRequest(BaseModel):
     duration_minutes: Optional[int] = None  # Frontend sends this
     notes: Optional[str] = None
 
+class CoachChatRequest(BaseModel):
+    message: str
+
 class ICalConnectRequest(BaseModel):
     url: str
     name: Optional[str] = "Mon calendrier iCal"
@@ -1382,6 +1385,162 @@ Réponds en JSON:
         "coach_mode": coach_mode,
         "context_note": f"C'est le {time_of_day}, idéal pour une micro-action."
     }
+
+# ============== COACH CHAT (PERSISTENT) ==============
+
+COACH_CHAT_SYSTEM = """Tu es le coach IA InFinea, un compagnon bienveillant et expert en productivité, apprentissage et bien-être.
+Tu discutes naturellement avec l'utilisateur pour l'aider à progresser.
+Tu es concis (2-3 phrases max par réponse), chaleureux, et tu tutoies l'utilisateur.
+Tu connais son profil, ses sessions récentes, et tu peux suggérer des actions concrètes.
+Quand tu suggères une action, mentionne son nom exact pour que l'utilisateur puisse la lancer.
+Ne réponds JAMAIS en JSON — réponds en texte naturel conversationnel."""
+
+
+@api_router.get("/ai/coach/history")
+@limiter.limit("20/minute")
+async def get_coach_history(request: Request, user: dict = Depends(get_current_user)):
+    """Get coach conversation history for the current user."""
+    messages = await db.coach_messages.find(
+        {"user_id": user["user_id"]},
+        {"_id": 0, "role": 1, "content": 1, "created_at": 1, "suggested_action_id": 1}
+    ).sort("created_at", 1).limit(50).to_list(50)
+
+    return {"messages": messages}
+
+
+@api_router.post("/ai/coach/chat")
+@limiter.limit("15/minute")
+async def coach_chat(
+    request: Request,
+    chat_req: CoachChatRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Send a message to the coach and get a response."""
+    user_message = chat_req.message.strip()
+    if not user_message or len(user_message) > 500:
+        raise HTTPException(status_code=400, detail="Message vide ou trop long (max 500 caractères)")
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Save user message
+    await db.coach_messages.insert_one({
+        "user_id": user["user_id"],
+        "role": "user",
+        "content": user_message,
+        "created_at": now,
+    })
+
+    # Build context for the AI
+    user_context = await build_user_context(user)
+
+    # Fetch recent sessions for context
+    recent_sessions = await db.user_sessions_history.find(
+        {"user_id": user["user_id"]},
+        {"_id": 0, "action_title": 1, "completed": 1, "started_at": 1, "actual_duration": 1}
+    ).sort("started_at", -1).limit(5).to_list(5)
+
+    sessions_ctx = ""
+    if recent_sessions:
+        lines = []
+        for s in recent_sessions:
+            status = "terminée" if s.get("completed") else "abandonnée"
+            lines.append(f"- {s.get('action_title', '?')} ({status}, {s.get('actual_duration', '?')} min)")
+        sessions_ctx = "\n\nDernières sessions:\n" + "\n".join(lines)
+
+    # Fetch available actions for suggestions
+    act_query = {}
+    if user.get("subscription_tier") == "free":
+        act_query["is_premium"] = False
+    available = await db.micro_actions.find(act_query, {"_id": 0, "action_id": 1, "title": 1, "category": 1, "duration_min": 1, "duration_max": 1}).to_list(10)
+    actions_ctx = ""
+    if available:
+        lines = [f"- \"{a.get('title')}\" ({a.get('category')}, {a.get('duration_min')}-{a.get('duration_max')} min)" for a in available[:8]]
+        actions_ctx = "\n\nActions disponibles que tu peux suggérer:\n" + "\n".join(lines)
+
+    # Build conversation history (last 20 messages for context window)
+    history_docs = await db.coach_messages.find(
+        {"user_id": user["user_id"]},
+        {"_id": 0, "role": 1, "content": 1}
+    ).sort("created_at", -1).limit(20).to_list(20)
+    history_docs.reverse()
+
+    # Build messages array for Anthropic API (system + history)
+    system_prompt = f"""{COACH_CHAT_SYSTEM}
+
+{user_context}{sessions_ctx}{actions_ctx}
+
+Streak actuel: {user.get('streak_days', 0)} jours.
+Temps total investi: {user.get('total_time_invested', 0)} minutes."""
+
+    api_messages = []
+    for msg in history_docs:
+        role = msg["role"]
+        if role in ("user", "assistant"):
+            api_messages.append({"role": role, "content": msg["content"]})
+
+    # Ensure conversation starts with user message (Anthropic requirement)
+    if not api_messages or api_messages[0]["role"] != "user":
+        api_messages = [m for m in api_messages if m["role"] in ("user", "assistant")]
+        if not api_messages:
+            api_messages = [{"role": "user", "content": user_message}]
+
+    # Call AI with full conversation
+    api_key = os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('OPENAI_API_KEY')
+    ai_model = get_ai_model(user)
+    assistant_content = None
+
+    if api_key:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client_http:
+                resp = await client_http.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json"
+                    },
+                    json={
+                        "model": ai_model,
+                        "max_tokens": 300,
+                        "system": system_prompt,
+                        "messages": api_messages,
+                    }
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                assistant_content = data["content"][0]["text"]
+        except Exception as e:
+            logger.error(f"Coach chat AI error: {e}")
+
+    if not assistant_content:
+        assistant_content = "Je suis là pour t'aider ! Malheureusement j'ai un petit souci technique. Réessaie dans un instant."
+
+    # Save assistant response
+    await db.coach_messages.insert_one({
+        "user_id": user["user_id"],
+        "role": "assistant",
+        "content": assistant_content,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    await track_event(db, user["user_id"], "coach_chat_message", {
+        "message_length": len(user_message),
+    })
+
+    return {
+        "role": "assistant",
+        "content": assistant_content,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@api_router.delete("/ai/coach/history")
+@limiter.limit("5/minute")
+async def clear_coach_history(request: Request, user: dict = Depends(get_current_user)):
+    """Clear coach conversation history."""
+    result = await db.coach_messages.delete_many({"user_id": user["user_id"]})
+    return {"deleted": result.deleted_count}
+
 
 # ============== AI DEBRIEF ROUTE ==============
 
@@ -5078,6 +5237,11 @@ async def startup_event():
     )
     await db.action_signals.create_index("updated_at")
     logger.info("action_signals indexes ensured")
+
+    # Create indexes for coach_messages collection (persistent chat)
+    await db.coach_messages.create_index([("user_id", 1), ("created_at", 1)])
+    await db.coach_messages.create_index("created_at", expireAfterSeconds=30 * 24 * 3600)  # TTL: 30 days
+    logger.info("coach_messages indexes ensured")
 
     # Start daily action generation background loop
     from services.action_generator import daily_generation_loop

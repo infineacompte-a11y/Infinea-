@@ -24,6 +24,7 @@ import ChallengesPage from "@/pages/ChallengesPage";
 import PrivacyPage from "@/pages/PrivacyPage";
 import CGUPage from "@/pages/CGUPage";
 import NotFound from "@/pages/NotFound";
+import CoachFAB from "@/components/CoachFAB";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
 export const API = `${BACKEND_URL}/api`;
@@ -215,7 +216,13 @@ const ProtectedRoute = ({ children }) => {
     return null;
   }
 
-  return children;
+  return (
+    <>
+      {children}
+      {/* Coach FAB on all protected pages except active session and onboarding */}
+      {!/^\/session\//.test(location.pathname) && location.pathname !== "/onboarding" && <CoachFAB />}
+    </>
+  );
 };
 
 // App Router
