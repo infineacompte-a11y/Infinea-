@@ -121,21 +121,26 @@ export default function AICoachCard({ onStartAction }) {
           {/* Suggestion + Context note row */}
           <div className="flex flex-col gap-3">
             {suggestion && (
-              <div
-                className={`flex items-start gap-3 p-3.5 rounded-xl bg-primary/5 border border-primary/10 ${
-                  actionId && onStartAction ? "cursor-pointer hover:bg-primary/10 transition-colors" : ""
-                }`}
-                onClick={() => actionId && onStartAction?.(actionId)}
-              >
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <Sparkles className="w-4 h-4 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-primary mb-0.5">Suggestion pour vous</p>
-                  <p className="text-sm leading-relaxed">{suggestion}</p>
+              <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/10">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-primary mb-0.5">Suggestion pour vous</p>
+                    <p className="text-sm leading-relaxed">{suggestion}</p>
+                  </div>
                 </div>
                 {actionId && onStartAction && (
-                  <ArrowRight className="w-4 h-4 text-primary shrink-0 mt-1" />
+                  <Button
+                    size="sm"
+                    className="mt-3 w-full gap-2"
+                    onClick={() => onStartAction(actionId)}
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Commencer cette action
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Button>
                 )}
               </div>
             )}

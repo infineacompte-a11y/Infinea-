@@ -183,7 +183,7 @@ export default function Dashboard() {
           </div>
 
           {/* AI Coach — first thing the user sees */}
-          <AICoachCard />
+          <AICoachCard onStartAction={startSession} />
 
           {/* Smart Prediction Module */}
           <SmartPredictionCard />
