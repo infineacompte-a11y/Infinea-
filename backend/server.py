@@ -1240,6 +1240,7 @@ Réponds en JSON:
     ai_response = await call_ai(f"coach_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
     ai_result = parse_ai_json(ai_response)
 
+    # Find a suggested action — try goals-filtered first, then fallback to all
     profile = user.get("user_profile", {}) or {}
     goals = profile.get("goals", [])
     query = {}
@@ -1247,8 +1248,22 @@ Réponds en JSON:
         query["category"] = {"$in": goals}
     if user.get("subscription_tier") == "free":
         query["is_premium"] = False
-    actions = await db.micro_actions.find(query, {"_id": 0}).to_list(5)
-    suggested_action_id = actions[0]["action_id"] if actions else None
+    actions = await db.micro_actions.find(query, {"_id": 0}).to_list(10)
+    # Fallback: if goals filter returned nothing, try without category filter
+    if not actions and goals:
+        fallback_query = {}
+        if user.get("subscription_tier") == "free":
+            fallback_query["is_premium"] = False
+        actions = await db.micro_actions.find(fallback_query, {"_id": 0}).to_list(10)
+    # Use scoring engine to pick the best action if features exist
+    suggested_action_id = None
+    if actions:
+        try:
+            from services.scoring_engine import rank_actions_for_user
+            ranked = await rank_actions_for_user(db, user["user_id"], actions)
+            suggested_action_id = ranked[0].get("action_id") if ranked else actions[0].get("action_id")
+        except Exception:
+            suggested_action_id = actions[0].get("action_id")
 
     await track_event(db, user["user_id"], "ai_coach_served", {
         "ai_success": ai_result is not None,
