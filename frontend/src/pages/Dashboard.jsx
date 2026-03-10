@@ -182,6 +182,9 @@ export default function Dashboard() {
             </p>
           </div>
 
+          {/* AI Coach — first thing the user sees */}
+          <AICoachCard />
+
           {/* Smart Prediction Module */}
           <SmartPredictionCard />
 
@@ -249,8 +252,7 @@ export default function Dashboard() {
             </Card>
           </div>
 
-          {/* AI Coach */}
-          <AICoachCard />
+          {/* AI Coach moved to top of dashboard */}
 
           {/* Main Action Card */}
           <Card className="mb-8 bento-item">
