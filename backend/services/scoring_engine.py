@@ -8,14 +8,19 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
 
+from services.feedback_loop import get_user_signals
+
 logger = logging.getLogger("scoring_engine")
 
-# Scoring weights
-W_CATEGORY_AFFINITY = 0.30
-W_DURATION_FIT = 0.25
-W_ENERGY_MATCH = 0.20
-W_TIME_PERFORMANCE = 0.15
-W_NOVELTY_BONUS = 0.10
+# Scoring weights (sum = 1.0)
+# Feedback signal takes 0.15 from the original budget,
+# other weights scaled down proportionally to preserve relative ordering.
+W_CATEGORY_AFFINITY = 0.25
+W_DURATION_FIT = 0.22
+W_ENERGY_MATCH = 0.17
+W_TIME_PERFORMANCE = 0.13
+W_NOVELTY_BONUS = 0.08
+W_FEEDBACK_SIGNAL = 0.15
 
 # Energy adjacency map (exact=1.0, adjacent=0.5, opposite=0.1)
 _ENERGY_SCORES = {
@@ -59,6 +64,7 @@ def score_action(
             "available_time": int (minutes),
             "time_bucket": "morning"|"afternoon"|"evening"|"night",
             "recent_action_ids": set of action_ids done in last 7 days,
+            "feedback_signals": dict {action_id: score} from action_signals,
         }
 
     Returns:
@@ -102,10 +108,17 @@ def score_action(
     tod_rates = features.get("completion_rate_by_time_of_day", {})
     time_performance = tod_rates.get(bucket, global_rate)
 
-    # --- 5. Novelty bonus (0.10) ---
+    # --- 5. Novelty bonus (0.08) ---
     recent_ids = context.get("recent_action_ids", set())
     action_id = action.get("action_id", "")
     novelty_bonus = 0.2 if action_id in recent_ids else 1.0
+
+    # --- 6. Feedback signal (0.15) ---
+    # Maps signal score from [-1, +1] to [0, 1] range for weighted sum.
+    # Default 0.5 (neutral) when no signal exists for this action.
+    feedback_signals = context.get("feedback_signals", {})
+    raw_signal = feedback_signals.get(action_id, 0.0)
+    feedback_score = (raw_signal + 1.0) / 2.0  # -1→0, 0→0.5, +1→1.0
 
     # --- Weighted total ---
     total = (
@@ -114,6 +127,7 @@ def score_action(
         + W_ENERGY_MATCH * energy_match
         + W_TIME_PERFORMANCE * time_performance
         + W_NOVELTY_BONUS * novelty_bonus
+        + W_FEEDBACK_SIGNAL * feedback_score
     )
 
     return {
@@ -124,6 +138,7 @@ def score_action(
             "energy_match": round(energy_match, 3),
             "time_performance": round(time_performance, 3),
             "novelty_bonus": round(novelty_bonus, 3),
+            "feedback_signal": round(feedback_score, 3),
         },
     }
 
@@ -160,12 +175,17 @@ async def rank_actions_for_user(
     ).to_list(200)
     recent_action_ids = {s["action_id"] for s in recent_sessions if s.get("action_id")}
 
+    # Fetch feedback signals for candidate actions
+    candidate_ids = [a.get("action_id", "") for a in actions if a.get("action_id")]
+    feedback_signals = await get_user_signals(db, user_id, candidate_ids)
+
     # Build context
     context = {
         "energy_level": energy_level,
         "available_time": available_time,
         "time_bucket": _current_time_bucket(),
         "recent_action_ids": recent_action_ids,
+        "feedback_signals": feedback_signals,
     }
 
     # Score each action
@@ -245,11 +265,16 @@ async def get_next_best_action(
     ).to_list(200)
     recent_action_ids = {s["action_id"] for s in recent_sessions if s.get("action_id")}
 
+    # Fetch feedback signals
+    candidate_ids = [a.get("action_id", "") for a in actions if a.get("action_id")]
+    feedback_signals = await get_user_signals(db, user_id, candidate_ids)
+
     context = {
         "energy_level": inferred_energy,
         "available_time": slot_duration,
         "time_bucket": bucket,
         "recent_action_ids": recent_action_ids,
+        "feedback_signals": feedback_signals,
     }
 
     # Score all actions, pick the best
