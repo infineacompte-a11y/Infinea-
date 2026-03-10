@@ -37,7 +37,54 @@ const CATEGORY_MAP = {
   creativity: { label: "Créativité", color: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
   fitness: { label: "Fitness", color: "bg-rose-500/10 text-rose-500 border-rose-500/20" },
   mindfulness: { label: "Pleine conscience", color: "bg-sky-500/10 text-sky-500 border-sky-500/20" },
+  leadership: { label: "Leadership", color: "bg-indigo-500/10 text-indigo-500 border-indigo-500/20" },
+  finance: { label: "Finance", color: "bg-teal-500/10 text-teal-500 border-teal-500/20" },
+  relations: { label: "Relations", color: "bg-pink-500/10 text-pink-500 border-pink-500/20" },
+  mental_health: { label: "Santé mentale", color: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20" },
+  entrepreneurship: { label: "Entrepreneuriat", color: "bg-orange-500/10 text-orange-500 border-orange-500/20" },
 };
+
+// Duration presets: 2 weeks to 12 months
+const DURATION_STEPS = [
+  { value: 14, label: "2 sem." },
+  { value: 30, label: "1 mois" },
+  { value: 45, label: "1.5 mois" },
+  { value: 60, label: "2 mois" },
+  { value: 75, label: "2.5 mois" },
+  { value: 90, label: "3 mois" },
+  { value: 120, label: "4 mois" },
+  { value: 150, label: "5 mois" },
+  { value: 180, label: "6 mois" },
+  { value: 210, label: "7 mois" },
+  { value: 240, label: "8 mois" },
+  { value: 270, label: "9 mois" },
+  { value: 300, label: "10 mois" },
+  { value: 330, label: "11 mois" },
+  { value: 365, label: "12 mois" },
+];
+
+function durationToLabel(days) {
+  const match = DURATION_STEPS.find((s) => s.value === days);
+  if (match) return match.label;
+  if (days < 30) return `${days} jours`;
+  const m = Math.round(days / 30);
+  return `${m} mois`;
+}
+
+function durationSliderToValue(sliderPos) {
+  const idx = Math.round(sliderPos);
+  return DURATION_STEPS[Math.min(idx, DURATION_STEPS.length - 1)]?.value || 30;
+}
+
+function durationValueToSlider(days) {
+  let closest = 0;
+  let minDist = Infinity;
+  DURATION_STEPS.forEach((s, i) => {
+    const dist = Math.abs(s.value - days);
+    if (dist < minDist) { minDist = dist; closest = i; }
+  });
+  return closest;
+}
 
 const STATUS_MAP = {
   active: { label: "En cours", color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20", icon: Play },
@@ -305,32 +352,37 @@ export default function ObjectivesPage() {
                   />
                 </div>
 
-                {/* Description (optional) */}
+                {/* Description (optional — rich context for AI) */}
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">
-                    Détails <span className="text-muted-foreground">(optionnel)</span>
+                    Contexte & détails <span className="text-muted-foreground">(optionnel — plus tu donnes de détails, meilleur sera ton parcours)</span>
                   </label>
                   <textarea
-                    className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-                    placeholder="Niveau actuel, objectif précis, ressources..."
+                    className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y min-h-[80px]"
+                    placeholder="Niveau actuel, objectif précis, contraintes, ressources disponibles, ce que tu veux atteindre à la fin du parcours..."
                     value={form.description}
                     onChange={(e) => setForm({ ...form, description: e.target.value })}
-                    rows={2}
-                    maxLength={300}
+                    rows={4}
+                    maxLength={1500}
                   />
+                  <div className="flex justify-end mt-1">
+                    <span className={`text-[10px] ${form.description.length > 1200 ? "text-amber-500" : "text-muted-foreground/50"}`}>
+                      {form.description.length}/1500
+                    </span>
+                  </div>
                 </div>
 
-                {/* Category */}
+                {/* Category — all 11 categories */}
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Catégorie</label>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {Object.entries(CATEGORY_MAP).map(([key, cat]) => (
                       <button
                         key={key}
                         onClick={() => setForm({ ...form, category: key })}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                           form.category === key
-                            ? "bg-primary text-primary-foreground border-primary"
+                            ? "bg-primary text-primary-foreground border-primary scale-105"
                             : "bg-muted/30 border-border hover:border-primary/30"
                         }`}
                       >
@@ -340,33 +392,48 @@ export default function ObjectivesPage() {
                   </div>
                 </div>
 
-                {/* Duration */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-sm font-medium mb-1.5 block">Durée du parcours</label>
-                    <select
-                      className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm"
-                      value={form.target_duration_days}
-                      onChange={(e) => setForm({ ...form, target_duration_days: parseInt(e.target.value) })}
-                    >
-                      <option value={14}>2 semaines</option>
-                      <option value={30}>1 mois</option>
-                      <option value={60}>2 mois</option>
-                      <option value={90}>3 mois</option>
-                    </select>
+                {/* Minutes per day — smooth slider */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium">Minutes / jour</label>
+                    <span className="text-lg font-bold text-primary tabular-nums">{form.daily_minutes} min</span>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium mb-1.5 block">Minutes / jour</label>
-                    <select
-                      className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm"
-                      value={form.daily_minutes}
-                      onChange={(e) => setForm({ ...form, daily_minutes: parseInt(e.target.value) })}
-                    >
-                      <option value={5}>5 min</option>
-                      <option value={10}>10 min</option>
-                      <option value={15}>15 min</option>
-                      <option value={20}>20 min</option>
-                    </select>
+                  <input
+                    type="range"
+                    min={2}
+                    max={25}
+                    step={1}
+                    value={form.daily_minutes}
+                    onChange={(e) => setForm({ ...form, daily_minutes: parseInt(e.target.value) })}
+                    className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-background"
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                    <span>2 min</span>
+                    <span>10 min</span>
+                    <span>25 min</span>
+                  </div>
+                </div>
+
+                {/* Duration — smooth slider with snap points */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium">Durée du parcours</label>
+                    <span className="text-lg font-bold text-primary">{durationToLabel(form.target_duration_days)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={DURATION_STEPS.length - 1}
+                    step={1}
+                    value={durationValueToSlider(form.target_duration_days)}
+                    onChange={(e) => setForm({ ...form, target_duration_days: durationSliderToValue(parseInt(e.target.value)) })}
+                    className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-background"
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                    <span>2 sem.</span>
+                    <span>3 mois</span>
+                    <span>6 mois</span>
+                    <span>12 mois</span>
                   </div>
                 </div>
               </div>
