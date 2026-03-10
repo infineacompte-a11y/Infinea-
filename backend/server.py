@@ -1205,7 +1205,25 @@ async def get_ai_coach(request: Request, user: dict = Depends(get_current_user))
     day_names = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
     day_of_week = day_names[datetime.now().weekday()]
 
-    prompt = f"""{user_context}{recent_info}
+    # Fetch engagement features for coaching tone
+    user_features = await db.user_features.find_one(
+        {"user_id": user["user_id"]}, {"_id": 0, "engagement_trend": 1, "session_momentum": 1, "abandonment_rate": 1}
+    )
+    engagement_context = ""
+    if user_features:
+        trend = user_features.get("engagement_trend", 0.0)
+        momentum = user_features.get("session_momentum", 0)
+        abandon = user_features.get("abandonment_rate", 0.0)
+        if trend > 0.1:
+            engagement_context = f"\nL'utilisateur est en progression (+{trend:.0%} cette semaine). Encourage et félicite."
+        elif trend < -0.1:
+            engagement_context = f"\nL'utilisateur est en baisse ({trend:.0%} cette semaine). Sois bienveillant et motivant, propose quelque chose de léger."
+        if momentum >= 5:
+            engagement_context += f"\nIl a enchaîné {momentum} sessions d'affilée récemment — souligne cet exploit."
+        if abandon > 0.4:
+            engagement_context += "\nIl abandonne souvent ses sessions — propose des actions courtes et faciles."
+
+    prompt = f"""{user_context}{recent_info}{engagement_context}
 
 Il est actuellement le {time_of_day} ({day_of_week}).
 Le streak actuel est de {user.get('streak_days', 0)} jours.
