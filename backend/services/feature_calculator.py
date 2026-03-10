@@ -346,9 +346,19 @@ async def compute_all_users_features(db) -> Dict[str, Any]:
     processed = 0
     errors = 0
 
+    from services.weight_learner import compute_adaptive_weights
+
     for uid in user_ids:
         try:
             features = await compute_user_features(db, uid)
+
+            # Learn adaptive weights if enough data
+            adaptive = await compute_adaptive_weights(db, uid, features)
+            if adaptive:
+                features["adaptive_weights"] = adaptive
+            else:
+                features["adaptive_weights"] = None  # signals: use global defaults
+
             await db.user_features.update_one(
                 {"user_id": uid},
                 {"$set": features},
