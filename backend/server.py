@@ -20,6 +20,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from services.event_tracker import track_event
+from services.feedback_loop import record_signal
 from services.scoring_engine import rank_actions_for_user, get_next_best_action
 try:
     from icalendar import Calendar as ICalCalendar
@@ -972,6 +973,12 @@ Suggère les meilleures micro-actions en fonction du temps disponible et du nive
         "top_score": ranked_actions[0].get("_score") if is_scored else None,
     })
 
+    # Record impression signals for all shown actions (feedback loop)
+    for shown_action in recommended_actions[:3]:
+        aid = shown_action.get("action_id")
+        if aid:
+            await record_signal(db, user["user_id"], aid, "impression")
+
     result = {
         "suggestion": ai_result.get("top_pick", ranked_actions[0]["title"]),
         "reasoning": ai_result.get("reasoning", "Cette action est parfaite pour le temps dont vous disposez."),
@@ -1591,6 +1598,9 @@ async def start_session(
         "action_title": action["title"],
     })
 
+    # Feedback loop: user clicked on this action
+    await record_signal(db, user["user_id"], session_data.action_id, "click")
+
     return {
         "session_id": session_id,
         "action": action,
@@ -1629,6 +1639,12 @@ async def complete_session(
         "action_title": session.get("action_title"),
         "actual_duration": completion.actual_duration,
     })
+
+    # Feedback loop: completion or abandonment signal
+    action_id = session.get("action_id")
+    if action_id:
+        signal = "completion" if completion.completed else "abandonment"
+        await record_signal(db, user["user_id"], action_id, signal)
 
     if completion.completed:
         # Update user stats
