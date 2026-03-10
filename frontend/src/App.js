@@ -21,6 +21,8 @@ import JournalPage from "@/pages/JournalPage";
 import NotesPage from "@/pages/NotesPage";
 import OnboardingPage from "@/pages/OnboardingPage";
 import ChallengesPage from "@/pages/ChallengesPage";
+import ObjectivesPage from "@/pages/ObjectivesPage";
+import ObjectiveDetailPage from "@/pages/ObjectiveDetailPage";
 import PrivacyPage from "@/pages/PrivacyPage";
 import CGUPage from "@/pages/CGUPage";
 import NotFound from "@/pages/NotFound";
@@ -336,6 +338,22 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ChallengesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/objectives"
+        element={
+          <ProtectedRoute>
+            <ObjectivesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/objectives/:objectiveId"
+        element={
+          <ProtectedRoute>
+            <ObjectiveDetailPage />
           </ProtectedRoute>
         }
       />
