@@ -151,6 +151,20 @@ class DebriefRequest(BaseModel):
 class CoachChatRequest(BaseModel):
     message: str
 
+class ObjectiveCreate(BaseModel):
+    title: str  # "Apprendre le thaï", "Jouer du piano"
+    description: Optional[str] = None
+    target_duration_days: Optional[int] = 30  # 30, 60, 90 days
+    daily_minutes: Optional[int] = 10  # target per day
+    category: Optional[str] = None  # learning, productivity, etc.
+
+class ObjectiveUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    target_duration_days: Optional[int] = None
+    daily_minutes: Optional[int] = None
+    status: Optional[str] = None  # active, paused, completed, abandoned
+
 class ICalConnectRequest(BaseModel):
     url: str
     name: Optional[str] = "Mon calendrier iCal"
@@ -4534,6 +4548,289 @@ async def get_employees(user: dict = Depends(get_current_user)):
     
     return {"employees": employees, "total": len(employees)}
 
+# ============== OBJECTIVES (PARCOURS PERSONNALISÉS) ==============
+
+@api_router.post("/objectives")
+@limiter.limit("10/minute")
+async def create_objective(request: Request, obj: ObjectiveCreate, user: dict = Depends(get_current_user)):
+    """Create a new personal objective with AI-generated curriculum."""
+    # Free users: max 2 active objectives. Premium: unlimited.
+    active_count = await db.objectives.count_documents({"user_id": user["user_id"], "status": "active"})
+    max_objectives = 2 if user.get("subscription_tier") != "premium" else 20
+    if active_count >= max_objectives:
+        tier_msg = "Passe en Premium pour plus d'objectifs !" if user.get("subscription_tier") != "premium" else "Maximum 20 objectifs actifs."
+        raise HTTPException(status_code=400, detail=f"Limite atteinte ({max_objectives} objectifs actifs). {tier_msg}")
+
+    now = datetime.now(timezone.utc).isoformat()
+    objective_id = f"obj_{uuid.uuid4().hex[:12]}"
+
+    objective_doc = {
+        "objective_id": objective_id,
+        "user_id": user["user_id"],
+        "title": obj.title.strip(),
+        "description": (obj.description or "").strip(),
+        "target_duration_days": min(max(obj.target_duration_days or 30, 7), 365),
+        "daily_minutes": min(max(obj.daily_minutes or 10, 2), 60),
+        "category": obj.category or "learning",
+        "status": "active",
+        "created_at": now,
+        "started_at": now,
+        "current_day": 0,
+        "total_sessions": 0,
+        "total_minutes": 0,
+        "streak_days": 0,
+        "last_session_date": None,
+        "curriculum": [],  # Will be populated by curriculum engine
+        "progress_log": [],  # Track what was learned per session
+    }
+
+    await db.objectives.insert_one(objective_doc)
+
+    # Generate curriculum in background (non-blocking)
+    asyncio.create_task(_generate_curriculum_for_objective(objective_doc, user))
+
+    await track_event(db, user["user_id"], "objective_created", {
+        "objective_id": objective_id,
+        "title": obj.title,
+        "target_days": objective_doc["target_duration_days"],
+    })
+
+    # Return without _id
+    objective_doc.pop("_id", None)
+    return objective_doc
+
+
+async def _generate_curriculum_for_objective(objective: dict, user: dict):
+    """Background task: generate AI curriculum for an objective."""
+    try:
+        from services.curriculum_engine import generate_curriculum
+        curriculum = await generate_curriculum(objective, user)
+        if curriculum:
+            await db.objectives.update_one(
+                {"objective_id": objective["objective_id"]},
+                {"$set": {"curriculum": curriculum, "curriculum_generated_at": datetime.now(timezone.utc).isoformat()}}
+            )
+            logger.info(f"Curriculum generated for {objective['objective_id']}: {len(curriculum)} steps")
+    except Exception as e:
+        logger.error(f"Curriculum generation failed for {objective['objective_id']}: {e}")
+
+
+@api_router.get("/objectives")
+@limiter.limit("30/minute")
+async def list_objectives(request: Request, status: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """List user's objectives, optionally filtered by status."""
+    query = {"user_id": user["user_id"]}
+    if status:
+        query["status"] = status
+    objectives = await db.objectives.find(query, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return {"objectives": objectives}
+
+
+@api_router.get("/objectives/{objective_id}")
+@limiter.limit("30/minute")
+async def get_objective(request: Request, objective_id: str, user: dict = Depends(get_current_user)):
+    """Get a single objective with full curriculum and progress."""
+    obj = await db.objectives.find_one(
+        {"objective_id": objective_id, "user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    if not obj:
+        raise HTTPException(status_code=404, detail="Objectif non trouvé")
+    return obj
+
+
+@api_router.put("/objectives/{objective_id}")
+@limiter.limit("15/minute")
+async def update_objective(request: Request, objective_id: str, updates: ObjectiveUpdate, user: dict = Depends(get_current_user)):
+    """Update an objective (title, description, status, etc.)."""
+    obj = await db.objectives.find_one({"objective_id": objective_id, "user_id": user["user_id"]})
+    if not obj:
+        raise HTTPException(status_code=404, detail="Objectif non trouvé")
+
+    update_fields = {}
+    if updates.title is not None:
+        update_fields["title"] = updates.title.strip()
+    if updates.description is not None:
+        update_fields["description"] = updates.description.strip()
+    if updates.target_duration_days is not None:
+        update_fields["target_duration_days"] = min(max(updates.target_duration_days, 7), 365)
+    if updates.daily_minutes is not None:
+        update_fields["daily_minutes"] = min(max(updates.daily_minutes, 2), 60)
+    if updates.status is not None:
+        if updates.status not in ("active", "paused", "completed", "abandoned"):
+            raise HTTPException(status_code=400, detail="Statut invalide")
+        update_fields["status"] = updates.status
+        if updates.status == "completed":
+            update_fields["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="Aucune modification")
+
+    update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.objectives.update_one({"objective_id": objective_id}, {"$set": update_fields})
+
+    await track_event(db, user["user_id"], "objective_updated", {
+        "objective_id": objective_id,
+        "fields": list(update_fields.keys()),
+    })
+
+    updated = await db.objectives.find_one({"objective_id": objective_id}, {"_id": 0})
+    return updated
+
+
+@api_router.delete("/objectives/{objective_id}")
+@limiter.limit("10/minute")
+async def delete_objective(request: Request, objective_id: str, user: dict = Depends(get_current_user)):
+    """Delete an objective permanently."""
+    result = await db.objectives.delete_one({"objective_id": objective_id, "user_id": user["user_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Objectif non trouvé")
+
+    await track_event(db, user["user_id"], "objective_deleted", {"objective_id": objective_id})
+    return {"deleted": True}
+
+
+@api_router.get("/objectives/{objective_id}/next")
+@limiter.limit("20/minute")
+async def get_next_objective_session(request: Request, objective_id: str, user: dict = Depends(get_current_user)):
+    """Get the next micro-session for an objective based on curriculum progress."""
+    obj = await db.objectives.find_one(
+        {"objective_id": objective_id, "user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    if not obj:
+        raise HTTPException(status_code=404, detail="Objectif non trouvé")
+    if obj["status"] != "active":
+        raise HTTPException(status_code=400, detail="Objectif non actif")
+
+    curriculum = obj.get("curriculum", [])
+    if not curriculum:
+        return {"status": "generating", "message": "Le curriculum est en cours de génération..."}
+
+    # Find next uncompleted step
+    current_day = obj.get("current_day", 0)
+    next_step = None
+    for step in curriculum:
+        if step.get("day", 0) >= current_day and not step.get("completed"):
+            next_step = step
+            break
+
+    if not next_step:
+        # All steps completed — generate next batch or mark complete
+        return {
+            "status": "completed",
+            "message": f"Bravo ! Tu as terminé le parcours \"{obj['title']}\" !",
+            "total_sessions": obj.get("total_sessions", 0),
+            "total_minutes": obj.get("total_minutes", 0),
+        }
+
+    return {
+        "status": "ready",
+        "objective_id": objective_id,
+        "objective_title": obj["title"],
+        "step": next_step,
+        "progress": {
+            "current_day": current_day,
+            "total_days": obj["target_duration_days"],
+            "total_sessions": obj.get("total_sessions", 0),
+            "total_minutes": obj.get("total_minutes", 0),
+            "percent": round((current_day / max(obj["target_duration_days"], 1)) * 100, 1),
+        },
+    }
+
+
+@api_router.post("/objectives/{objective_id}/complete-step")
+@limiter.limit("15/minute")
+async def complete_objective_step(request: Request, objective_id: str, user: dict = Depends(get_current_user)):
+    """Mark the current step as completed after a session."""
+    body = await request.json()
+    step_index = body.get("step_index", 0)
+    actual_duration = body.get("actual_duration", 0)
+    notes = body.get("notes", "")
+    completed = body.get("completed", True)
+
+    obj = await db.objectives.find_one({"objective_id": objective_id, "user_id": user["user_id"]})
+    if not obj:
+        raise HTTPException(status_code=404, detail="Objectif non trouvé")
+
+    curriculum = obj.get("curriculum", [])
+    if step_index < 0 or step_index >= len(curriculum):
+        raise HTTPException(status_code=400, detail="Index d'étape invalide")
+
+    now = datetime.now(timezone.utc).isoformat()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    # Mark step
+    update_ops = {
+        f"curriculum.{step_index}.completed": completed,
+        f"curriculum.{step_index}.completed_at": now,
+        f"curriculum.{step_index}.actual_duration": actual_duration,
+        f"curriculum.{step_index}.notes": notes,
+    }
+
+    # Update objective stats
+    inc_ops = {"total_sessions": 1, "total_minutes": actual_duration}
+
+    # Streak for this objective
+    last_date = obj.get("last_session_date")
+    new_day = obj.get("current_day", 0)
+    obj_streak = obj.get("streak_days", 0)
+    if last_date != today:
+        new_day += 1
+        if last_date == (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d"):
+            obj_streak += 1
+        elif last_date is None:
+            obj_streak = 1
+        else:
+            obj_streak = 1  # streak broken
+
+    update_ops["current_day"] = new_day
+    update_ops["streak_days"] = obj_streak
+    update_ops["last_session_date"] = today
+
+    # Progress log entry
+    progress_entry = {
+        "day": new_day,
+        "step_index": step_index,
+        "step_title": curriculum[step_index].get("title", ""),
+        "duration": actual_duration,
+        "completed": completed,
+        "notes": notes,
+        "date": now,
+    }
+
+    await db.objectives.update_one(
+        {"objective_id": objective_id},
+        {
+            "$set": update_ops,
+            "$inc": inc_ops,
+            "$push": {"progress_log": progress_entry},
+        }
+    )
+
+    await track_event(db, user["user_id"], "objective_step_completed", {
+        "objective_id": objective_id,
+        "step_index": step_index,
+        "day": new_day,
+        "duration": actual_duration,
+    })
+
+    # Check if objective is now complete
+    completed_steps = sum(1 for s in curriculum if s.get("completed")) + (1 if completed else 0)
+    total_steps = len(curriculum)
+    is_finished = completed_steps >= total_steps
+
+    return {
+        "success": True,
+        "day": new_day,
+        "streak": obj_streak,
+        "completed_steps": completed_steps,
+        "total_steps": total_steps,
+        "is_finished": is_finished,
+        "progress_percent": round((completed_steps / max(total_steps, 1)) * 100, 1),
+    }
+
+
 # ============== REFLECTIONS / JOURNAL ==============
 
 class ReflectionCreate(BaseModel):
@@ -5242,6 +5539,11 @@ async def startup_event():
     await db.coach_messages.create_index([("user_id", 1), ("created_at", 1)])
     await db.coach_messages.create_index("created_at", expireAfterSeconds=30 * 24 * 3600)  # TTL: 30 days
     logger.info("coach_messages indexes ensured")
+
+    # Create indexes for objectives collection (parcours personnalisés)
+    await db.objectives.create_index([("user_id", 1), ("status", 1)])
+    await db.objectives.create_index("objective_id", unique=True)
+    logger.info("objectives indexes ensured")
 
     # Start daily action generation background loop
     from services.action_generator import daily_generation_loop

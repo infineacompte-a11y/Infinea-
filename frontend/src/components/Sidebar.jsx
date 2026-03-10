@@ -16,11 +16,13 @@ import {
   User,
   LogOut,
   Menu,
+  Target,
 } from "lucide-react";
 import { useAuth } from "@/App";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { to: "/objectives", label: "Mes Objectifs", icon: Target },
   { to: "/actions", label: "Bibliothèque", icon: Sparkles },
   { to: "/integrations", label: "Intégrations", icon: Calendar },
   { to: "/journal", label: "Journal", icon: Brain },
