@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger("feature_calculator")
 
-FEATURE_VERSION = 2
+FEATURE_VERSION = 3
 
 
 def _time_of_day_bucket(iso_timestamp: str) -> str:
@@ -41,6 +41,130 @@ def _median(values: list) -> float:
     if n % 2 == 0:
         return (sorted_vals[mid - 1] + sorted_vals[mid]) / 2
     return sorted_vals[mid]
+
+
+async def _compute_engagement_features(db, user_id: str) -> Dict[str, Any]:
+    """
+    Compute engagement features from event_log collection.
+    These complement session-based features with behavioral signals.
+
+    Returns dict with:
+        - suggestion_ctr: click-through rate (clicks / impressions)
+        - abandonment_rate: abandonments / starts
+        - engagement_trend: completion rate last 7d vs previous 7d (-1 to +1)
+        - session_momentum: max consecutive completed sessions (last 30d)
+        - category_fatigue: {category: abandonment trend} for declining categories
+    """
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+
+    events = await db.event_log.find(
+        {"user_id": user_id, "timestamp": {"$gte": thirty_days_ago}},
+        {"_id": 0, "event_type": 1, "timestamp": 1, "metadata": 1},
+    ).to_list(5000)
+
+    if not events:
+        return {
+            "suggestion_ctr": 0.0,
+            "abandonment_rate": 0.0,
+            "engagement_trend": 0.0,
+            "session_momentum": 0,
+            "category_fatigue": {},
+        }
+
+    # --- 1. Suggestion click-through rate ---
+    impressions = sum(1 for e in events if e["event_type"] == "suggestion_generated")
+    clicks = sum(1 for e in events if e["event_type"] == "suggestion_clicked")
+    suggestion_ctr = clicks / impressions if impressions > 0 else 0.0
+
+    # --- 2. Abandonment rate ---
+    starts = sum(1 for e in events if e["event_type"] == "action_started")
+    abandonments = sum(1 for e in events if e["event_type"] == "action_abandoned")
+    abandonment_rate = abandonments / starts if starts > 0 else 0.0
+
+    # --- 3. Engagement trend (last 7d vs previous 7d) ---
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    fourteen_days_ago = datetime.now(timezone.utc) - timedelta(days=14)
+
+    recent_completed = sum(
+        1 for e in events
+        if e["event_type"] == "action_completed" and e["timestamp"] >= seven_days_ago
+    )
+    recent_started = sum(
+        1 for e in events
+        if e["event_type"] == "action_started" and e["timestamp"] >= seven_days_ago
+    )
+    prev_completed = sum(
+        1 for e in events
+        if e["event_type"] == "action_completed"
+        and fourteen_days_ago <= e["timestamp"] < seven_days_ago
+    )
+    prev_started = sum(
+        1 for e in events
+        if e["event_type"] == "action_started"
+        and fourteen_days_ago <= e["timestamp"] < seven_days_ago
+    )
+
+    recent_rate = recent_completed / recent_started if recent_started > 0 else 0.0
+    prev_rate = prev_completed / prev_started if prev_started > 0 else 0.0
+    # Trend: positive = improving, negative = declining, clamped to [-1, +1]
+    engagement_trend = max(-1.0, min(1.0, recent_rate - prev_rate))
+
+    # --- 4. Session momentum (max consecutive completions, last 30d) ---
+    completion_events = sorted(
+        [e for e in events if e["event_type"] in ("action_completed", "action_abandoned")],
+        key=lambda e: e["timestamp"],
+    )
+    max_streak = 0
+    current_streak = 0
+    for e in completion_events:
+        if e["event_type"] == "action_completed":
+            current_streak += 1
+            max_streak = max(max_streak, current_streak)
+        else:
+            current_streak = 0
+
+    # --- 5. Category fatigue (abandonment trend per category) ---
+    # For each category: compare recent vs older abandonment rate
+    cat_recent_starts = {}
+    cat_recent_abandons = {}
+    cat_older_starts = {}
+    cat_older_abandons = {}
+
+    for e in events:
+        cat = (e.get("metadata") or {}).get("category")
+        if not cat:
+            continue
+        is_recent = e["timestamp"] >= seven_days_ago
+
+        if e["event_type"] == "action_started":
+            bucket = cat_recent_starts if is_recent else cat_older_starts
+            bucket[cat] = bucket.get(cat, 0) + 1
+        elif e["event_type"] == "action_abandoned":
+            bucket = cat_recent_abandons if is_recent else cat_older_abandons
+            bucket[cat] = bucket.get(cat, 0) + 1
+
+    category_fatigue = {}
+    all_cats = set(cat_recent_starts) | set(cat_older_starts)
+    for cat in all_cats:
+        r_starts = cat_recent_starts.get(cat, 0)
+        r_abandons = cat_recent_abandons.get(cat, 0)
+        o_starts = cat_older_starts.get(cat, 0)
+        o_abandons = cat_older_abandons.get(cat, 0)
+
+        r_rate = r_abandons / r_starts if r_starts >= 3 else 0.0
+        o_rate = o_abandons / o_starts if o_starts >= 3 else 0.0
+
+        # Only flag if abandonment is rising and recent sample is meaningful
+        if r_starts >= 3 and r_rate > o_rate + 0.1:
+            category_fatigue[cat] = round(r_rate - o_rate, 3)
+
+    return {
+        "suggestion_ctr": round(suggestion_ctr, 3),
+        "abandonment_rate": round(abandonment_rate, 3),
+        "engagement_trend": round(engagement_trend, 3),
+        "session_momentum": max_streak,
+        "category_fatigue": category_fatigue,
+    }
 
 
 async def compute_user_features(db, user_id: str) -> Dict[str, Any]:
@@ -161,6 +285,9 @@ async def compute_user_features(db, user_id: str) -> Dict[str, Any]:
         if active_days_last_30 > 0 else 0.0
     )
 
+    # 11. Engagement features from event_log
+    engagement = await _compute_engagement_features(db, user_id)
+
     return {
         "user_id": user_id,
         "completion_rate_global": round(completion_rate_global, 3),
@@ -175,6 +302,12 @@ async def compute_user_features(db, user_id: str) -> Dict[str, Any]:
         "avg_sessions_per_active_day": round(avg_sessions_per_active_day, 1),
         "total_sessions": total,
         "total_completed": completed_count,
+        # Engagement features (from event_log)
+        "suggestion_ctr": engagement["suggestion_ctr"],
+        "abandonment_rate": engagement["abandonment_rate"],
+        "engagement_trend": engagement["engagement_trend"],
+        "session_momentum": engagement["session_momentum"],
+        "category_fatigue": engagement["category_fatigue"],
         "computed_at": datetime.now(timezone.utc).isoformat(),
         "feature_version": FEATURE_VERSION,
     }
@@ -196,6 +329,12 @@ def _empty_features(user_id: str) -> Dict[str, Any]:
         "avg_sessions_per_active_day": 0.0,
         "total_sessions": 0,
         "total_completed": 0,
+        # Engagement features defaults
+        "suggestion_ctr": 0.0,
+        "abandonment_rate": 0.0,
+        "engagement_trend": 0.0,
+        "session_momentum": 0,
+        "category_fatigue": {},
         "computed_at": datetime.now(timezone.utc).isoformat(),
         "feature_version": FEATURE_VERSION,
     }

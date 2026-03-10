@@ -20,6 +20,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from services.event_tracker import track_event
+from services.feedback_loop import record_signal
 from services.scoring_engine import rank_actions_for_user, get_next_best_action
 try:
     from icalendar import Calendar as ICalCalendar
@@ -972,6 +973,12 @@ Suggère les meilleures micro-actions en fonction du temps disponible et du nive
         "top_score": ranked_actions[0].get("_score") if is_scored else None,
     })
 
+    # Record impression signals for all shown actions (feedback loop)
+    for shown_action in recommended_actions[:3]:
+        aid = shown_action.get("action_id")
+        if aid:
+            await record_signal(db, user["user_id"], aid, "impression")
+
     result = {
         "suggestion": ai_result.get("top_pick", ranked_actions[0]["title"]),
         "reasoning": ai_result.get("reasoning", "Cette action est parfaite pour le temps dont vous disposez."),
@@ -1198,7 +1205,25 @@ async def get_ai_coach(request: Request, user: dict = Depends(get_current_user))
     day_names = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
     day_of_week = day_names[datetime.now().weekday()]
 
-    prompt = f"""{user_context}{recent_info}
+    # Fetch engagement features for coaching tone
+    user_features = await db.user_features.find_one(
+        {"user_id": user["user_id"]}, {"_id": 0, "engagement_trend": 1, "session_momentum": 1, "abandonment_rate": 1}
+    )
+    engagement_context = ""
+    if user_features:
+        trend = user_features.get("engagement_trend", 0.0)
+        momentum = user_features.get("session_momentum", 0)
+        abandon = user_features.get("abandonment_rate", 0.0)
+        if trend > 0.1:
+            engagement_context = f"\nL'utilisateur est en progression (+{trend:.0%} cette semaine). Encourage et félicite."
+        elif trend < -0.1:
+            engagement_context = f"\nL'utilisateur est en baisse ({trend:.0%} cette semaine). Sois bienveillant et motivant, propose quelque chose de léger."
+        if momentum >= 5:
+            engagement_context += f"\nIl a enchaîné {momentum} sessions d'affilée récemment — souligne cet exploit."
+        if abandon > 0.4:
+            engagement_context += "\nIl abandonne souvent ses sessions — propose des actions courtes et faciles."
+
+    prompt = f"""{user_context}{recent_info}{engagement_context}
 
 Il est actuellement le {time_of_day} ({day_of_week}).
 Le streak actuel est de {user.get('streak_days', 0)} jours.
@@ -1591,6 +1616,9 @@ async def start_session(
         "action_title": action["title"],
     })
 
+    # Feedback loop: user clicked on this action
+    await record_signal(db, user["user_id"], session_data.action_id, "click")
+
     return {
         "session_id": session_id,
         "action": action,
@@ -1629,6 +1657,12 @@ async def complete_session(
         "action_title": session.get("action_title"),
         "actual_duration": completion.actual_duration,
     })
+
+    # Feedback loop: completion or abandonment signal
+    action_id = session.get("action_id")
+    if action_id:
+        signal = "completion" if completion.completed else "abandonment"
+        await record_signal(db, user["user_id"], action_id, signal)
 
     if completion.completed:
         # Update user stats
@@ -4888,6 +4922,13 @@ async def startup_event():
     await db.user_features.create_index("user_id", unique=True)
     await db.user_features.create_index("computed_at")
     logger.info("user_features indexes ensured")
+
+    # Create indexes for action_signals collection (feedback loop)
+    await db.action_signals.create_index(
+        [("user_id", 1), ("action_id", 1)], unique=True
+    )
+    await db.action_signals.create_index("updated_at")
+    logger.info("action_signals indexes ensured")
 
     # Start daily action generation background loop
     from services.action_generator import daily_generation_loop
