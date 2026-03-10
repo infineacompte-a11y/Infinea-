@@ -1187,25 +1187,90 @@ async def smart_predict(user: dict = Depends(get_current_user)):
 @api_router.get("/ai/coach")
 @limiter.limit("10/minute")
 async def get_ai_coach(request: Request, user: dict = Depends(get_current_user)):
-    """Get personalized AI coach message for dashboard"""
+    """Get personalized AI coach message for dashboard — context-aware"""
     user_context = await build_user_context(user)
+    now = datetime.now(timezone.utc)
 
-    recent_sessions = await db.user_sessions_history.find(
-        {"user_id": user["user_id"], "completed": True},
+    # --- 1. Context detection: what just happened? ---
+    # Fetch last 5 sessions (completed OR abandoned) for context
+    all_recent = await db.user_sessions_history.find(
+        {"user_id": user["user_id"]},
         {"_id": 0}
     ).sort("started_at", -1).limit(5).to_list(5)
 
+    recent_completed = [s for s in all_recent if s.get("completed")]
+    recent_abandoned = [s for s in all_recent if not s.get("completed") and s.get("completed_at")]
+
+    # Detect immediate context (what happened in the last minutes)
+    coach_mode = "default"  # default | post_completion | post_abandon | streak_milestone | comeback | first_visit
+    context_detail = ""
+
+    if not all_recent:
+        # No sessions at all — first time user
+        coach_mode = "first_visit"
+        context_detail = "\nCONTEXTE: Première visite de l'utilisateur ! Il n'a encore fait aucune session. Sois chaleureux, explique le concept des micro-actions, et encourage à faire la première."
+    else:
+        # Check for recent completion (< 10 min ago)
+        if recent_completed:
+            last_completed = recent_completed[0]
+            try:
+                completed_at = datetime.fromisoformat(last_completed.get("completed_at", ""))
+                if completed_at.tzinfo is None:
+                    completed_at = completed_at.replace(tzinfo=timezone.utc)
+                minutes_ago = (now - completed_at).total_seconds() / 60
+                if minutes_ago < 10:
+                    coach_mode = "post_completion"
+                    title = last_completed.get("action_title", "micro-action")
+                    dur = last_completed.get("actual_duration", "?")
+                    context_detail = f"\nCONTEXTE: L'utilisateur vient de TERMINER '{title}' ({dur} min) il y a {int(minutes_ago)} min ! Célèbre cette victoire et propose d'enchaîner."
+            except (ValueError, TypeError):
+                pass
+
+        # Check for recent abandonment (< 30 min ago)
+        if coach_mode == "default" and recent_abandoned:
+            last_abandoned = recent_abandoned[0]
+            try:
+                abandoned_at = datetime.fromisoformat(last_abandoned.get("completed_at", ""))
+                if abandoned_at.tzinfo is None:
+                    abandoned_at = abandoned_at.replace(tzinfo=timezone.utc)
+                minutes_ago = (now - abandoned_at).total_seconds() / 60
+                if minutes_ago < 30:
+                    coach_mode = "post_abandon"
+                    title = last_abandoned.get("action_title", "micro-action")
+                    context_detail = f"\nCONTEXTE: L'utilisateur a ABANDONNÉ '{title}' il y a {int(minutes_ago)} min. Sois bienveillant, ne culpabilise pas, et propose une action PLUS COURTE et PLUS FACILE."
+            except (ValueError, TypeError):
+                pass
+
+        # Check for streak milestones
+        streak = user.get("streak_days", 0)
+        if coach_mode == "default" and streak in (3, 7, 14, 21, 30, 50, 100):
+            coach_mode = "streak_milestone"
+            context_detail = f"\nCONTEXTE: L'utilisateur vient d'atteindre un STREAK de {streak} jours ! C'est un accomplissement majeur. Célèbre chaleureusement et motive à continuer."
+
+        # Check for inactivity (> 3 days since last session)
+        if coach_mode == "default" and all_recent:
+            try:
+                last_session_at = datetime.fromisoformat(all_recent[0].get("started_at", ""))
+                if last_session_at.tzinfo is None:
+                    last_session_at = last_session_at.replace(tzinfo=timezone.utc)
+                days_inactive = (now - last_session_at).days
+                if days_inactive >= 3:
+                    coach_mode = "comeback"
+                    context_detail = f"\nCONTEXTE: L'utilisateur n'a pas fait de session depuis {days_inactive} jours. C'est un RETOUR ! Accueille-le chaleureusement, sans culpabiliser, et propose quelque chose de très accessible."
+            except (ValueError, TypeError):
+                pass
+
     recent_info = ""
-    if recent_sessions:
-        recent_titles = [s.get("action_title", "action") for s in recent_sessions[:3]]
-        recent_info = f"\nSessions récentes: {', '.join(recent_titles)}"
+    if recent_completed:
+        recent_titles = [s.get("action_title", "action") for s in recent_completed[:3]]
+        recent_info = f"\nSessions récentes complétées: {', '.join(recent_titles)}"
 
     hour = datetime.now().hour
     time_of_day = "matin" if hour < 12 else "après-midi" if hour < 18 else "soir"
     day_names = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
     day_of_week = day_names[datetime.now().weekday()]
 
-    # Fetch engagement features for coaching tone
+    # --- 2. Engagement features for coaching tone ---
     user_features_doc = await db.user_features.find_one(
         {"user_id": user["user_id"]}, {"_id": 0, "engagement_trend": 1, "session_momentum": 1, "abandonment_rate": 1}
     )
@@ -1223,22 +1288,24 @@ async def get_ai_coach(request: Request, user: dict = Depends(get_current_user))
         if abandon > 0.4:
             engagement_context += "\nIl abandonne souvent ses sessions — propose des actions courtes et faciles."
 
-    # --- Fetch & rank candidate actions BEFORE AI call ---
+    # --- 3. Fetch & rank candidate actions ---
     profile = user.get("user_profile", {}) or {}
     goals = profile.get("goals", [])
-    query = {}
+    act_query = {}
     if goals:
-        query["category"] = {"$in": goals}
+        act_query["category"] = {"$in": goals}
     if user.get("subscription_tier") == "free":
-        query["is_premium"] = False
-    candidate_actions = await db.micro_actions.find(query, {"_id": 0}).to_list(20)
-    if not candidate_actions and goals:
+        act_query["is_premium"] = False
+    # Post-abandon: prioritize short/easy actions
+    if coach_mode == "post_abandon":
+        act_query["duration_max"] = {"$lte": 5}
+    candidate_actions = await db.micro_actions.find(act_query, {"_id": 0}).to_list(20)
+    if not candidate_actions and (goals or coach_mode == "post_abandon"):
         fallback_query = {}
         if user.get("subscription_tier") == "free":
             fallback_query["is_premium"] = False
         candidate_actions = await db.micro_actions.find(fallback_query, {"_id": 0}).to_list(20)
 
-    # Rank with scoring engine
     top_actions = candidate_actions[:5]
     try:
         from services.scoring_engine import rank_actions_for_user
@@ -1247,28 +1314,29 @@ async def get_ai_coach(request: Request, user: dict = Depends(get_current_user))
     except Exception:
         pass
 
-    # Build action menu for the AI prompt
     actions_menu = ""
     if top_actions:
         action_lines = []
         for i, a in enumerate(top_actions):
             dur = f"{a.get('duration_min', '?')}-{a.get('duration_max', '?')} min"
-            action_lines.append(f"  {i}: \"{a.get('title', 'Action')}\" ({a.get('category', '')}, {dur})")
-        actions_menu = "\n\nActions disponibles (classées par pertinence pour cet utilisateur):\n" + "\n".join(action_lines)
+            energy = a.get("energy_level", "medium")
+            action_lines.append(f"  {i}: \"{a.get('title', 'Action')}\" ({a.get('category', '')}, {dur}, énergie: {energy})")
+        actions_menu = "\n\nActions disponibles (classées par pertinence):\n" + "\n".join(action_lines)
 
-    prompt = f"""{user_context}{recent_info}{engagement_context}
+    # --- 4. Build prompt with context ---
+    prompt = f"""{user_context}{recent_info}{engagement_context}{context_detail}
 
 Il est actuellement le {time_of_day} ({day_of_week}).
 Le streak actuel est de {user.get('streak_days', 0)} jours.{actions_menu}
 
-Génère un message de coach personnalisé pour l'accueillir sur son dashboard.
-Ta suggestion DOIT correspondre à une des actions disponibles ci-dessus (indique son numéro dans chosen_action).
+Génère un message de coach personnalisé adapté au CONTEXTE ci-dessus.
+Ta suggestion DOIT correspondre à une des actions disponibles (indique son numéro dans chosen_action).
 Réponds en JSON:
 {{
-    "greeting": "Message d'accueil personnalisé (1-2 phrases)",
-    "suggestion": "Suggestion basée sur l'action choisie — explique POURQUOI cette action est idéale maintenant (1-2 phrases)",
+    "greeting": "Message d'accueil personnalisé, adapté au contexte (1-2 phrases)",
+    "suggestion": "Suggestion basée sur l'action choisie — explique POURQUOI cette action est idéale MAINTENANT vu le contexte (1-2 phrases)",
     "chosen_action": 0,
-    "context_note": "Note contextuelle courte liée au moment/streak (1 phrase)"
+    "context_note": "Note contextuelle courte (1 phrase)"
 }}"""
 
     ai_response = await call_ai(f"coach_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
@@ -1292,6 +1360,7 @@ Réponds en JSON:
     await track_event(db, user["user_id"], "ai_coach_served", {
         "ai_success": ai_result is not None,
         "time_of_day": time_of_day,
+        "coach_mode": coach_mode,
         "suggested_action_id": suggested_action_id,
     })
 
@@ -1301,6 +1370,7 @@ Réponds en JSON:
             "suggestion": ai_result.get("suggestion", "Commencez une micro-action pour avancer."),
             "suggested_action_id": suggested_action_id,
             "suggested_action_title": suggested_title,
+            "coach_mode": coach_mode,
             "context_note": ai_result.get("context_note", f"C'est le {time_of_day}, bon moment pour progresser.")
         }
 
@@ -1309,6 +1379,7 @@ Réponds en JSON:
         "suggestion": f"Que dirais-tu de : {suggested_title}" if suggested_title else "Profitez de quelques minutes pour progresser vers vos objectifs.",
         "suggested_action_id": suggested_action_id,
         "suggested_action_title": suggested_title,
+        "coach_mode": coach_mode,
         "context_note": f"C'est le {time_of_day}, idéal pour une micro-action."
     }
 

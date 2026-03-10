@@ -3,13 +3,81 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Sparkles,
-  Loader2,
   RefreshCw,
   ArrowRight,
   Brain,
   MessageCircle,
+  Trophy,
+  Heart,
+  Flame,
+  Sunrise,
+  HandHeart,
 } from "lucide-react";
 import { API, authFetch } from "@/App";
+
+// Mode-specific configuration
+const COACH_MODES = {
+  post_completion: {
+    icon: Trophy,
+    badge: "Bravo !",
+    badgeColor: "bg-emerald-500/10 text-emerald-500",
+    glowFrom: "from-emerald-500/30",
+    iconBg: "from-emerald-500/20 to-emerald-500/5",
+    iconRing: "ring-emerald-500/10",
+    iconColor: "text-emerald-500",
+    subtitle: "Après ta session",
+  },
+  post_abandon: {
+    icon: HandHeart,
+    badge: "On continue",
+    badgeColor: "bg-amber-500/10 text-amber-500",
+    glowFrom: "from-amber-500/30",
+    iconBg: "from-amber-500/20 to-amber-500/5",
+    iconRing: "ring-amber-500/10",
+    iconColor: "text-amber-500",
+    subtitle: "Pas de pression",
+  },
+  streak_milestone: {
+    icon: Flame,
+    badge: "Milestone !",
+    badgeColor: "bg-orange-500/10 text-orange-500",
+    glowFrom: "from-orange-500/30",
+    iconBg: "from-orange-500/20 to-orange-500/5",
+    iconRing: "ring-orange-500/10",
+    iconColor: "text-orange-500",
+    subtitle: "Exploit débloqué",
+  },
+  comeback: {
+    icon: Sunrise,
+    badge: "Bon retour",
+    badgeColor: "bg-sky-500/10 text-sky-500",
+    glowFrom: "from-sky-500/30",
+    iconBg: "from-sky-500/20 to-sky-500/5",
+    iconRing: "ring-sky-500/10",
+    iconColor: "text-sky-500",
+    subtitle: "Content de te revoir",
+  },
+  first_visit: {
+    icon: Heart,
+    badge: "Bienvenue",
+    badgeColor: "bg-rose-500/10 text-rose-500",
+    glowFrom: "from-rose-500/30",
+    iconBg: "from-rose-500/20 to-rose-500/5",
+    iconRing: "ring-rose-500/10",
+    iconColor: "text-rose-500",
+    subtitle: "Ta première micro-action",
+  },
+  default: {
+    icon: Brain,
+    badge: "Personnalisé",
+    badgeColor: "bg-primary/10 text-primary",
+    glowFrom: "from-primary/30",
+    iconBg: "from-primary/20 to-primary/5",
+    iconRing: "ring-primary/10",
+    iconColor: "text-primary",
+    subtitle: "Adapté à ton profil",
+  },
+};
 
 export default function AICoachCard({ onStartAction }) {
   const [coaching, setCoaching] = useState(null);
@@ -63,39 +131,41 @@ export default function AICoachCard({ onStartAction }) {
     );
   }
 
-  // Backend returns: greeting, suggestion, context_note, suggested_action_id
   const greeting = coaching?.greeting;
   const suggestion = coaching?.suggestion;
   const contextNote = coaching?.context_note;
   const actionId = coaching?.suggested_action_id;
+  const coachMode = coaching?.coach_mode || "default";
 
   if (!greeting && !suggestion) return null;
 
+  const mode = COACH_MODES[coachMode] || COACH_MODES.default;
+  const ModeIcon = mode.icon;
+
   return (
     <div className="relative mb-8 group" data-testid="ai-coach-card">
-      {/* Gradient background glow */}
-      <div className="absolute -inset-px rounded-2xl bg-gradient-to-br from-primary/30 via-primary/10 to-transparent opacity-60 group-hover:opacity-100 transition-opacity duration-500" />
+      {/* Gradient background glow — color changes by mode */}
+      <div className={`absolute -inset-px rounded-2xl bg-gradient-to-br ${mode.glowFrom} via-primary/10 to-transparent opacity-60 group-hover:opacity-100 transition-opacity duration-500`} />
 
       <Card className="relative border-primary/20 bg-card/80 backdrop-blur-sm rounded-2xl overflow-hidden">
-        {/* Subtle pattern overlay */}
         <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-primary/5 to-transparent rounded-bl-full" />
 
         <CardContent className="relative p-6">
           {/* Header row */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ring-1 ring-primary/10">
-                <Brain className="w-5 h-5 text-primary" />
+              <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${mode.iconBg} flex items-center justify-center ring-1 ${mode.iconRing}`}>
+                <ModeIcon className={`w-5 h-5 ${mode.iconColor}`} />
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-heading font-semibold text-sm">Coach IA</h3>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-medium text-primary">
+                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${mode.badgeColor}`}>
                     <Sparkles className="w-2.5 h-2.5" />
-                    Personnalisé
+                    {mode.badge}
                   </span>
                 </div>
-                <p className="text-[11px] text-muted-foreground">Adapté à votre profil</p>
+                <p className="text-[11px] text-muted-foreground">{mode.subtitle}</p>
               </div>
             </div>
             <Button
@@ -109,7 +179,7 @@ export default function AICoachCard({ onStartAction }) {
             </Button>
           </div>
 
-          {/* Greeting — the main coaching message */}
+          {/* Greeting */}
           {greeting && (
             <div className="mb-4">
               <p className="text-[15px] leading-relaxed font-medium text-foreground">
@@ -118,7 +188,7 @@ export default function AICoachCard({ onStartAction }) {
             </div>
           )}
 
-          {/* Suggestion + Context note row */}
+          {/* Suggestion + CTA */}
           <div className="flex flex-col gap-3">
             {suggestion && (
               <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/10">
@@ -127,7 +197,12 @@ export default function AICoachCard({ onStartAction }) {
                     <Sparkles className="w-4 h-4 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-primary mb-0.5">Suggestion pour vous</p>
+                    <p className="text-xs font-medium text-primary mb-0.5">
+                      {coachMode === "post_completion" ? "Enchaîne avec" :
+                       coachMode === "post_abandon" ? "Essaie plutôt" :
+                       coachMode === "first_visit" ? "Pour commencer" :
+                       "Suggestion pour toi"}
+                    </p>
                     <p className="text-sm leading-relaxed">{suggestion}</p>
                   </div>
                 </div>
@@ -138,7 +213,9 @@ export default function AICoachCard({ onStartAction }) {
                     onClick={() => onStartAction(actionId)}
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    Commencer cette action
+                    {coachMode === "post_completion" ? "Continuer sur ma lancée" :
+                     coachMode === "first_visit" ? "Faire ma première action" :
+                     "Commencer cette action"}
                     <ArrowRight className="w-3.5 h-3.5" />
                   </Button>
                 )}
