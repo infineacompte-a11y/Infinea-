@@ -4905,6 +4905,13 @@ async def startup_event():
     await db.user_features.create_index("computed_at")
     logger.info("user_features indexes ensured")
 
+    # Create indexes for action_signals collection (feedback loop)
+    await db.action_signals.create_index(
+        [("user_id", 1), ("action_id", 1)], unique=True
+    )
+    await db.action_signals.create_index("updated_at")
+    logger.info("action_signals indexes ensured")
+
     # Start daily action generation background loop
     from services.action_generator import daily_generation_loop
     asyncio.create_task(daily_generation_loop(db))
