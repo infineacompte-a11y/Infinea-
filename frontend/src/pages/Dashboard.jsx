@@ -40,6 +40,7 @@ import SlotCard from "@/components/SlotCard";
 import AICoachCard from "@/components/AICoachCard";
 import Sidebar from "@/components/Sidebar";
 import SmartPredictionCard from "@/components/SmartPredictionCard";
+import RecapCard from "@/components/RecapCard";
 
 const categoryIcons = {
   learning: BookOpen,
@@ -181,6 +182,9 @@ export default function Dashboard() {
               Que pouvez-vous accomplir maintenant ?
             </p>
           </div>
+
+          {/* Recap Card */}
+          <RecapCard />
 
           {/* AI Coach — first thing the user sees */}
           <AICoachCard onStartAction={startSession} />
