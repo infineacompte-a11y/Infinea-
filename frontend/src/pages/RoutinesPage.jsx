@@ -41,7 +41,71 @@ const TIME_OF_DAY = [
   { value: "anytime", label: "Flexible", icon: Infinity, color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" },
 ];
 
-const DURATION_PRESETS = [5, 10, 15, 20, 30];
+// ─── Duration Scroll Picker ─────────────────────────────
+function DurationPicker({ value, onChange, className = "" }) {
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -1 : 1;
+    const next = Math.max(1, Math.min(120, value + delta));
+    if (next !== value) {
+      onChange(next);
+      if (navigator.vibrate) navigator.vibrate(8);
+    }
+  };
+
+  const handleTouch = React.useRef({ startY: 0, lastVal: value });
+
+  const onTouchStart = (e) => {
+    handleTouch.current = { startY: e.touches[0].clientY, lastVal: value };
+  };
+
+  const onTouchMove = (e) => {
+    e.preventDefault();
+    const diff = handleTouch.current.startY - e.touches[0].clientY;
+    const steps = Math.round(diff / 12);
+    const next = Math.max(1, Math.min(120, handleTouch.current.lastVal + steps));
+    if (next !== value) {
+      onChange(next);
+      if (navigator.vibrate) navigator.vibrate(8);
+    }
+  };
+
+  return (
+    <div
+      className={`flex items-center gap-1 rounded-lg border border-border bg-muted/30 select-none ${className}`}
+      onWheel={handleWheel}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+    >
+      <button
+        type="button"
+        className="px-2 py-2 text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
+        onClick={() => { const n = Math.max(1, value - 1); onChange(n); if (navigator.vibrate) navigator.vibrate(8); }}
+      >
+        −
+      </button>
+      <input
+        type="number"
+        min={1}
+        max={120}
+        value={value}
+        onChange={(e) => {
+          const n = Math.max(1, Math.min(120, parseInt(e.target.value) || 1));
+          onChange(n);
+        }}
+        className="w-8 text-center text-sm font-medium bg-transparent focus:outline-none tabular-nums [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+      <span className="text-xs text-muted-foreground pr-1">min</span>
+      <button
+        type="button"
+        className="px-2 py-2 text-muted-foreground hover:text-foreground transition-colors text-sm font-medium"
+        onClick={() => { const n = Math.min(120, value + 1); onChange(n); if (navigator.vibrate) navigator.vibrate(8); }}
+      >
+        +
+      </button>
+    </div>
+  );
+}
 
 function timeLabel(tod) {
   return TIME_OF_DAY.find((t) => t.value === tod) || TIME_OF_DAY[0];
@@ -497,9 +561,9 @@ export default function RoutinesPage() {
                   <VoiceTextArea
                     value={form.description}
                     onChange={(val) => setForm((f) => ({ ...f, description: val }))}
-                    placeholder="Décris ta routine..."
-                    rows={2}
-                    maxLength={500}
+                    placeholder="Décris ta routine en détail : objectifs, contexte, ce que tu veux accomplir..."
+                    rows={4}
+                    maxLength={2000}
                   />
                 </div>
 
@@ -593,15 +657,10 @@ export default function RoutinesPage() {
                       maxLength={100}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
                     />
-                    <select
-                      className="w-20 rounded-lg border border-border bg-muted/30 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    <DurationPicker
                       value={newItem.duration_minutes}
-                      onChange={(e) => setNewItem({ ...newItem, duration_minutes: parseInt(e.target.value) })}
-                    >
-                      {DURATION_PRESETS.map((d) => (
-                        <option key={d} value={d}>{d} min</option>
-                      ))}
-                    </select>
+                      onChange={(v) => setNewItem({ ...newItem, duration_minutes: v })}
+                    />
                     <Button
                       type="button"
                       size="sm"
