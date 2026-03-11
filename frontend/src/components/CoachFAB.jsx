@@ -10,6 +10,7 @@ import {
   ArrowDown,
 } from "lucide-react";
 import { API, authFetch } from "@/App";
+import VoiceInput from "@/components/VoiceInput";
 
 const QUICK_REPLIES = [
   { label: "Que faire maintenant ?", message: "Que me conseilles-tu de faire maintenant ?" },
@@ -286,6 +287,11 @@ export default function CoachFAB() {
                   style={{ minHeight: "40px" }}
                 />
               </div>
+              <VoiceInput
+                variant="icon"
+                onResult={(text) => { setInput((prev) => prev ? prev + " " + text : text); }}
+                disabled={isSending}
+              />
               <Button
                 size="icon"
                 className="h-10 w-10 rounded-xl shrink-0"

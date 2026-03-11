@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import VoiceInput from "@/components/VoiceInput";
 import {
   BookOpen,
   Brain,
@@ -403,13 +404,21 @@ export default function JournalPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <Textarea
-              placeholder="Qu'avez-vous en tête? Comment vous sentez-vous après cette session?"
-              value={newReflection.content}
-              onChange={(e) => setNewReflection({ ...newReflection, content: e.target.value })}
-              className="min-h-[120px] resize-none"
-              data-testid="reflection-textarea"
-            />
+            <div className="relative">
+              <Textarea
+                placeholder="Qu'avez-vous en tête? Comment vous sentez-vous après cette session?"
+                value={newReflection.content}
+                onChange={(e) => setNewReflection({ ...newReflection, content: e.target.value })}
+                className="min-h-[120px] resize-none pr-12"
+                data-testid="reflection-textarea"
+              />
+              <div className="absolute right-2 bottom-2">
+                <VoiceInput
+                  variant="icon"
+                  onResult={(text) => setNewReflection((prev) => ({ ...prev, content: prev.content ? prev.content + " " + text : text }))}
+                />
+              </div>
+            </div>
 
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Comment vous sentez-vous?</label>
