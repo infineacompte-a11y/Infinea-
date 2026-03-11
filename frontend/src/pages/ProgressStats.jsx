@@ -18,9 +18,12 @@ import {
   MessageCircle,
   Brain,
   Rocket,
+  Share2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
-import { API, authFetch } from "@/App";
+import { API, authFetch, useAuth } from "@/App";
 import Sidebar from "@/components/Sidebar";
 import {
   BarChart,
@@ -65,8 +68,10 @@ const categoryLabels = {
 };
 
 export default function ProgressStats() {
+  const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [shareState, setShareState] = useState("idle"); // idle | copied
   useEffect(() => {
     fetchStats();
   }, []);
@@ -108,13 +113,53 @@ export default function ProgressStats() {
       <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
         <div className="max-w-5xl mx-auto">
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="progress-title">
-              Votre Capital-Temps
-            </h1>
-            <p className="text-muted-foreground">
-              Suivez votre progression et vos accomplissements
-            </p>
+          <div className="flex items-start justify-between mb-8">
+            <div>
+              <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="progress-title">
+                Votre Capital-Temps
+              </h1>
+              <p className="text-muted-foreground">
+                Suivez votre progression et vos accomplissements
+              </p>
+            </div>
+            {stats && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 shrink-0"
+                onClick={async () => {
+                  const name = user?.name?.split(" ")[0] || "Un utilisateur";
+                  const text = [
+                    `${name} sur InFinea :`,
+                    `${stats.total_time_invested || 0} min investies`,
+                    `${stats.total_sessions || 0} sessions complétées`,
+                    `${stats.streak_days || 0} jours de streak`,
+                    ``,
+                    `Rejoins-moi sur InFinea — programme tes micro-avancements !`,
+                  ].join("\n");
+
+                  if (navigator.share) {
+                    try {
+                      await navigator.share({ title: "Ma progression InFinea", text });
+                    } catch {
+                      // User cancelled
+                    }
+                  } else {
+                    await navigator.clipboard.writeText(text);
+                    setShareState("copied");
+                    toast.success("Copié dans le presse-papier !");
+                    setTimeout(() => setShareState("idle"), 2000);
+                  }
+                }}
+              >
+                {shareState === "copied" ? (
+                  <Check className="w-4 h-4 text-emerald-500" />
+                ) : (
+                  <Share2 className="w-4 h-4" />
+                )}
+                Partager
+              </Button>
+            )}
           </div>
 
           {isLoading ? (
