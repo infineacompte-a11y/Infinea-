@@ -161,9 +161,25 @@ const MOMENTUM_CONFIG = {
   declining: { icon: TrendingDown, color: "text-amber-500", bg: "bg-amber-500/10", border: "border-amber-500/20" },
 };
 
+const DIFFICULTY_BAR_COLORS = [
+  "",
+  "bg-emerald-500",   // 1 — Fondamental
+  "bg-blue-500",      // 2 — Débutant
+  "bg-amber-500",     // 3 — Intermédiaire
+  "bg-orange-500",    // 4 — Avancé
+  "bg-rose-500",      // 5 — Expert
+];
+
+const INSIGHT_TABS = [
+  { key: "analyse", label: "Analyse", icon: Brain },
+  { key: "activite", label: "Activité", icon: BarChart3 },
+  { key: "journal", label: "Journal", icon: MessageSquare },
+];
+
 function InsightsTab({ objectiveId }) {
   const [insights, setInsights] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [subTab, setSubTab] = useState("analyse");
 
   useEffect(() => {
     (async () => {
@@ -203,205 +219,280 @@ function InsightsTab({ objectiveId }) {
   return (
     <div className="space-y-4">
 
-      {/* ── AI Analysis Card ── */}
-      {ai_analysis && (
-        <Card className="p-4 border-primary/15 bg-gradient-to-br from-primary/5 to-transparent">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center">
-              <Brain className="w-4 h-4 text-primary" />
-            </div>
-            <h3 className="font-heading font-semibold text-sm">Analyse IA</h3>
-            {ai_analysis.momentum && (() => {
-              const mc = MOMENTUM_CONFIG[ai_analysis.momentum] || MOMENTUM_CONFIG.stable;
-              const Icon = mc.icon;
-              return (
-                <Badge variant="outline" className={`ml-auto text-[10px] ${mc.color} ${mc.bg} ${mc.border}`}>
-                  <Icon className="w-3 h-3 mr-1" />
-                  {ai_analysis.momentum_label || ai_analysis.momentum}
-                </Badge>
-              );
-            })()}
-          </div>
+      {/* ── Sub-tab navigation ── */}
+      <div className="flex border-b border-border/50">
+        {INSIGHT_TABS.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = subTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setSubTab(tab.key)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-all -mb-px ${
+                isActive
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {tab.label}
+              {tab.key === "journal" && notes?.length > 0 && (
+                <span className="text-[9px] bg-muted rounded-full px-1.5 py-0.5">{notes.length}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
-          <p className="text-sm text-foreground/80 leading-relaxed mb-3">
-            {ai_analysis.summary}
-          </p>
-
-          {ai_analysis.strengths?.length > 0 && (
-            <div className="mb-2.5">
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <Zap className="w-3 h-3 text-emerald-500" />
-                <span className="text-xs font-medium text-emerald-600">Points forts</span>
-              </div>
-              <div className="space-y-1 pl-5">
-                {ai_analysis.strengths.map((s, i) => (
-                  <p key={i} className="text-xs text-muted-foreground leading-relaxed">{s}</p>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {ai_analysis.improvements?.length > 0 && (
-            <div className="mb-2.5">
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <AlertTriangle className="w-3 h-3 text-amber-500" />
-                <span className="text-xs font-medium text-amber-600">Axes d'amélioration</span>
-              </div>
-              <div className="space-y-1 pl-5">
-                {ai_analysis.improvements.map((s, i) => (
-                  <p key={i} className="text-xs text-muted-foreground leading-relaxed">{s}</p>
-                ))}
-              </div>
+      {/* ══════════ ANALYSE TAB ══════════ */}
+      {subTab === "analyse" && (
+        <div className="space-y-4">
+          {/* Stats Grid — always visible */}
+          {stats && (
+            <div className="grid grid-cols-3 gap-2">
+              <Card className="p-3 text-center">
+                <Activity className="w-4 h-4 text-blue-500 mx-auto mb-1" />
+                <div className="text-lg font-bold">{stats.completion_rate}%</div>
+                <div className="text-[10px] text-muted-foreground">Complétion</div>
+              </Card>
+              <Card className="p-3 text-center">
+                <Clock className="w-4 h-4 text-purple-500 mx-auto mb-1" />
+                <div className="text-lg font-bold">{stats.avg_duration}<span className="text-xs font-normal">m</span></div>
+                <div className="text-[10px] text-muted-foreground">Moy. / session</div>
+              </Card>
+              <Card className="p-3 text-center">
+                <Calendar className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
+                <div className="text-lg font-bold">{stats.active_days}</div>
+                <div className="text-[10px] text-muted-foreground">Jours actifs</div>
+              </Card>
             </div>
           )}
 
-          {ai_analysis.next_advice && (
-            <div className="bg-primary/5 rounded-lg px-3 py-2 border border-primary/10 mt-2">
-              <div className="flex items-start gap-2">
-                <Lightbulb className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-                <p className="text-xs text-foreground/70 leading-relaxed">{ai_analysis.next_advice}</p>
+          {/* AI Analysis Card */}
+          {ai_analysis ? (
+            <Card className="p-4 border-primary/15 bg-gradient-to-br from-primary/5 to-transparent">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center">
+                  <Brain className="w-4 h-4 text-primary" />
+                </div>
+                <h3 className="font-heading font-semibold text-sm">Analyse IA</h3>
+                {ai_analysis.momentum && (() => {
+                  const mc = MOMENTUM_CONFIG[ai_analysis.momentum] || MOMENTUM_CONFIG.stable;
+                  const Icon = mc.icon;
+                  return (
+                    <Badge variant="outline" className={`ml-auto text-[10px] ${mc.color} ${mc.bg} ${mc.border}`}>
+                      <Icon className="w-3 h-3 mr-1" />
+                      {ai_analysis.momentum_label || ai_analysis.momentum}
+                    </Badge>
+                  );
+                })()}
               </div>
-            </div>
-          )}
-        </Card>
-      )}
 
-      {/* ── Stats Grid ── */}
-      {stats && (
-        <div className="grid grid-cols-3 gap-2">
-          <Card className="p-3 text-center">
-            <Activity className="w-4 h-4 text-blue-500 mx-auto mb-1" />
-            <div className="text-lg font-bold">{stats.completion_rate}%</div>
-            <div className="text-[10px] text-muted-foreground">Taux complétion</div>
-          </Card>
-          <Card className="p-3 text-center">
-            <Clock className="w-4 h-4 text-purple-500 mx-auto mb-1" />
-            <div className="text-lg font-bold">{stats.avg_duration}<span className="text-xs font-normal">m</span></div>
-            <div className="text-[10px] text-muted-foreground">Durée moyenne</div>
-          </Card>
-          <Card className="p-3 text-center">
-            <Calendar className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
-            <div className="text-lg font-bold">{stats.active_days}</div>
-            <div className="text-[10px] text-muted-foreground">Jours actifs</div>
-          </Card>
+              <p className="text-sm text-foreground/80 leading-relaxed mb-3">
+                {ai_analysis.summary}
+              </p>
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                {ai_analysis.strengths?.length > 0 && (
+                  <div className="bg-emerald-500/5 rounded-xl p-3 border border-emerald-500/10">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Zap className="w-3.5 h-3.5 text-emerald-500" />
+                      <span className="text-xs font-semibold text-emerald-500">Points forts</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {ai_analysis.strengths.map((s, i) => (
+                        <p key={i} className="text-[11px] text-foreground/70 leading-relaxed flex items-start gap-1.5">
+                          <span className="text-emerald-500 mt-0.5 shrink-0">•</span>
+                          {s}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {ai_analysis.improvements?.length > 0 && (
+                  <div className="bg-amber-500/5 rounded-xl p-3 border border-amber-500/10">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                      <span className="text-xs font-semibold text-amber-500">À améliorer</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {ai_analysis.improvements.map((s, i) => (
+                        <p key={i} className="text-[11px] text-foreground/70 leading-relaxed flex items-start gap-1.5">
+                          <span className="text-amber-500 mt-0.5 shrink-0">•</span>
+                          {s}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {ai_analysis.next_advice && (
+                <div className="bg-primary/5 rounded-xl px-3.5 py-2.5 border border-primary/10">
+                  <div className="flex items-start gap-2">
+                    <Lightbulb className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-[10px] font-semibold text-primary uppercase tracking-wide">Conseil</span>
+                      <p className="text-xs text-foreground/70 leading-relaxed mt-0.5">{ai_analysis.next_advice}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Card>
+          ) : (
+            <Card className="p-6 text-center border-dashed">
+              <Brain className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
+              <p className="text-xs text-muted-foreground">
+                L'analyse IA se débloque après 3 sessions complétées.
+              </p>
+            </Card>
+          )}
         </div>
       )}
 
-      {/* ── Weekly Activity ── */}
-      {weekly_activity?.length > 0 && (
-        <Card className="p-4">
-          <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-primary" />
-            Activité hebdomadaire
-          </h4>
-          <div className="space-y-2">
-            {weekly_activity.slice(-8).map((week, i) => {
-              const maxMinutes = Math.max(...weekly_activity.map((w) => w.minutes), 1);
-              const barWidth = Math.max(8, (week.minutes / maxMinutes) * 100);
-              return (
-                <div key={i} className="flex items-center gap-3">
-                  <span className="text-[10px] text-muted-foreground w-16 shrink-0 font-mono">
-                    {week.week}
-                  </span>
-                  <div className="flex-1 h-5 bg-muted/30 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-primary/60 to-primary rounded-full flex items-center justify-end pr-2 transition-all duration-500"
-                      style={{ width: `${barWidth}%` }}
-                    >
-                      {week.minutes >= 10 && (
-                        <span className="text-[9px] text-primary-foreground font-medium">{week.minutes}m</span>
+      {/* ══════════ ACTIVITÉ TAB ══════════ */}
+      {subTab === "activite" && (
+        <div className="space-y-4">
+          {/* Weekly Activity */}
+          {weekly_activity?.length > 0 && (
+            <Card className="p-4">
+              <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-primary" />
+                Activité hebdomadaire
+              </h4>
+              <div className="space-y-2.5">
+                {weekly_activity.slice(-8).map((week, i) => {
+                  const maxMinutes = Math.max(...weekly_activity.map((w) => w.minutes), 1);
+                  const barWidth = Math.max(8, (week.minutes / maxMinutes) * 100);
+                  return (
+                    <div key={i} className="flex items-center gap-3">
+                      <span className="text-[10px] text-muted-foreground w-16 shrink-0 font-mono">
+                        {week.week}
+                      </span>
+                      <div className="flex-1 h-6 bg-muted/30 rounded-lg overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-primary/60 to-primary rounded-lg flex items-center justify-end pr-2 transition-all duration-500"
+                          style={{ width: `${barWidth}%` }}
+                        >
+                          {week.minutes >= 5 && (
+                            <span className="text-[9px] text-primary-foreground font-medium">{week.minutes}m</span>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground w-12 text-right">{week.sessions} sess.</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
+          {/* Difficulty Progression */}
+          {difficulty_curve?.length > 1 && (
+            <Card className="p-4">
+              <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-primary" />
+                Progression de difficulté
+              </h4>
+              <div className="flex items-end gap-1.5 h-28 px-1">
+                {difficulty_curve.map((point, i) => {
+                  const heightPct = Math.max(15, (point.difficulty / 5) * 100);
+                  const barColor = DIFFICULTY_BAR_COLORS[point.difficulty] || "bg-primary";
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1.5 group" title={`${point.title} — ${DIFFICULTY_LABELS[point.difficulty]}`}>
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity text-[8px] text-center text-muted-foreground leading-tight max-w-[60px] truncate">
+                        {point.title}
+                      </div>
+                      <div
+                        className={`w-full rounded-t-md ${barColor} transition-all duration-300 min-h-[8px]`}
+                        style={{ height: `${heightPct}%` }}
+                      />
+                      <span className="text-[9px] text-muted-foreground font-medium">J{point.day}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between mt-3 px-1">
+                {DIFFICULTY_LABELS.slice(1).map((label, i) => (
+                  <div key={i} className="flex items-center gap-1">
+                    <div className={`w-2 h-2 rounded-sm ${DIFFICULTY_BAR_COLORS[i + 1]}`} />
+                    <span className="text-[8px] text-muted-foreground">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Full Timeline */}
+          {insights.timeline?.length > 0 && (
+            <Card className="p-4">
+              <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
+                Historique des sessions
+                <span className="text-[10px] text-muted-foreground font-normal ml-auto">{insights.timeline.length} sessions</span>
+              </h4>
+              <div className="space-y-1.5 max-h-[350px] overflow-y-auto pr-1">
+                {insights.timeline.slice().reverse().map((entry, i) => (
+                  <div key={i} className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs ${
+                    entry.completed ? "bg-muted/20" : "bg-red-500/5"
+                  }`}>
+                    {entry.completed ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                    )}
+                    <span className="font-semibold text-muted-foreground w-8 shrink-0">J{entry.day}</span>
+                    <span className="flex-1 truncate">{entry.step_title}</span>
+                    <span className="text-muted-foreground/50 shrink-0">{entry.duration}m</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ══════════ JOURNAL TAB ══════════ */}
+      {subTab === "journal" && (
+        <div className="space-y-4">
+          {notes?.length > 0 ? (
+            <div className="space-y-3">
+              {notes.slice().reverse().map((entry, i) => (
+                <Card key={i} className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="outline" className="text-[10px] bg-primary/5 border-primary/15 text-primary">
+                      Jour {entry.day}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground flex-1 truncate">{entry.step_title}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {entry.duration > 0 && (
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                          <Clock className="w-2.5 h-2.5" />
+                          {entry.duration}m
+                        </span>
+                      )}
+                      {entry.date && (
+                        <span className="text-[10px] text-muted-foreground/50">
+                          {new Date(entry.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                        </span>
                       )}
                     </div>
                   </div>
-                  <span className="text-[10px] text-muted-foreground w-8 text-right">{week.sessions}s</span>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
-
-      {/* ── Difficulty Progression ── */}
-      {difficulty_curve?.length > 2 && (
-        <Card className="p-4">
-          <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-primary" />
-            Progression de difficulté
-          </h4>
-          <div className="flex items-end gap-1 h-20">
-            {difficulty_curve.map((point, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1" title={point.title}>
-                <div
-                  className={`w-full rounded-t transition-all ${
-                    DIFFICULTY_COLORS[point.difficulty]?.replace("text-", "bg-").replace("500", "500/60") || "bg-primary/40"
-                  }`}
-                  style={{ height: `${Math.max(12, (point.difficulty / 5) * 100)}%` }}
-                />
-                <span className="text-[8px] text-muted-foreground">J{point.day}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center justify-between mt-2 text-[9px] text-muted-foreground">
-            <span>Fondamental</span>
-            <span>Expert</span>
-          </div>
-        </Card>
-      )}
-
-      {/* ── Notes Journal ── */}
-      {notes?.length > 0 && (
-        <Card className="p-4">
-          <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-primary" />
-            Journal de notes
-            <span className="text-[10px] text-muted-foreground font-normal ml-auto">{notes.length} entrée{notes.length > 1 ? "s" : ""}</span>
-          </h4>
-          <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
-            {notes.slice().reverse().map((entry, i) => (
-              <div key={i} className="border-l-2 border-primary/20 pl-3 py-1">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-[10px] font-medium text-primary">Jour {entry.day}</span>
-                  <span className="text-[10px] text-muted-foreground">{entry.step_title}</span>
-                  {entry.duration > 0 && (
-                    <span className="text-[10px] text-muted-foreground/50 ml-auto">{entry.duration}m</span>
-                  )}
-                </div>
-                <p className="text-sm text-foreground/80 leading-relaxed">{entry.notes}</p>
-                {entry.date && (
-                  <span className="text-[9px] text-muted-foreground/40 mt-0.5 block">
-                    {new Date(entry.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* ── Timeline (all sessions) ── */}
-      {insights.timeline?.length > 0 && (
-        <Card className="p-4">
-          <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-primary" />
-            Historique complet
-          </h4>
-          <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
-            {insights.timeline.slice().reverse().map((entry, i) => (
-              <div key={i} className={`flex items-center gap-3 px-2.5 py-1.5 rounded-lg text-xs ${
-                entry.completed ? "bg-muted/20" : "bg-red-500/5"
-              }`}>
-                {entry.completed ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                ) : (
-                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                )}
-                <span className="font-medium text-muted-foreground w-10 shrink-0">J{entry.day}</span>
-                <span className="flex-1 truncate">{entry.step_title}</span>
-                <span className="text-muted-foreground/50 shrink-0">{entry.duration}m</span>
-              </div>
-            ))}
-          </div>
-        </Card>
+                  <p className="text-sm text-foreground/80 leading-relaxed">{entry.notes}</p>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card className="p-8 text-center border-dashed">
+              <MessageSquare className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
+              <h4 className="font-heading font-semibold text-sm mb-1">Aucune note pour l'instant</h4>
+              <p className="text-xs text-muted-foreground">
+                Ajoute des notes lors de tes sessions pour les retrouver ici.
+              </p>
+            </Card>
+          )}
+        </div>
       )}
     </div>
   );
