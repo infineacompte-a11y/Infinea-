@@ -18,11 +18,13 @@ import {
   Menu,
   Target,
   CalendarClock,
+  Zap,
 } from "lucide-react";
 import { useAuth } from "@/App";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { to: "/my-day", label: "Ma Journée", icon: Zap },
   { to: "/objectives", label: "Mes Objectifs", icon: Target },
   { to: "/routines", label: "Mes Routines", icon: CalendarClock },
   { to: "/actions", label: "Bibliothèque", icon: Sparkles },

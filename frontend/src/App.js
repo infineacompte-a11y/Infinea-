@@ -24,6 +24,7 @@ import ChallengesPage from "@/pages/ChallengesPage";
 import ObjectivesPage from "@/pages/ObjectivesPage";
 import ObjectiveDetailPage from "@/pages/ObjectiveDetailPage";
 import RoutinesPage from "@/pages/RoutinesPage";
+import MyDayPage from "@/pages/MyDayPage";
 import PrivacyPage from "@/pages/PrivacyPage";
 import CGUPage from "@/pages/CGUPage";
 import NotFound from "@/pages/NotFound";
@@ -363,6 +364,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <RoutinesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-day"
+        element={
+          <ProtectedRoute>
+            <MyDayPage />
           </ProtectedRoute>
         }
       />
