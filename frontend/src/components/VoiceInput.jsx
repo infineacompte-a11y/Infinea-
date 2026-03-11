@@ -278,21 +278,38 @@ export function VoiceTextArea({
         </div>
       )}
 
-      <div className="relative">
-        <textarea
-          className={`w-full rounded-lg border bg-muted/30 px-3 py-2.5 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none transition-all duration-200 ${
-            listening
-              ? "border-red-500/30 ring-1 ring-red-500/10 rounded-t-none"
-              : "border-border"
-          } ${textareaClassName}`}
-          placeholder={placeholder}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          rows={rows}
-          maxLength={maxLength}
-          disabled={disabled}
-        />
-        <div className="absolute right-2 bottom-2">
+      {/* Textarea */}
+      <textarea
+        className={`w-full rounded-lg border bg-muted/30 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none transition-all duration-200 ${
+          listening
+            ? "border-red-500/30 ring-1 ring-red-500/10 rounded-t-none rounded-b-none"
+            : "border-border rounded-b-none"
+        } ${textareaClassName}`}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+        maxLength={maxLength}
+        disabled={disabled}
+      />
+
+      {/* Toolbar below textarea with mic button */}
+      <div className={`flex items-center justify-between px-2 py-1.5 border border-t-0 rounded-b-lg transition-colors ${
+        listening ? "border-red-500/30 bg-red-500/3" : "border-border bg-muted/20"
+      }`}>
+        <div className="flex items-center gap-1.5">
+          {maxLength && (
+            <span className={`text-[10px] ${
+              value.length > maxLength * 0.8 ? "text-amber-500" : "text-muted-foreground/40"
+            }`}>
+              {value.length}/{maxLength}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {listening && (
+            <span className="text-[10px] text-red-500/60 font-medium mr-1">Dicte ton texte...</span>
+          )}
           <VoiceInput
             variant="icon"
             textValue={value}

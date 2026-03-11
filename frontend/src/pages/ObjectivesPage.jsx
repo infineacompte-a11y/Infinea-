@@ -370,11 +370,6 @@ export default function ObjectivesPage() {
                     rows={4}
                     maxLength={1500}
                   />
-                  <div className="flex justify-end mt-1">
-                    <span className={`text-[10px] ${form.description.length > 1200 ? "text-amber-500" : "text-muted-foreground/50"}`}>
-                      {form.description.length}/1500
-                    </span>
-                  </div>
                 </div>
 
                 {/* Category — all 11 categories */}
