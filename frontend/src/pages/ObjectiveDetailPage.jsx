@@ -153,6 +153,135 @@ function CurriculumStep({ step, index, isNext, onStart }) {
   );
 }
 
+// ─── SkillsTab (C.3 — Skill Graph Visualization) ───
+
+const MASTERY_COLORS = {
+  "Non démarré": { bar: "bg-muted", text: "text-muted-foreground", bg: "bg-muted/20" },
+  "Débutant": { bar: "bg-blue-500", text: "text-blue-500", bg: "bg-blue-500/10" },
+  "En progression": { bar: "bg-emerald-500", text: "text-emerald-500", bg: "bg-emerald-500/10" },
+  "Intermédiaire": { bar: "bg-amber-500", text: "text-amber-500", bg: "bg-amber-500/10" },
+  "Avancé": { bar: "bg-orange-500", text: "text-orange-500", bg: "bg-orange-500/10" },
+  "Maîtrisé": { bar: "bg-primary", text: "text-primary", bg: "bg-primary/10" },
+};
+
+function SkillsTab({ objectiveId }) {
+  const [data, setData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await authFetch(`${API}/objectives/${objectiveId}/skills`);
+        if (res.ok) setData(await res.json());
+      } catch {
+        // silent
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [objectiveId]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!data || !data.skills?.length) {
+    return (
+      <Card className="p-8 text-center">
+        <Brain className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+        <h3 className="font-heading font-semibold mb-1">Pas encore de compétences</h3>
+        <p className="text-sm text-muted-foreground">
+          Complète quelques sessions pour voir ta carte de compétences.
+        </p>
+      </Card>
+    );
+  }
+
+  const { skills, overall_mastery, level, review_needed } = data;
+  const overallColor = MASTERY_COLORS[level] || MASTERY_COLORS["Non démarré"];
+
+  return (
+    <div className="space-y-4">
+      {/* Overall mastery card */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Maîtrise globale</p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-2xl font-bold tabular-nums">{overall_mastery}%</span>
+              <Badge variant="outline" className={`text-[10px] ${overallColor.text} ${overallColor.bg} border-current/20`}>
+                {level}
+              </Badge>
+            </div>
+          </div>
+          {review_needed > 0 && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <RotateCcw className="w-3.5 h-3.5 text-amber-500" />
+              <span className="text-xs font-medium text-amber-600">{review_needed} à réviser</span>
+            </div>
+          )}
+        </div>
+        <Progress value={overall_mastery} className="h-2.5" />
+      </Card>
+
+      {/* Skills grid */}
+      <div className="space-y-2">
+        {skills.map((skill) => {
+          const mc = MASTERY_COLORS[skill.level] || MASTERY_COLORS["Non démarré"];
+          return (
+            <Card key={skill.name} className={`p-4 transition-all ${skill.needs_review ? "border-amber-500/30 bg-amber-500/3" : ""}`}>
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium text-sm truncate">{skill.name}</h3>
+                    {skill.needs_review && (
+                      <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-600 border-amber-500/20 shrink-0">
+                        <RotateCcw className="w-2.5 h-2.5 mr-0.5" />
+                        Révision
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                    <span>{skill.sessions_done}/{skill.sessions_total} sessions</span>
+                    <span>{skill.total_minutes} min</span>
+                    <Badge variant="outline" className={`text-[9px] ${mc.text} ${mc.bg} border-current/20`}>
+                      {skill.level}
+                    </Badge>
+                  </div>
+                </div>
+                <span className={`text-lg font-bold tabular-nums ${mc.text}`}>{skill.mastery}%</span>
+              </div>
+              <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${mc.bar}`}
+                  style={{ width: `${skill.mastery}%` }}
+                />
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-2 pt-2">
+        {["Débutant", "En progression", "Intermédiaire", "Avancé", "Maîtrisé"].map((lvl) => {
+          const mc = MASTERY_COLORS[lvl];
+          return (
+            <div key={lvl} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <div className={`w-2 h-2 rounded-full ${mc.bar}`} />
+              {lvl}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── InsightsTab ───
 
 const MOMENTUM_CONFIG = {
@@ -729,6 +858,17 @@ export default function ObjectiveDetailPage() {
               Parcours
             </button>
             <button
+              onClick={() => setActiveTab("skills")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === "skills"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Brain className="w-4 h-4" />
+              Skills
+            </button>
+            <button
               onClick={() => setActiveTab("insights")}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 activeTab === "insights"
@@ -745,7 +885,9 @@ export default function ObjectiveDetailPage() {
           </div>
 
           {/* ── Tab Content ── */}
-          {activeTab === "parcours" ? (
+          {activeTab === "skills" ? (
+            <SkillsTab objectiveId={objectiveId} />
+          ) : activeTab === "parcours" ? (
             <>
               {/* Curriculum header */}
               <div className="mb-4 flex items-center justify-between">

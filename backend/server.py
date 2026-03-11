@@ -5027,10 +5027,42 @@ async def complete_objective_step(request: Request, objective_id: str, user: dic
         "duration": actual_duration,
     })
 
+    # ── Adaptive difficulty (C.4) ──────────────
+    # Track performance signal for this step
+    step = curriculum[step_index]
+    expected_min = step.get("duration_min", 5)
+    expected_max = step.get("duration_max", 15)
+    difficulty = step.get("difficulty", 1)
+
+    performance = "normal"
+    if completed and actual_duration > 0:
+        if actual_duration < expected_min * 0.8:
+            performance = "fast"  # Completed much faster than expected
+        elif actual_duration > expected_max * 1.3:
+            performance = "slow"  # Took much longer than expected
+    elif not completed:
+        performance = "abandoned"
+
+    # Store performance signal on the step
+    await db.objectives.update_one(
+        {"objective_id": objective_id},
+        {"$set": {
+            f"curriculum.{step_index}.performance": performance,
+            f"curriculum.{step_index}.difficulty_feedback": difficulty,
+        }}
+    )
+
     # Check if objective is now complete
     completed_steps = sum(1 for s in curriculum if s.get("completed")) + (1 if completed else 0)
     total_steps = len(curriculum)
     is_finished = completed_steps >= total_steps
+
+    # Adaptive hint for frontend
+    adaptive_hint = None
+    if performance == "fast":
+        adaptive_hint = "Tu progresses vite ! Les prochaines sessions seront plus stimulantes."
+    elif performance == "abandoned":
+        adaptive_hint = "Pas de souci. La prochaine session sera un peu plus douce."
 
     return {
         "success": True,
@@ -5040,6 +5072,132 @@ async def complete_objective_step(request: Request, objective_id: str, user: dic
         "total_steps": total_steps,
         "is_finished": is_finished,
         "progress_percent": round((completed_steps / max(total_steps, 1)) * 100, 1),
+        "performance": performance,
+        "adaptive_hint": adaptive_hint,
+    }
+
+
+# ============== SKILL GRAPH + ADAPTIVE DIFFICULTY ==============
+
+@api_router.get("/objectives/{objective_id}/skills")
+@limiter.limit("20/minute")
+async def get_objective_skills(request: Request, objective_id: str, user: dict = Depends(get_current_user)):
+    """Compute skill graph from curriculum focus fields and completion data.
+
+    Returns skills with mastery %, level labels, and spaced repetition flags.
+    """
+    obj = await db.objectives.find_one(
+        {"objective_id": objective_id, "user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    if not obj:
+        raise HTTPException(status_code=404, detail="Objectif non trouvé")
+
+    curriculum = obj.get("curriculum", [])
+    if not curriculum:
+        return {"skills": [], "overall_mastery": 0, "level": "Non démarré"}
+
+    # ── Aggregate by focus (skill) ──────────────
+    skill_data = {}
+    for step in curriculum:
+        focus = (step.get("focus") or "").strip()
+        if not focus:
+            continue
+        if focus not in skill_data:
+            skill_data[focus] = {
+                "total": 0,
+                "completed": 0,
+                "total_minutes": 0,
+                "max_difficulty": 0,
+                "last_practiced": None,
+                "steps": [],
+            }
+        sd = skill_data[focus]
+        sd["total"] += 1
+        sd["max_difficulty"] = max(sd["max_difficulty"], step.get("difficulty", 1))
+        if step.get("completed"):
+            sd["completed"] += 1
+            sd["total_minutes"] += step.get("actual_duration", step.get("duration_min", 5))
+            completed_at = step.get("completed_at")
+            if completed_at and (not sd["last_practiced"] or completed_at > sd["last_practiced"]):
+                sd["last_practiced"] = completed_at
+
+    # ── Build skill cards ───────────────────────
+    now = datetime.now(timezone.utc)
+    skills = []
+    for name, data in skill_data.items():
+        mastery = round((data["completed"] / max(data["total"], 1)) * 100)
+
+        # Level label
+        if mastery == 0:
+            level = "Non démarré"
+        elif mastery < 25:
+            level = "Débutant"
+        elif mastery < 50:
+            level = "En progression"
+        elif mastery < 75:
+            level = "Intermédiaire"
+        elif mastery < 100:
+            level = "Avancé"
+        else:
+            level = "Maîtrisé"
+
+        # Spaced repetition flag: needs review if last practiced >3 days ago
+        needs_review = False
+        if data["last_practiced"]:
+            try:
+                last_dt = datetime.fromisoformat(data["last_practiced"])
+                if last_dt.tzinfo is None:
+                    last_dt = last_dt.replace(tzinfo=timezone.utc)
+                days_since = (now - last_dt).days
+                needs_review = days_since >= 3 and mastery < 100
+            except (ValueError, TypeError):
+                pass
+        else:
+            needs_review = False
+
+        skills.append({
+            "name": name,
+            "mastery": mastery,
+            "level": level,
+            "sessions_done": data["completed"],
+            "sessions_total": data["total"],
+            "total_minutes": data["total_minutes"],
+            "max_difficulty": data["max_difficulty"],
+            "needs_review": needs_review,
+            "last_practiced": data["last_practiced"],
+        })
+
+    # Sort by mastery ascending (weakest first — shows where to focus)
+    skills.sort(key=lambda s: s["mastery"])
+
+    # ── Overall mastery ─────────────────────────
+    total_completed = sum(1 for s in curriculum if s.get("completed"))
+    total_steps = len(curriculum)
+    overall_mastery = round((total_completed / max(total_steps, 1)) * 100)
+
+    if overall_mastery == 0:
+        overall_level = "Non démarré"
+    elif overall_mastery < 25:
+        overall_level = "Débutant"
+    elif overall_mastery < 50:
+        overall_level = "En progression"
+    elif overall_mastery < 75:
+        overall_level = "Intermédiaire"
+    elif overall_mastery < 100:
+        overall_level = "Avancé"
+    else:
+        overall_level = "Maîtrisé"
+
+    # Skills needing review count
+    review_count = sum(1 for s in skills if s["needs_review"])
+
+    return {
+        "skills": skills,
+        "skills_count": len(skills),
+        "overall_mastery": overall_mastery,
+        "level": overall_level,
+        "review_needed": review_count,
     }
 
 
