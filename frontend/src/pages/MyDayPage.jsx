@@ -59,6 +59,139 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// ─── Smart CTAs — contextual actions based on day state ───
+function SmartCTAs({ routines, objectives, routinesCompletedToday, todaySessions, navigate }) {
+  const allRoutinesDone = routines.length > 0 && routinesCompletedToday.length >= routines.length;
+  const hasRoutines = routines.length > 0;
+  const hasObjectives = objectives.length > 0;
+  const currentTod = getCurrentTimeOfDay();
+
+  // Find the next undone routine for current time of day
+  const today = todayISO();
+  const nextRoutine = routines.find(
+    (r) =>
+      !r.last_completed_at?.startsWith(today) &&
+      (r.time_of_day === currentTod || r.time_of_day === "anytime")
+  ) || routines.find((r) => !r.last_completed_at?.startsWith(today));
+
+  // Find the objective with most momentum (highest streak or most recent activity)
+  const priorityObjective = objectives.length > 0
+    ? [...objectives].sort((a, b) => (b.streak_days || 0) - (a.streak_days || 0))[0]
+    : null;
+
+  // ── Determine smart actions ──────────────
+  const actions = [];
+
+  if (allRoutinesDone && todaySessions.length > 0) {
+    // Everything done — celebrate
+    actions.push({
+      label: "Voir ma progression",
+      icon: Trophy,
+      variant: "default",
+      className: "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0",
+      onClick: () => navigate("/progress"),
+    });
+    if (priorityObjective?.nextStep) {
+      actions.push({
+        label: `Bonus : ${priorityObjective.nextStep.title}`,
+        sublabel: priorityObjective.title,
+        icon: Sparkles,
+        variant: "outline",
+        className: "border-primary/30 text-primary hover:bg-primary/10",
+        onClick: () => navigate(`/objectives/${priorityObjective.objective_id}`),
+      });
+    }
+  } else if (!hasRoutines && !hasObjectives) {
+    // Nothing set up
+    actions.push({
+      label: "Créer mon premier objectif",
+      icon: Target,
+      variant: "default",
+      onClick: () => navigate("/objectives"),
+    });
+    actions.push({
+      label: "Créer une routine",
+      icon: CalendarClock,
+      variant: "outline",
+      onClick: () => navigate("/routines"),
+    });
+  } else {
+    // Normal day — smart next action
+    if (nextRoutine) {
+      actions.push({
+        label: `Lancer : ${nextRoutine.name}`,
+        sublabel: `${nextRoutine.total_minutes || 0} min · ${(nextRoutine.items || []).length} actions`,
+        icon: Play,
+        variant: "default",
+        onClick: () => navigate("/routines"),
+      });
+    } else if (!hasRoutines) {
+      actions.push({
+        label: "Planifier des routines",
+        icon: CalendarClock,
+        variant: "outline",
+        className: "border-primary/30",
+        onClick: () => navigate("/routines"),
+      });
+    }
+
+    if (priorityObjective?.nextStep) {
+      actions.push({
+        label: `Continuer : ${priorityObjective.title}`,
+        sublabel: `Prochaine session — ${priorityObjective.nextStep.title}`,
+        icon: Target,
+        variant: nextRoutine ? "outline" : "default",
+        className: nextRoutine ? "border-primary/30" : "",
+        onClick: () => navigate(`/objectives/${priorityObjective.objective_id}`),
+      });
+    } else if (!hasObjectives) {
+      actions.push({
+        label: "Définir un objectif",
+        icon: Target,
+        variant: "outline",
+        className: "border-primary/30",
+        onClick: () => navigate("/objectives"),
+      });
+    }
+  }
+
+  if (actions.length === 0) return null;
+
+  return (
+    <div className="mt-8 pt-5 border-t border-border/30">
+      <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium mb-3 text-center">
+        {allRoutinesDone && todaySessions.length > 0
+          ? "Journée accomplie"
+          : "Prochaine action recommandée"}
+      </p>
+      <div className="space-y-2">
+        {actions.map((action, i) => {
+          const Icon = action.icon;
+          return (
+            <Button
+              key={i}
+              variant={action.variant}
+              className={`w-full h-auto py-3 px-4 justify-start gap-3 ${action.className || ""}`}
+              onClick={action.onClick}
+            >
+              <div className="w-9 h-9 rounded-xl bg-background/20 flex items-center justify-center shrink-0">
+                <Icon className="w-5 h-5" />
+              </div>
+              <div className="text-left flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{action.label}</p>
+                {action.sublabel && (
+                  <p className="text-[11px] opacity-70 truncate">{action.sublabel}</p>
+                )}
+              </div>
+              <ChevronRight className="w-4 h-4 opacity-50 shrink-0" />
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────
 export default function MyDayPage() {
   const navigate = useNavigate();
@@ -405,27 +538,14 @@ export default function MyDayPage() {
                 </div>
               )}
 
-              {/* ── Quick link to add more ───────── */}
-              <div className="flex items-center justify-center gap-3 mt-8 pt-4 border-t border-border/30">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs text-muted-foreground gap-1.5"
-                  onClick={() => navigate("/routines")}
-                >
-                  <CalendarClock className="w-3.5 h-3.5" />
-                  Gérer les routines
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs text-muted-foreground gap-1.5"
-                  onClick={() => navigate("/objectives")}
-                >
-                  <Target className="w-3.5 h-3.5" />
-                  Gérer les objectifs
-                </Button>
-              </div>
+              {/* ── Smart CTAs — contextual based on day state ─── */}
+              <SmartCTAs
+                routines={routines}
+                objectives={objectivesWithNext}
+                routinesCompletedToday={routinesCompletedToday}
+                todaySessions={todaySessions}
+                navigate={navigate}
+              />
             </>
           )}
         </div>
