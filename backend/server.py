@@ -4379,6 +4379,141 @@ async def mark_notifications_read(
     
     return {"message": "Notifications marked as read"}
 
+# ============== SMART NOTIFICATIONS (Proactive Coach) ==============
+
+@api_router.get("/notifications/smart")
+@limiter.limit("10/minute")
+async def get_smart_notifications(request: Request, user: dict = Depends(get_current_user)):
+    """Generate proactive smart notifications based on user behavior patterns."""
+    now = datetime.now(timezone.utc)
+    today = now.date()
+    today_iso = today.isoformat()
+    user_id = user["user_id"]
+    smart_notifs = []
+
+    # ── 1. Streak en danger ─────────────────────
+    streak = user.get("streak_days", 0)
+    last_session_raw = user.get("last_session_date")
+    if streak > 0 and last_session_raw:
+        if isinstance(last_session_raw, str):
+            last_date = datetime.fromisoformat(last_session_raw).date()
+        else:
+            last_date = last_session_raw.date() if hasattr(last_session_raw, "date") else last_session_raw
+        days_since = (today - last_date).days
+        if days_since >= 1:
+            smart_notifs.append({
+                "id": "streak_danger",
+                "type": "streak_alert",
+                "priority": 1,
+                "title": f"Ton streak de {streak} jours est en danger !",
+                "message": f"Tu n'as pas pratiqué depuis {days_since} jour{'s' if days_since > 1 else ''}. Un petit 5 min suffit pour garder ta série.",
+                "icon": "flame",
+                "action_label": "Faire une micro-action",
+                "action_url": "/dashboard",
+            })
+
+    # ── 2. Objectifs négligés ───────────────────
+    objectives = await db.objectives.find(
+        {"user_id": user_id, "status": "active", "deleted": {"$ne": True}},
+        {"_id": 0, "objective_id": 1, "title": 1, "last_session_at": 1, "streak_days": 1, "current_day": 1}
+    ).to_list(20)
+
+    for obj in objectives:
+        last_obj_session = obj.get("last_session_at")
+        if last_obj_session:
+            if isinstance(last_obj_session, str):
+                last_obj_date = datetime.fromisoformat(last_obj_session).date()
+            else:
+                last_obj_date = last_obj_session.date() if hasattr(last_obj_session, "date") else today
+            days_idle = (today - last_obj_date).days
+            if days_idle >= 3:
+                smart_notifs.append({
+                    "id": f"obj_idle_{obj['objective_id']}",
+                    "type": "objective_nudge",
+                    "priority": 2,
+                    "title": f"Tu n'as pas avancé sur « {obj['title'][:40]} »",
+                    "message": f"{days_idle} jours sans session. Reprends avec une micro-session de 5 min !",
+                    "icon": "target",
+                    "action_label": "Reprendre",
+                    "action_url": f"/objectives/{obj['objective_id']}",
+                })
+
+    # ── 3. Routines non faites aujourd'hui ──────
+    routines = await db.routines.find(
+        {"user_id": user_id, "is_active": True, "deleted": {"$ne": True}},
+        {"_id": 0, "routine_id": 1, "name": 1, "time_of_day": 1, "total_minutes": 1, "last_completed_at": 1}
+    ).to_list(20)
+
+    hour = now.hour
+    current_tod = "morning" if hour < 12 else ("afternoon" if hour < 18 else "evening")
+    tod_order = {"morning": 0, "afternoon": 1, "evening": 2, "anytime": 3}
+
+    for routine in routines:
+        last_done = routine.get("last_completed_at", "")
+        if last_done and last_done.startswith(today_iso):
+            continue  # Already done today
+
+        rtod = routine.get("time_of_day", "anytime")
+        # Only nudge for current or past time slots (don't nag about evening routine at 8am)
+        if rtod != "anytime" and tod_order.get(rtod, 3) > tod_order.get(current_tod, 3):
+            continue
+
+        smart_notifs.append({
+            "id": f"routine_pending_{routine['routine_id']}",
+            "type": "routine_reminder",
+            "priority": 3 if rtod == current_tod else 4,
+            "title": f"Routine « {routine['name'][:40]} » pas encore faite",
+            "message": f"{routine.get('total_minutes', 0)} min — c'est le moment idéal pour la lancer.",
+            "icon": "calendar-clock",
+            "action_label": "Lancer",
+            "action_url": "/routines",
+        })
+
+    # ── 4. Milestone atteint (celebrate) ────────
+    for obj in objectives:
+        curr_day = obj.get("current_day", 0)
+        if curr_day in (7, 14, 30, 60, 90):
+            smart_notifs.append({
+                "id": f"milestone_{obj['objective_id']}_{curr_day}",
+                "type": "milestone",
+                "priority": 2,
+                "title": f"Jour {curr_day} sur « {obj['title'][:30]} » !",
+                "message": f"Bravo pour ta régularité ! Continue comme ça.",
+                "icon": "trophy",
+                "action_label": "Voir mon parcours",
+                "action_url": f"/objectives/{obj['objective_id']}",
+            })
+
+    # ── 5. Conseil énergie (time-based) ─────────
+    if hour >= 6 and hour < 10 and not smart_notifs:
+        smart_notifs.append({
+            "id": "energy_morning",
+            "type": "coach_tip",
+            "priority": 5,
+            "title": "Le matin, ton énergie est à son max",
+            "message": "C'est le meilleur moment pour les tâches qui demandent de la concentration.",
+            "icon": "zap",
+            "action_label": "Ma Journée",
+            "action_url": "/my-day",
+        })
+    elif hour >= 13 and hour < 15 and not smart_notifs:
+        smart_notifs.append({
+            "id": "energy_afternoon",
+            "type": "coach_tip",
+            "priority": 5,
+            "title": "Début d'après-midi : idéal pour des tâches légères",
+            "message": "Profite de ce créneau pour une micro-action créative ou de bien-être.",
+            "icon": "zap",
+            "action_label": "Ma Journée",
+            "action_url": "/my-day",
+        })
+
+    # Sort by priority (lower = more important)
+    smart_notifs.sort(key=lambda n: n.get("priority", 99))
+
+    return {"notifications": smart_notifs[:8], "count": len(smart_notifs)}
+
+
 # ============== B2B DASHBOARD ==============
 
 class CompanyCreate(BaseModel):
