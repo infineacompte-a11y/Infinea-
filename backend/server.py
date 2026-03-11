@@ -5617,7 +5617,7 @@ async def create_routine(request: Request, routine: RoutineCreate, user: dict = 
         "routine_id": routine_id,
         "user_id": user["user_id"],
         "name": routine.name.strip()[:100],
-        "description": (routine.description or "").strip()[:500],
+        "description": (routine.description or "").strip()[:2000],
         "time_of_day": routine.time_of_day if routine.time_of_day in ("morning", "afternoon", "evening", "anytime") else "morning",
         "items": validated_items,
         "is_active": True,
@@ -5672,7 +5672,7 @@ async def update_routine(request: Request, routine_id: str, update: RoutineUpdat
     if update.name is not None:
         updates["name"] = update.name.strip()[:100]
     if update.description is not None:
-        updates["description"] = update.description.strip()[:500]
+        updates["description"] = update.description.strip()[:2000]
     if update.time_of_day is not None and update.time_of_day in ("morning", "afternoon", "evening", "anytime"):
         updates["time_of_day"] = update.time_of_day
     if update.is_active is not None:
