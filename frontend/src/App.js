@@ -23,6 +23,7 @@ import OnboardingPage from "@/pages/OnboardingPage";
 import ChallengesPage from "@/pages/ChallengesPage";
 import ObjectivesPage from "@/pages/ObjectivesPage";
 import ObjectiveDetailPage from "@/pages/ObjectiveDetailPage";
+import RoutinesPage from "@/pages/RoutinesPage";
 import PrivacyPage from "@/pages/PrivacyPage";
 import CGUPage from "@/pages/CGUPage";
 import NotFound from "@/pages/NotFound";
@@ -354,6 +355,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ObjectiveDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/routines"
+        element={
+          <ProtectedRoute>
+            <RoutinesPage />
           </ProtectedRoute>
         }
       />
