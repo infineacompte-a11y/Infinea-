@@ -30,6 +30,15 @@ import {
   BookOpen,
   Lightbulb,
   Trophy,
+  BarChart3,
+  Brain,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  MessageSquare,
+  Activity,
+  Zap,
+  AlertTriangle,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { VoiceTextArea } from "@/components/VoiceInput";
@@ -38,6 +47,8 @@ import { toast } from "sonner";
 
 const DIFFICULTY_LABELS = ["", "Fondamental", "Débutant", "Intermédiaire", "Avancé", "Expert"];
 const DIFFICULTY_COLORS = ["", "text-emerald-500", "text-blue-500", "text-amber-500", "text-orange-500", "text-rose-500"];
+
+// ─── CurriculumStep (unchanged) ───
 
 function CurriculumStep({ step, index, isNext, onStart }) {
   const [expanded, setExpanded] = useState(isNext);
@@ -57,7 +68,6 @@ function CurriculumStep({ step, index, isNext, onStart }) {
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-3 px-4 py-3 text-left"
       >
-        {/* Status icon */}
         <div className="shrink-0">
           {completed ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-500" />
@@ -69,8 +79,6 @@ function CurriculumStep({ step, index, isNext, onStart }) {
             <Circle className="w-5 h-5 text-muted-foreground/40" />
           )}
         </div>
-
-        {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-medium text-muted-foreground">JOUR {step.day}</span>
@@ -89,8 +97,6 @@ function CurriculumStep({ step, index, isNext, onStart }) {
             {step.title}
           </h4>
         </div>
-
-        {/* Duration + expand */}
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-xs text-muted-foreground">
             {step.duration_min}-{step.duration_max}m
@@ -103,11 +109,9 @@ function CurriculumStep({ step, index, isNext, onStart }) {
         </div>
       </button>
 
-      {/* Expanded content */}
       {expanded && (
         <div className="px-4 pb-4 pt-0 space-y-3 border-t border-border/30 mt-0">
           <p className="text-sm text-muted-foreground leading-relaxed pt-3">{step.description}</p>
-
           {step.focus && (
             <div className="flex items-center gap-1.5 text-xs">
               <BookOpen className="w-3 h-3 text-primary" />
@@ -115,7 +119,6 @@ function CurriculumStep({ step, index, isNext, onStart }) {
               <span className="font-medium">{step.focus}</span>
             </div>
           )}
-
           {step.instructions && step.instructions.length > 0 && (
             <div className="space-y-1.5">
               {step.instructions.map((inst, i) => (
@@ -126,23 +129,18 @@ function CurriculumStep({ step, index, isNext, onStart }) {
               ))}
             </div>
           )}
-
           {step.tip && (
             <div className="flex items-start gap-2 bg-amber-500/5 rounded-lg px-3 py-2 border border-amber-500/10">
               <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
               <span className="text-xs text-amber-600">{step.tip}</span>
             </div>
           )}
-
-          {/* Completed info */}
           {completed && step.actual_duration && (
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <span>Durée : {step.actual_duration} min</span>
               {step.notes && <span className="truncate">Note : {step.notes}</span>}
             </div>
           )}
-
-          {/* Start button for next step */}
           {isNext && !completed && (
             <Button onClick={() => onStart(step, index)} className="w-full gap-2 mt-2">
               <Play className="w-4 h-4" />
@@ -155,11 +153,268 @@ function CurriculumStep({ step, index, isNext, onStart }) {
   );
 }
 
+// ─── InsightsTab ───
+
+const MOMENTUM_CONFIG = {
+  rising: { icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
+  stable: { icon: Minus, color: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20" },
+  declining: { icon: TrendingDown, color: "text-amber-500", bg: "bg-amber-500/10", border: "border-amber-500/20" },
+};
+
+function InsightsTab({ objectiveId }) {
+  const [insights, setInsights] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await authFetch(`${API}/objectives/${objectiveId}/insights`);
+        if (res.ok) setInsights(await res.json());
+      } catch {
+        // silent
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [objectiveId]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!insights || (!insights.timeline?.length && !insights.ai_analysis)) {
+    return (
+      <Card className="p-8 text-center">
+        <BarChart3 className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+        <h4 className="font-heading font-semibold text-sm mb-1">Pas encore d'insights</h4>
+        <p className="text-xs text-muted-foreground">
+          Complète quelques sessions pour débloquer l'analyse de ta progression.
+        </p>
+      </Card>
+    );
+  }
+
+  const { stats, ai_analysis, notes, difficulty_curve, weekly_activity } = insights;
+
+  return (
+    <div className="space-y-4">
+
+      {/* ── AI Analysis Card ── */}
+      {ai_analysis && (
+        <Card className="p-4 border-primary/15 bg-gradient-to-br from-primary/5 to-transparent">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center">
+              <Brain className="w-4 h-4 text-primary" />
+            </div>
+            <h3 className="font-heading font-semibold text-sm">Analyse IA</h3>
+            {ai_analysis.momentum && (() => {
+              const mc = MOMENTUM_CONFIG[ai_analysis.momentum] || MOMENTUM_CONFIG.stable;
+              const Icon = mc.icon;
+              return (
+                <Badge variant="outline" className={`ml-auto text-[10px] ${mc.color} ${mc.bg} ${mc.border}`}>
+                  <Icon className="w-3 h-3 mr-1" />
+                  {ai_analysis.momentum_label || ai_analysis.momentum}
+                </Badge>
+              );
+            })()}
+          </div>
+
+          <p className="text-sm text-foreground/80 leading-relaxed mb-3">
+            {ai_analysis.summary}
+          </p>
+
+          {ai_analysis.strengths?.length > 0 && (
+            <div className="mb-2.5">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Zap className="w-3 h-3 text-emerald-500" />
+                <span className="text-xs font-medium text-emerald-600">Points forts</span>
+              </div>
+              <div className="space-y-1 pl-5">
+                {ai_analysis.strengths.map((s, i) => (
+                  <p key={i} className="text-xs text-muted-foreground leading-relaxed">{s}</p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {ai_analysis.improvements?.length > 0 && (
+            <div className="mb-2.5">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <AlertTriangle className="w-3 h-3 text-amber-500" />
+                <span className="text-xs font-medium text-amber-600">Axes d'amélioration</span>
+              </div>
+              <div className="space-y-1 pl-5">
+                {ai_analysis.improvements.map((s, i) => (
+                  <p key={i} className="text-xs text-muted-foreground leading-relaxed">{s}</p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {ai_analysis.next_advice && (
+            <div className="bg-primary/5 rounded-lg px-3 py-2 border border-primary/10 mt-2">
+              <div className="flex items-start gap-2">
+                <Lightbulb className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                <p className="text-xs text-foreground/70 leading-relaxed">{ai_analysis.next_advice}</p>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* ── Stats Grid ── */}
+      {stats && (
+        <div className="grid grid-cols-3 gap-2">
+          <Card className="p-3 text-center">
+            <Activity className="w-4 h-4 text-blue-500 mx-auto mb-1" />
+            <div className="text-lg font-bold">{stats.completion_rate}%</div>
+            <div className="text-[10px] text-muted-foreground">Taux complétion</div>
+          </Card>
+          <Card className="p-3 text-center">
+            <Clock className="w-4 h-4 text-purple-500 mx-auto mb-1" />
+            <div className="text-lg font-bold">{stats.avg_duration}<span className="text-xs font-normal">m</span></div>
+            <div className="text-[10px] text-muted-foreground">Durée moyenne</div>
+          </Card>
+          <Card className="p-3 text-center">
+            <Calendar className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
+            <div className="text-lg font-bold">{stats.active_days}</div>
+            <div className="text-[10px] text-muted-foreground">Jours actifs</div>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Weekly Activity ── */}
+      {weekly_activity?.length > 0 && (
+        <Card className="p-4">
+          <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-primary" />
+            Activité hebdomadaire
+          </h4>
+          <div className="space-y-2">
+            {weekly_activity.slice(-8).map((week, i) => {
+              const maxMinutes = Math.max(...weekly_activity.map((w) => w.minutes), 1);
+              const barWidth = Math.max(8, (week.minutes / maxMinutes) * 100);
+              return (
+                <div key={i} className="flex items-center gap-3">
+                  <span className="text-[10px] text-muted-foreground w-16 shrink-0 font-mono">
+                    {week.week}
+                  </span>
+                  <div className="flex-1 h-5 bg-muted/30 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary/60 to-primary rounded-full flex items-center justify-end pr-2 transition-all duration-500"
+                      style={{ width: `${barWidth}%` }}
+                    >
+                      {week.minutes >= 10 && (
+                        <span className="text-[9px] text-primary-foreground font-medium">{week.minutes}m</span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground w-8 text-right">{week.sessions}s</span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* ── Difficulty Progression ── */}
+      {difficulty_curve?.length > 2 && (
+        <Card className="p-4">
+          <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-primary" />
+            Progression de difficulté
+          </h4>
+          <div className="flex items-end gap-1 h-20">
+            {difficulty_curve.map((point, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1" title={point.title}>
+                <div
+                  className={`w-full rounded-t transition-all ${
+                    DIFFICULTY_COLORS[point.difficulty]?.replace("text-", "bg-").replace("500", "500/60") || "bg-primary/40"
+                  }`}
+                  style={{ height: `${Math.max(12, (point.difficulty / 5) * 100)}%` }}
+                />
+                <span className="text-[8px] text-muted-foreground">J{point.day}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between mt-2 text-[9px] text-muted-foreground">
+            <span>Fondamental</span>
+            <span>Expert</span>
+          </div>
+        </Card>
+      )}
+
+      {/* ── Notes Journal ── */}
+      {notes?.length > 0 && (
+        <Card className="p-4">
+          <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-primary" />
+            Journal de notes
+            <span className="text-[10px] text-muted-foreground font-normal ml-auto">{notes.length} entrée{notes.length > 1 ? "s" : ""}</span>
+          </h4>
+          <div className="space-y-2.5 max-h-[400px] overflow-y-auto pr-1">
+            {notes.slice().reverse().map((entry, i) => (
+              <div key={i} className="border-l-2 border-primary/20 pl-3 py-1">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[10px] font-medium text-primary">Jour {entry.day}</span>
+                  <span className="text-[10px] text-muted-foreground">{entry.step_title}</span>
+                  {entry.duration > 0 && (
+                    <span className="text-[10px] text-muted-foreground/50 ml-auto">{entry.duration}m</span>
+                  )}
+                </div>
+                <p className="text-sm text-foreground/80 leading-relaxed">{entry.notes}</p>
+                {entry.date && (
+                  <span className="text-[9px] text-muted-foreground/40 mt-0.5 block">
+                    {new Date(entry.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* ── Timeline (all sessions) ── */}
+      {insights.timeline?.length > 0 && (
+        <Card className="p-4">
+          <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-primary" />
+            Historique complet
+          </h4>
+          <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+            {insights.timeline.slice().reverse().map((entry, i) => (
+              <div key={i} className={`flex items-center gap-3 px-2.5 py-1.5 rounded-lg text-xs ${
+                entry.completed ? "bg-muted/20" : "bg-red-500/5"
+              }`}>
+                {entry.completed ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                )}
+                <span className="font-medium text-muted-foreground w-10 shrink-0">J{entry.day}</span>
+                <span className="flex-1 truncate">{entry.step_title}</span>
+                <span className="text-muted-foreground/50 shrink-0">{entry.duration}m</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ───
+
 export default function ObjectiveDetailPage() {
   const { objectiveId } = useParams();
   const navigate = useNavigate();
   const [objective, setObjective] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("parcours");
   const [showSession, setShowSession] = useState(false);
   const [activeStep, setActiveStep] = useState(null);
   const [activeStepIndex, setActiveStepIndex] = useState(null);
@@ -369,57 +624,93 @@ export default function ObjectiveDetailPage() {
             </div>
           </Card>
 
-          {/* Curriculum */}
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-heading font-semibold text-base">
-              {isGenerating ? "Génération en cours..." : "Mon parcours"}
-            </h2>
-            {!isGenerating && (
-              <span className="text-xs text-muted-foreground">
-                {completedSteps}/{totalSteps} sessions
-              </span>
-            )}
+          {/* ── Tab Switcher ── */}
+          <div className="flex gap-1 p-1 mb-4 bg-muted/30 rounded-xl">
+            <button
+              onClick={() => setActiveTab("parcours")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === "parcours"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              Parcours
+            </button>
+            <button
+              onClick={() => setActiveTab("insights")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === "insights"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              Insights
+              {completedSteps >= 3 && (
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+              )}
+            </button>
           </div>
 
-          {isGenerating ? (
-            <Card className="p-8 text-center">
-              <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">
-                L'IA génère ton parcours personnalisé...
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Reviens dans quelques secondes !
-              </p>
-              <Button variant="outline" size="sm" className="mt-4" onClick={loadObjective}>
-                Rafraîchir
-              </Button>
-            </Card>
-          ) : (
-            <div className="space-y-2">
-              {curriculum.map((step, i) => (
-                <CurriculumStep
-                  key={step.step_index ?? i}
-                  step={step}
-                  index={i}
-                  isNext={i === nextStepIndex && objective.status === "active"}
-                  onStart={startSession}
-                />
-              ))}
-            </div>
-          )}
+          {/* ── Tab Content ── */}
+          {activeTab === "parcours" ? (
+            <>
+              {/* Curriculum header */}
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="font-heading font-semibold text-base">
+                  {isGenerating ? "Génération en cours..." : "Mon parcours"}
+                </h2>
+                {!isGenerating && (
+                  <span className="text-xs text-muted-foreground">
+                    {completedSteps}/{totalSteps} sessions
+                  </span>
+                )}
+              </div>
 
-          {/* Completed celebration */}
-          {percent >= 100 && (
-            <Card className="p-6 mt-6 text-center border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5">
-              <Trophy className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-              <h3 className="font-heading font-bold text-lg">Parcours terminé !</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Tu as complété {completedSteps} sessions et investi {objective.total_minutes || 0} minutes.
-              </p>
-              <Button className="mt-4" onClick={() => navigate("/objectives")}>
-                Voir mes objectifs
-              </Button>
-            </Card>
+              {isGenerating ? (
+                <Card className="p-8 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">
+                    L'IA génère ton parcours personnalisé...
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Reviens dans quelques secondes !
+                  </p>
+                  <Button variant="outline" size="sm" className="mt-4" onClick={loadObjective}>
+                    Rafraîchir
+                  </Button>
+                </Card>
+              ) : (
+                <div className="space-y-2">
+                  {curriculum.map((step, i) => (
+                    <CurriculumStep
+                      key={step.step_index ?? i}
+                      step={step}
+                      index={i}
+                      isNext={i === nextStepIndex && objective.status === "active"}
+                      onStart={startSession}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Completed celebration */}
+              {percent >= 100 && (
+                <Card className="p-6 mt-6 text-center border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5">
+                  <Trophy className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+                  <h3 className="font-heading font-bold text-lg">Parcours terminé !</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Tu as complété {completedSteps} sessions et investi {objective.total_minutes || 0} minutes.
+                  </p>
+                  <Button className="mt-4" onClick={() => navigate("/objectives")}>
+                    Voir mes objectifs
+                  </Button>
+                </Card>
+              )}
+            </>
+          ) : (
+            <InsightsTab objectiveId={objectiveId} />
           )}
         </div>
       </main>
