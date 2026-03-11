@@ -435,6 +435,22 @@ export default function ObjectiveDetailPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            {/* Memory: last session context */}
+            {(() => {
+              const log = objective?.progress_log || [];
+              const last = log.length > 0 ? log[log.length - 1] : null;
+              if (!last) return null;
+              return (
+                <div className="flex items-start gap-2 bg-blue-500/5 rounded-lg px-3 py-2 border border-blue-500/10">
+                  <BookOpen className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
+                  <div className="text-xs text-blue-400">
+                    <span className="font-medium">Dernière session :</span> {last.step_title}
+                    {last.notes && <span className="block text-blue-400/70 mt-0.5">"{last.notes}"</span>}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Timer */}
             <div className="text-center">
               <div className="text-4xl font-mono font-bold tabular-nums">{formatTime(sessionTimer)}</div>

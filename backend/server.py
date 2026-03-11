@@ -1305,6 +1305,23 @@ async def get_ai_coach(request: Request, user: dict = Depends(get_current_user))
         if abandon > 0.4:
             engagement_context += "\nIl abandonne souvent ses sessions — propose des actions courtes et faciles."
 
+    # --- 2b. Fetch active objectives for context ---
+    active_objs = await db.objectives.find(
+        {"user_id": user["user_id"], "status": "active"},
+        {"_id": 0, "title": 1, "current_day": 1, "target_duration_days": 1, "streak_days": 1, "progress_log": {"$slice": -2}}
+    ).to_list(5)
+    objectives_context = ""
+    if active_objs:
+        obj_lines = []
+        for o in active_objs:
+            pct = round((o.get("current_day", 0) / max(o.get("target_duration_days", 1), 1)) * 100)
+            line = f"- \"{o['title']}\" (Jour {o.get('current_day',0)}/{o.get('target_duration_days')}, {pct}%)"
+            log = o.get("progress_log", [])
+            if log and log[-1].get("step_title"):
+                line += f" — dernier: {log[-1]['step_title']}"
+            obj_lines.append(line)
+        objectives_context = "\n\nParcours actifs (l'utilisateur travaille ces objectifs — mentionne-les !):\n" + "\n".join(obj_lines)
+
     # --- 3. Fetch & rank candidate actions ---
     profile = user.get("user_profile", {}) or {}
     goals = profile.get("goals", [])
@@ -1341,7 +1358,7 @@ async def get_ai_coach(request: Request, user: dict = Depends(get_current_user))
         actions_menu = "\n\nActions disponibles (classées par pertinence):\n" + "\n".join(action_lines)
 
     # --- 4. Build prompt with context ---
-    prompt = f"""{user_context}{recent_info}{engagement_context}{context_detail}
+    prompt = f"""{user_context}{recent_info}{engagement_context}{objectives_context}{context_detail}
 
 Il est actuellement le {time_of_day} ({day_of_week}).
 Le streak actuel est de {user.get('streak_days', 0)} jours.{actions_menu}
@@ -1471,6 +1488,30 @@ async def coach_chat(
         lines = [f"- \"{a.get('title')}\" ({a.get('category')}, {a.get('duration_min')}-{a.get('duration_max')} min)" for a in available[:8]]
         actions_ctx = "\n\nActions disponibles que tu peux suggérer:\n" + "\n".join(lines)
 
+    # Fetch active objectives for context
+    active_objectives = await db.objectives.find(
+        {"user_id": user["user_id"], "status": "active"},
+        {"_id": 0, "title": 1, "category": 1, "current_day": 1, "target_duration_days": 1,
+         "total_sessions": 1, "total_minutes": 1, "streak_days": 1, "progress_log": {"$slice": -3}}
+    ).to_list(5)
+
+    objectives_ctx = ""
+    if active_objectives:
+        lines = []
+        for o in active_objectives:
+            pct = round((o.get("current_day", 0) / max(o.get("target_duration_days", 1), 1)) * 100)
+            line = f"- \"{o.get('title')}\" (Jour {o.get('current_day', 0)}/{o.get('target_duration_days')}, {pct}%, streak {o.get('streak_days', 0)}j)"
+            # Add last session notes for continuity
+            log = o.get("progress_log", [])
+            if log:
+                last = log[-1]
+                if last.get("notes"):
+                    line += f"\n  Dernière note: \"{last['notes']}\""
+                if last.get("step_title"):
+                    line += f"\n  Dernier focus: {last['step_title']}"
+            lines.append(line)
+        objectives_ctx = "\n\nObjectifs actifs de l'utilisateur (IMPORTANT — réfère-toi à ces parcours):\n" + "\n".join(lines)
+
     # Build conversation history (last 20 messages for context window)
     history_docs = await db.coach_messages.find(
         {"user_id": user["user_id"]},
@@ -1481,7 +1522,7 @@ async def coach_chat(
     # Build messages array for Anthropic API (system + history)
     system_prompt = f"""{COACH_CHAT_SYSTEM}
 
-{user_context}{sessions_ctx}{actions_ctx}
+{user_context}{sessions_ctx}{objectives_ctx}{actions_ctx}
 
 Streak actuel: {user.get('streak_days', 0)} jours.
 Temps total investi: {user.get('total_time_invested', 0)} minutes."""
@@ -4724,6 +4765,23 @@ async def get_next_objective_session(request: Request, objective_id: str, user: 
             "total_minutes": obj.get("total_minutes", 0),
         }
 
+    # Build session memory: last 5 completed steps with notes
+    progress_log = obj.get("progress_log", [])
+    recent_sessions = progress_log[-5:] if progress_log else []
+
+    # Build memory context string for the frontend/coach
+    memory_context = None
+    if recent_sessions:
+        lines = []
+        for entry in recent_sessions:
+            line = f"Jour {entry.get('day', '?')}: {entry.get('step_title', '?')}"
+            if entry.get("notes"):
+                line += f" — Notes: {entry['notes']}"
+            if entry.get("duration"):
+                line += f" ({entry['duration']} min)"
+            lines.append(line)
+        memory_context = "\n".join(lines)
+
     return {
         "status": "ready",
         "objective_id": objective_id,
@@ -4735,6 +4793,12 @@ async def get_next_objective_session(request: Request, objective_id: str, user: 
             "total_sessions": obj.get("total_sessions", 0),
             "total_minutes": obj.get("total_minutes", 0),
             "percent": round((current_day / max(obj["target_duration_days"], 1)) * 100, 1),
+        },
+        "memory": {
+            "recent_sessions": recent_sessions,
+            "context": memory_context,
+            "last_notes": recent_sessions[-1].get("notes", "") if recent_sessions else "",
+            "last_focus": recent_sessions[-1].get("step_title", "") if recent_sessions else "",
         },
     }
 
