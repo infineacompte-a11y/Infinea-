@@ -4908,6 +4908,166 @@ async def complete_objective_step(request: Request, objective_id: str, user: dic
     }
 
 
+# ============== OBJECTIVE INSIGHTS ==============
+
+@api_router.get("/objectives/{objective_id}/insights")
+@limiter.limit("10/minute")
+async def get_objective_insights(request: Request, objective_id: str, user: dict = Depends(get_current_user)):
+    """Return structured insights for an objective: timeline, stats, AI analysis."""
+    obj = await db.objectives.find_one(
+        {"objective_id": objective_id, "user_id": user["user_id"]},
+        {"_id": 0}
+    )
+    if not obj:
+        raise HTTPException(status_code=404, detail="Objectif non trouvé")
+
+    progress_log = obj.get("progress_log", [])
+    curriculum = obj.get("curriculum", [])
+
+    # ── Computed stats ──
+    completed_sessions = [e for e in progress_log if e.get("completed")]
+    abandoned_sessions = [e for e in progress_log if not e.get("completed")]
+    durations = [e.get("duration", 0) for e in completed_sessions if e.get("duration")]
+    notes_entries = [e for e in progress_log if e.get("notes", "").strip()]
+
+    avg_duration = round(sum(durations) / len(durations), 1) if durations else 0
+    total_time = sum(durations)
+    completion_rate = round(len(completed_sessions) / max(len(progress_log), 1) * 100, 1) if progress_log else 0
+
+    # Session frequency: sessions per active day
+    unique_days = set()
+    for entry in progress_log:
+        date_str = entry.get("date", "")
+        if date_str:
+            unique_days.add(date_str[:10])
+    active_days = len(unique_days)
+
+    # Streak analysis
+    streak = obj.get("streak_days", 0)
+    best_streak = streak  # simple for now
+
+    # Difficulty curve: map completed steps to their difficulty
+    difficulty_curve = []
+    for entry in completed_sessions:
+        step_idx = entry.get("step_index", 0)
+        if step_idx < len(curriculum):
+            step = curriculum[step_idx]
+            difficulty_curve.append({
+                "day": entry.get("day", 0),
+                "difficulty": step.get("difficulty", 1),
+                "duration": entry.get("duration", 0),
+                "title": step.get("title", ""),
+            })
+
+    # Weekly activity: group sessions by week
+    weekly_activity = {}
+    for entry in progress_log:
+        date_str = entry.get("date", "")
+        if date_str and len(date_str) >= 10:
+            try:
+                dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                week_key = dt.strftime("%Y-W%W")
+                if week_key not in weekly_activity:
+                    weekly_activity[week_key] = {"sessions": 0, "minutes": 0, "week": week_key}
+                weekly_activity[week_key]["sessions"] += 1
+                weekly_activity[week_key]["minutes"] += entry.get("duration", 0)
+            except (ValueError, TypeError):
+                pass
+    weekly_data = sorted(weekly_activity.values(), key=lambda x: x["week"])
+
+    # ── AI analysis (cached in the objective doc, refreshed every 6h) ──
+    ai_analysis = obj.get("ai_insights_cache", {})
+    cache_age_ok = False
+    if ai_analysis.get("generated_at"):
+        try:
+            gen_time = datetime.fromisoformat(ai_analysis["generated_at"].replace("Z", "+00:00"))
+            cache_age_ok = (datetime.now(timezone.utc) - gen_time).total_seconds() < 6 * 3600
+        except (ValueError, TypeError):
+            pass
+
+    if not cache_age_ok and len(completed_sessions) >= 3:
+        # Generate fresh AI analysis
+        notes_text = "\n".join(
+            f"Jour {e.get('day', '?')} — {e.get('step_title', '?')} ({e.get('duration', '?')}min): {e.get('notes', '')}"
+            for e in progress_log[-15:]  # Last 15 sessions max
+        )
+        analysis_prompt = f"""Analyse la progression d'un utilisateur sur l'objectif "{obj.get('title', '')}".
+
+Données:
+- {len(completed_sessions)} sessions complétées, {len(abandoned_sessions)} abandonnées
+- Durée moyenne: {avg_duration} min, Total: {total_time} min
+- Streak actuel: {streak} jours
+- Taux de complétion: {completion_rate}%
+- Jour actuel: {obj.get('current_day', 0)}/{obj.get('target_duration_days', 30)}
+
+Journal des sessions récentes:
+{notes_text}
+
+Retourne une analyse JSON avec cette structure exacte:
+{{
+  "summary": "2-3 phrases de bilan global de la progression",
+  "strengths": ["point fort 1", "point fort 2"],
+  "improvements": ["axe d'amélioration 1", "axe d'amélioration 2"],
+  "next_advice": "1 conseil concret et actionnable pour la prochaine session",
+  "momentum": "rising" | "stable" | "declining",
+  "momentum_label": "En progression" | "Stable" | "En baisse"
+}}
+
+Sois bienveillant, concret et motivant. Réponds UNIQUEMENT avec le JSON, rien d'autre."""
+
+        is_premium = user.get("subscription_tier") == "premium"
+        ai_model = "claude-sonnet-4-20250514" if is_premium else None
+        raw = await call_ai("insights", AI_SYSTEM_MESSAGE, analysis_prompt, model=ai_model)
+
+        if raw:
+            try:
+                # Extract JSON from response
+                import re as _re
+                json_match = _re.search(r'\{[\s\S]*\}', raw)
+                if json_match:
+                    ai_analysis = json.loads(json_match.group())
+                    ai_analysis["generated_at"] = datetime.now(timezone.utc).isoformat()
+                    # Cache in DB
+                    await db.objectives.update_one(
+                        {"objective_id": objective_id},
+                        {"$set": {"ai_insights_cache": ai_analysis}}
+                    )
+            except (json.JSONDecodeError, Exception) as e:
+                logger.error(f"Insights AI parse error: {e}")
+                ai_analysis = {}
+
+    # ── Build response ──
+    return {
+        "objective_id": objective_id,
+        "title": obj.get("title", ""),
+        "stats": {
+            "total_sessions": len(completed_sessions),
+            "abandoned_sessions": len(abandoned_sessions),
+            "completion_rate": completion_rate,
+            "avg_duration": avg_duration,
+            "total_minutes": total_time,
+            "active_days": active_days,
+            "current_streak": streak,
+            "current_day": obj.get("current_day", 0),
+            "target_days": obj.get("target_duration_days", 30),
+        },
+        "timeline": progress_log,
+        "notes": [
+            {
+                "day": e.get("day"),
+                "step_title": e.get("step_title", ""),
+                "notes": e.get("notes", ""),
+                "date": e.get("date", ""),
+                "duration": e.get("duration", 0),
+            }
+            for e in notes_entries
+        ],
+        "difficulty_curve": difficulty_curve,
+        "weekly_activity": weekly_data,
+        "ai_analysis": ai_analysis if ai_analysis and ai_analysis.get("summary") else None,
+    }
+
+
 # ============== ROUTINES ==============
 
 @api_router.post("/routines")
