@@ -39,6 +39,7 @@ import {
   Activity,
   Zap,
   AlertTriangle,
+  Share2,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { VoiceTextArea } from "@/components/VoiceInput";
@@ -799,6 +800,28 @@ export default function ObjectiveDetailPage() {
                     <RotateCcw className="w-4 h-4" />
                   </Button>
                 ) : null}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={async () => {
+                    const text = [
+                      `Jour ${objective.current_day || 0} sur « ${objective.title} »`,
+                      `${percent}% complété · ${objective.streak_days || 0}j de streak · ${objective.total_minutes || 0} min investies`,
+                      ``,
+                      `Mon parcours sur InFinea !`,
+                    ].join("\n");
+                    if (navigator.share) {
+                      try { await navigator.share({ title: objective.title, text }); } catch {}
+                    } else {
+                      await navigator.clipboard.writeText(text);
+                      toast.success("Copié !");
+                    }
+                  }}
+                  title="Partager"
+                >
+                  <Share2 className="w-4 h-4" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
