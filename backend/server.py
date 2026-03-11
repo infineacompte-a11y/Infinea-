@@ -2164,6 +2164,117 @@ async def get_user_stats(user: dict = Depends(get_current_user)):
         "recent_sessions": recent
     }
 
+# ============== RECAP INTELLIGENT (D.1) ==============
+
+@api_router.get("/recap")
+@limiter.limit("20/minute")
+async def get_user_recap(request: Request, user: dict = Depends(get_current_user)):
+    """Generate daily + weekly recap from sessions, objectives, and routines."""
+    now = datetime.now(timezone.utc)
+    today = now.date()
+    today_iso = today.isoformat()
+    week_start = (today - timedelta(days=today.weekday())).isoformat()
+    user_id = user["user_id"]
+
+    # ── Today's sessions ────────────────────────
+    today_sessions = await db.user_sessions_history.find(
+        {"user_id": user_id, "completed": True, "completed_at": {"$gte": today_iso}},
+        {"_id": 0, "actual_duration": 1, "action_title": 1, "category": 1, "completed_at": 1}
+    ).to_list(50)
+
+    today_minutes = sum(s.get("actual_duration", 0) for s in today_sessions)
+    today_count = len(today_sessions)
+    today_categories = list(set(s.get("category", "") for s in today_sessions if s.get("category")))
+
+    # ── This week's sessions ────────────────────
+    week_sessions = await db.user_sessions_history.find(
+        {"user_id": user_id, "completed": True, "completed_at": {"$gte": week_start}},
+        {"_id": 0, "actual_duration": 1, "category": 1, "completed_at": 1}
+    ).to_list(200)
+
+    week_minutes = sum(s.get("actual_duration", 0) for s in week_sessions)
+    week_count = len(week_sessions)
+
+    # Week sessions by day (for mini bar chart)
+    week_by_day = {}
+    for s in week_sessions:
+        day = s.get("completed_at", "")[:10]
+        if day:
+            week_by_day[day] = week_by_day.get(day, 0) + s.get("actual_duration", 0)
+
+    # ── Objectives progress this week ───────────
+    objectives = await db.objectives.find(
+        {"user_id": user_id, "status": "active", "deleted": {"$ne": True}},
+        {"_id": 0, "objective_id": 1, "title": 1, "current_day": 1, "streak_days": 1,
+         "total_sessions": 1, "total_minutes": 1, "curriculum": 1}
+    ).to_list(20)
+
+    obj_summaries = []
+    for obj in objectives:
+        curriculum = obj.get("curriculum", [])
+        completed_this_week = sum(
+            1 for s in curriculum
+            if s.get("completed") and s.get("completed_at", "") >= week_start
+        )
+        total_completed = sum(1 for s in curriculum if s.get("completed"))
+        total_steps = len(curriculum)
+        percent = round((total_completed / max(total_steps, 1)) * 100)
+
+        obj_summaries.append({
+            "objective_id": obj["objective_id"],
+            "title": obj["title"],
+            "streak_days": obj.get("streak_days", 0),
+            "sessions_this_week": completed_this_week,
+            "progress_percent": percent,
+            "total_completed": total_completed,
+            "total_steps": total_steps,
+        })
+
+    # ── Routines today ──────────────────────────
+    routines = await db.routines.find(
+        {"user_id": user_id, "is_active": True, "deleted": {"$ne": True}},
+        {"_id": 0, "name": 1, "last_completed_at": 1, "times_completed": 1}
+    ).to_list(20)
+
+    routines_done_today = sum(1 for r in routines if (r.get("last_completed_at") or "").startswith(today_iso))
+    routines_total = len(routines)
+
+    # ── Highlights ──────────────────────────────
+    highlights = []
+    streak = user.get("streak_days", 0)
+    if streak >= 7:
+        highlights.append({"type": "streak", "text": f"Streak de {streak} jours ! Continue comme ça."})
+    if today_count >= 3:
+        highlights.append({"type": "productive", "text": f"{today_count} sessions aujourd'hui, journée productive !"})
+    if week_minutes >= 60:
+        highlights.append({"type": "milestone", "text": f"Plus d'une heure investie cette semaine ({week_minutes} min)."})
+
+    best_obj = max(obj_summaries, key=lambda o: o["sessions_this_week"], default=None)
+    if best_obj and best_obj["sessions_this_week"] > 0:
+        highlights.append({
+            "type": "focus",
+            "text": f"Focus de la semaine : « {best_obj['title'][:30]} » ({best_obj['sessions_this_week']} sessions)."
+        })
+
+    return {
+        "today": {
+            "sessions": today_count,
+            "minutes": today_minutes,
+            "categories": today_categories,
+            "routines_done": routines_done_today,
+            "routines_total": routines_total,
+        },
+        "week": {
+            "sessions": week_count,
+            "minutes": week_minutes,
+            "by_day": week_by_day,
+        },
+        "streak": streak,
+        "objectives": obj_summaries,
+        "highlights": highlights,
+    }
+
+
 # ============== STRIPE PAYMENT ROUTES ==============
 
 SUBSCRIPTION_PRICE = 6.99  # EUR
