@@ -26,7 +26,7 @@ const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { to: "/my-day", label: "Ma Journée", icon: Zap },
   { to: "/objectives", label: "Mes Objectifs", icon: Target },
-  { to: "/routines", label: "Mes Routines", icon: CalendarClock },
+  { to: "/routines", label: "Mes Habitudes", icon: CalendarClock },
   { to: "/actions", label: "Bibliothèque", icon: Sparkles },
   { to: "/integrations", label: "Intégrations", icon: Calendar },
   { to: "/journal", label: "Journal", icon: Brain },

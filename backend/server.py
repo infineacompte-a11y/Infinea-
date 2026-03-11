@@ -169,12 +169,16 @@ class RoutineCreate(BaseModel):
     name: str  # "Routine matinale", "Pause déjeuner productive"
     description: Optional[str] = None
     time_of_day: Optional[str] = "morning"  # morning, afternoon, evening, anytime
-    items: Optional[List[dict]] = []  # [{type: "action"|"objective_step", ref_id, title, duration_minutes, order}]
+    frequency: Optional[str] = "daily"  # daily | weekdays | weekends | custom
+    frequency_days: Optional[List[int]] = None  # [0=Mon..6=Sun] for custom
+    items: Optional[List[dict]] = []  # [{type, ref_id, title, duration_minutes, order}]
 
 class RoutineUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     time_of_day: Optional[str] = None
+    frequency: Optional[str] = None
+    frequency_days: Optional[List[int]] = None
     items: Optional[List[dict]] = None
     is_active: Optional[bool] = None
 
@@ -5613,16 +5617,31 @@ async def create_routine(request: Request, routine: RoutineCreate, user: dict = 
             "order": i,
         })
 
+    # Frequency
+    freq = routine.frequency if routine.frequency in ("daily", "weekdays", "weekends", "custom") else "daily"
+    freq_days = None
+    if freq == "custom" and routine.frequency_days:
+        freq_days = [d for d in routine.frequency_days if 0 <= d <= 6]
+    elif freq == "weekdays":
+        freq_days = [0, 1, 2, 3, 4]
+    elif freq == "weekends":
+        freq_days = [5, 6]
+
     doc = {
         "routine_id": routine_id,
         "user_id": user["user_id"],
         "name": routine.name.strip()[:100],
         "description": (routine.description or "").strip()[:2000],
         "time_of_day": routine.time_of_day if routine.time_of_day in ("morning", "afternoon", "evening", "anytime") else "morning",
+        "frequency": freq,
+        "frequency_days": freq_days,
         "items": validated_items,
         "is_active": True,
         "total_minutes": sum(it["duration_minutes"] for it in validated_items),
         "times_completed": 0,
+        "streak_current": 0,
+        "streak_best": 0,
+        "completion_log": [],  # [{date: "2026-03-11", completed_at: "..."}]
         "last_completed_at": None,
         "created_at": now,
         "updated_at": now,
@@ -5675,6 +5694,16 @@ async def update_routine(request: Request, routine_id: str, update: RoutineUpdat
         updates["description"] = update.description.strip()[:2000]
     if update.time_of_day is not None and update.time_of_day in ("morning", "afternoon", "evening", "anytime"):
         updates["time_of_day"] = update.time_of_day
+    if update.frequency is not None and update.frequency in ("daily", "weekdays", "weekends", "custom"):
+        updates["frequency"] = update.frequency
+        if update.frequency == "custom" and update.frequency_days:
+            updates["frequency_days"] = [d for d in update.frequency_days if 0 <= d <= 6]
+        elif update.frequency == "weekdays":
+            updates["frequency_days"] = [0, 1, 2, 3, 4]
+        elif update.frequency == "weekends":
+            updates["frequency_days"] = [5, 6]
+        else:
+            updates["frequency_days"] = None
     if update.is_active is not None:
         updates["is_active"] = update.is_active
     if update.items is not None:
@@ -5711,22 +5740,78 @@ async def delete_routine(request: Request, routine_id: str, user: dict = Depends
 @api_router.post("/routines/{routine_id}/complete")
 @limiter.limit("20/minute")
 async def complete_routine(request: Request, routine_id: str, user: dict = Depends(get_current_user)):
-    """Mark a routine as completed (increments counter, updates last_completed_at)."""
+    """Mark a routine as completed — updates streak, completion log, counter."""
     routine = await db.routines.find_one(
         {"routine_id": routine_id, "user_id": user["user_id"], "deleted": {"$ne": True}}
     )
     if not routine:
         raise HTTPException(status_code=404, detail="Routine non trouvée.")
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    today_str = now.strftime("%Y-%m-%d")
+
+    # Prevent double-completion for same day
+    completion_log = routine.get("completion_log", [])
+    if any(entry.get("date") == today_str for entry in completion_log):
+        return {
+            "status": "already_completed",
+            "routine_id": routine_id,
+            "times_completed": routine.get("times_completed", 0),
+            "streak_current": routine.get("streak_current", 0),
+        }
+
+    # Calculate streak
+    streak = routine.get("streak_current", 0)
+    last_completed = routine.get("last_completed_at")
+    if last_completed:
+        try:
+            last_date = datetime.fromisoformat(last_completed.replace("Z", "+00:00")).date()
+            today_date = now.date()
+            diff = (today_date - last_date).days
+            if diff == 1:
+                streak += 1  # Consecutive day
+            elif diff > 1:
+                streak = 1  # Streak broken
+            else:
+                streak = max(streak, 1)
+        except (ValueError, AttributeError):
+            streak = 1
+    else:
+        streak = 1
+
+    best_streak = max(routine.get("streak_best", 0), streak)
+
+    # Add to completion log (keep last 90 entries)
+    completion_log.append({"date": today_str, "completed_at": now.isoformat()})
+    completion_log = completion_log[-90:]
+
+    # Week completion rate (last 7 days)
+    week_ago = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+    week_completions = sum(1 for e in completion_log if e["date"] >= week_ago)
+
     await db.routines.update_one(
         {"routine_id": routine_id},
         {
             "$inc": {"times_completed": 1},
-            "$set": {"last_completed_at": now, "updated_at": now},
+            "$set": {
+                "last_completed_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+                "streak_current": streak,
+                "streak_best": best_streak,
+                "completion_log": completion_log,
+            },
         }
     )
-    return {"status": "completed", "routine_id": routine_id, "times_completed": (routine.get("times_completed", 0) + 1)}
+
+    new_count = routine.get("times_completed", 0) + 1
+    return {
+        "status": "completed",
+        "routine_id": routine_id,
+        "times_completed": new_count,
+        "streak_current": streak,
+        "streak_best": best_streak,
+        "week_completions": week_completions,
+    }
 
 
 # ============== REFLECTIONS / JOURNAL ==============
