@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { Mic } from "lucide-react";
+import { Mic, MicOff } from "lucide-react";
 import { toast } from "sonner";
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -24,27 +24,50 @@ function cleanTranscript(raw) {
 }
 
 /**
- * Universal voice input component — inline mic button that can be placed
- * next to any text field. Captures speech, cleans it, and returns via onResult.
+ * Universal voice input component with real-time transcript display.
+ *
+ * Two usage modes:
+ *
+ * MODE 1 — Managed (recommended): pass textValue + onTextChange
+ *   The component auto-manages interim display in the linked text field.
+ *   <VoiceInput textValue={notes} onTextChange={setNotes} />
+ *
+ * MODE 2 — Manual: pass onResult (+ optional onInterim)
+ *   You handle everything yourself.
+ *   <VoiceInput onResult={(text) => append(text)} />
  *
  * Props:
- * - onResult(text): called with cleaned transcript when recording stops
- * - onInterim(text): called with interim text during recording (optional)
+ * - textValue: current text field value (managed mode)
+ * - onTextChange(newValue): setter for text field (managed mode)
+ * - onResult(text): called with cleaned transcript when recording stops (manual mode)
+ * - onInterim(text): called with interim text during recording (manual mode)
+ * - onListeningChange(isListening): notifies parent when listening state changes
  * - disabled: disables the button
- * - variant: "icon" (default, small round button) | "pill" (labeled button)
- * - className: additional CSS classes for the container
+ * - variant: "icon" (default) | "pill"
+ * - className: additional CSS classes
  */
 export default function VoiceInput({
+  textValue,
+  onTextChange,
   onResult,
   onInterim,
+  onListeningChange,
   disabled = false,
   variant = "icon",
   className = "",
 }) {
   const [isListening, setIsListening] = useState(false);
+  const [interimText, setInterimText] = useState("");
   const recognitionRef = useRef(null);
   const fullTranscriptRef = useRef("");
+  const baselineRef = useRef(""); // text value when recording started
+  const isManaged = textValue !== undefined && onTextChange;
   const isSupported = !!SpeechRecognition;
+
+  // Notify parent of listening state changes
+  useEffect(() => {
+    onListeningChange?.(isListening);
+  }, [isListening, onListeningChange]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -68,6 +91,12 @@ export default function VoiceInput({
     recognition.maxAlternatives = 1;
 
     fullTranscriptRef.current = "";
+    setInterimText("");
+
+    // Save baseline text for managed mode
+    if (isManaged) {
+      baselineRef.current = textValue || "";
+    }
 
     recognition.onstart = () => {
       setIsListening(true);
@@ -75,20 +104,32 @@ export default function VoiceInput({
 
     recognition.onresult = (event) => {
       let interim = "";
-      let final = "";
+      let finalText = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          final += transcript;
+          finalText += transcript;
         } else {
           interim += transcript;
         }
       }
-      if (final) {
-        fullTranscriptRef.current += final;
+      if (finalText) {
+        fullTranscriptRef.current += finalText;
       }
+
+      // Real-time display
+      const currentDraft = fullTranscriptRef.current + interim;
+
+      if (isManaged) {
+        // Update text field in real-time with interim
+        const separator = baselineRef.current && currentDraft ? " " : "";
+        onTextChange(baselineRef.current + separator + currentDraft);
+      }
+
+      setInterimText(interim);
+
       if (onInterim) {
-        onInterim(interim || fullTranscriptRef.current);
+        onInterim(currentDraft);
       }
     };
 
@@ -99,14 +140,22 @@ export default function VoiceInput({
         toast.error("Erreur de reconnaissance vocale.");
       }
       setIsListening(false);
+      setInterimText("");
     };
 
     recognition.onend = () => {
       setIsListening(false);
+      setInterimText("");
       const cleaned = cleanTranscript(fullTranscriptRef.current);
-      if (cleaned && onResult) {
+
+      if (isManaged) {
+        // Set final cleaned text
+        const separator = baselineRef.current && cleaned ? " " : "";
+        onTextChange(baselineRef.current + separator + cleaned);
+      } else if (cleaned && onResult) {
         onResult(cleaned);
       }
+
       fullTranscriptRef.current = "";
     };
 
@@ -117,7 +166,7 @@ export default function VoiceInput({
       toast.error("Impossible de démarrer le micro.");
       setIsListening(false);
     }
-  }, [isSupported, onResult, onInterim]);
+  }, [isSupported, isManaged, textValue, onTextChange, onResult, onInterim]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
@@ -132,7 +181,7 @@ export default function VoiceInput({
 
   if (!isSupported) return null;
 
-  // Icon variant: small circular button, perfect for inline placement
+  // Icon variant: small circular button with enhanced listening feedback
   if (variant === "icon") {
     return (
       <button
@@ -140,38 +189,51 @@ export default function VoiceInput({
         onClick={toggle}
         disabled={disabled}
         title={isListening ? "Arrêter la dictée" : "Dicter"}
-        className={`relative shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+        className={`relative shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 ${
           isListening
-            ? "bg-red-500 text-white shadow-lg shadow-red-500/25"
+            ? "bg-red-500 text-white shadow-lg shadow-red-500/30 scale-110"
             : "bg-muted/50 text-muted-foreground hover:bg-primary/10 hover:text-primary border border-border/50"
         } ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"} ${className}`}
       >
-        <Mic className="w-4 h-4" />
+        {isListening ? (
+          <MicOff className="w-4 h-4" />
+        ) : (
+          <Mic className="w-4 h-4" />
+        )}
         {isListening && (
-          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+          <>
+            <span className="absolute inset-0 rounded-xl bg-red-500/20 animate-ping" />
+            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-400 animate-pulse" />
+          </>
         )}
       </button>
     );
   }
 
-  // Pill variant: labeled button, similar to original VoiceNoteButton
+  // Pill variant: labeled button with full listening state
   return (
     <button
       type="button"
       onClick={toggle}
       disabled={disabled}
-      className={`shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+      className={`shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
         isListening
-          ? "bg-red-500 text-white shadow-lg shadow-red-500/25"
+          ? "bg-red-500 text-white shadow-lg shadow-red-500/30 scale-[1.02]"
           : "bg-muted/50 text-muted-foreground hover:bg-primary/10 hover:text-primary border border-border/50"
       } ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"} ${className}`}
     >
-      <Mic className="w-4 h-4" />
+      {isListening ? (
+        <MicOff className="w-4 h-4" />
+      ) : (
+        <Mic className="w-4 h-4" />
+      )}
       {isListening ? (
         <span className="flex items-center gap-1.5">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+          <span className="flex items-center gap-0.5">
+            <span className="w-1 h-3 bg-white/80 rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
+            <span className="w-1 h-4 bg-white/90 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
+            <span className="w-1 h-2 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
+            <span className="w-1 h-3.5 bg-white/85 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
           </span>
           Écoute...
         </span>
@@ -179,5 +241,67 @@ export default function VoiceInput({
         "Dicter"
       )}
     </button>
+  );
+}
+
+/**
+ * Wrapper component: voice-enabled textarea area with listening indicator bar.
+ * Use this for a complete voice + text experience.
+ *
+ * <VoiceTextArea value={text} onChange={setText} placeholder="..." rows={3} />
+ */
+export function VoiceTextArea({
+  value,
+  onChange,
+  placeholder = "",
+  rows = 2,
+  maxLength,
+  className = "",
+  disabled = false,
+  voiceDisabled = false,
+  textareaClassName = "",
+}) {
+  const [listening, setListening] = useState(false);
+
+  return (
+    <div className={`relative ${className}`}>
+      {/* Listening indicator bar */}
+      {listening && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/5 border border-red-500/15 border-b-0 rounded-t-lg">
+          <div className="flex items-center gap-0.5">
+            <span className="w-0.5 h-2 bg-red-500/60 rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
+            <span className="w-0.5 h-3 bg-red-500/80 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
+            <span className="w-0.5 h-1.5 bg-red-500/50 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
+            <span className="w-0.5 h-2.5 bg-red-500/70 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
+          </div>
+          <span className="text-[11px] text-red-500/80 font-medium">Écoute en cours — parle naturellement...</span>
+        </div>
+      )}
+
+      <div className="relative">
+        <textarea
+          className={`w-full rounded-lg border bg-muted/30 px-3 py-2.5 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none transition-all duration-200 ${
+            listening
+              ? "border-red-500/30 ring-1 ring-red-500/10 rounded-t-none"
+              : "border-border"
+          } ${textareaClassName}`}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={rows}
+          maxLength={maxLength}
+          disabled={disabled}
+        />
+        <div className="absolute right-2 bottom-2">
+          <VoiceInput
+            variant="icon"
+            textValue={value}
+            onTextChange={onChange}
+            onListeningChange={setListening}
+            disabled={disabled || voiceDisabled}
+          />
+        </div>
+      </div>
+    </div>
   );
 }

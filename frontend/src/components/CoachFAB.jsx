@@ -47,6 +47,7 @@ export default function CoachFAB() {
   const [isSending, setIsSending] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [hasNewMessage, setHasNewMessage] = useState(false);
+  const [voiceListening, setVoiceListening] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const panelRef = useRef(null);
@@ -271,8 +272,21 @@ export default function CoachFAB() {
             </div>
           )}
 
+          {/* Listening indicator */}
+          {voiceListening && (
+            <div className="px-3 py-1.5 border-t border-red-500/10 bg-red-500/5 flex items-center gap-2">
+              <div className="flex items-center gap-0.5">
+                <span className="w-0.5 h-2 bg-red-500/60 rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
+                <span className="w-0.5 h-3 bg-red-500/80 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
+                <span className="w-0.5 h-1.5 bg-red-500/50 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
+                <span className="w-0.5 h-2.5 bg-red-500/70 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
+              </div>
+              <span className="text-[11px] text-red-500/80 font-medium">Écoute en cours...</span>
+            </div>
+          )}
+
           {/* Input area */}
-          <div className="px-3 py-3 border-t border-border/50 bg-card/90">
+          <div className={`px-3 py-3 border-t bg-card/90 ${voiceListening ? "border-red-500/20" : "border-border/50"}`}>
             <div className="flex items-end gap-2">
               <div className="flex-1 relative">
                 <textarea
@@ -283,13 +297,17 @@ export default function CoachFAB() {
                   placeholder="Écris au coach..."
                   rows={1}
                   maxLength={500}
-                  className="w-full resize-none rounded-xl border border-border/50 bg-muted/30 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 placeholder:text-muted-foreground/50 max-h-24"
+                  className={`w-full resize-none rounded-xl border bg-muted/30 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 placeholder:text-muted-foreground/50 max-h-24 transition-colors ${
+                    voiceListening ? "border-red-500/30" : "border-border/50"
+                  }`}
                   style={{ minHeight: "40px" }}
                 />
               </div>
               <VoiceInput
                 variant="icon"
-                onResult={(text) => { setInput((prev) => prev ? prev + " " + text : text); }}
+                textValue={input}
+                onTextChange={setInput}
+                onListeningChange={setVoiceListening}
                 disabled={isSending}
               />
               <Button

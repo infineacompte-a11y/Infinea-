@@ -2,8 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import VoiceInput from "@/components/VoiceInput";
+import { VoiceTextArea } from "@/components/VoiceInput";
 import {
   BookOpen,
   Brain,
@@ -404,21 +403,12 @@ export default function JournalPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="relative">
-              <Textarea
-                placeholder="Qu'avez-vous en tête? Comment vous sentez-vous après cette session?"
-                value={newReflection.content}
-                onChange={(e) => setNewReflection({ ...newReflection, content: e.target.value })}
-                className="min-h-[120px] resize-none pr-12"
-                data-testid="reflection-textarea"
-              />
-              <div className="absolute right-2 bottom-2">
-                <VoiceInput
-                  variant="icon"
-                  onResult={(text) => setNewReflection((prev) => ({ ...prev, content: prev.content ? prev.content + " " + text : text }))}
-                />
-              </div>
-            </div>
+            <VoiceTextArea
+              value={newReflection.content}
+              onChange={(val) => setNewReflection((prev) => ({ ...prev, content: val }))}
+              placeholder="Qu'avez-vous en tête? Comment vous sentez-vous après cette session?"
+              rows={4}
+            />
 
             <div className="space-y-2">
               <label className="text-sm text-muted-foreground">Comment vous sentez-vous?</label>

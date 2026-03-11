@@ -32,7 +32,7 @@ import {
   Trophy,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
-import VoiceInput from "@/components/VoiceInput";
+import { VoiceTextArea } from "@/components/VoiceInput";
 import { API, authFetch } from "@/App";
 import { toast } from "sonner";
 
@@ -483,21 +483,12 @@ export default function ObjectiveDetailPage() {
             )}
 
             {/* Notes with voice input */}
-            <div className="relative">
-              <textarea
-                className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-                placeholder="Notes sur cette session..."
-                value={sessionNotes}
-                onChange={(e) => setSessionNotes(e.target.value)}
-                rows={2}
-              />
-              <div className="absolute right-2 bottom-2">
-                <VoiceInput
-                  variant="icon"
-                  onResult={(text) => setSessionNotes((prev) => prev ? prev + " " + text : text)}
-                />
-              </div>
-            </div>
+            <VoiceTextArea
+              value={sessionNotes}
+              onChange={setSessionNotes}
+              placeholder="Notes sur cette session..."
+              rows={2}
+            />
           </div>
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
