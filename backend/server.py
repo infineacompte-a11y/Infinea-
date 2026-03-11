@@ -4252,6 +4252,121 @@ async def get_premium_challenges(user: dict = Depends(get_current_user)):
         "total_challenges": len(MONTHLY_CHALLENGES)
     }
 
+# ── Community Challenges (free for all) ──────────
+
+COMMUNITY_CHALLENGES = [
+    {
+        "id": "community_7day_streak",
+        "title": "Streak Communautaire",
+        "description": "Maintiens un streak de 7 jours ce mois-ci",
+        "icon": "flame",
+        "target": 7,
+        "metric": "streak",
+        "reward": "Badge Flamme Communautaire",
+    },
+    {
+        "id": "community_30min_week",
+        "title": "30 min cette semaine",
+        "description": "Investis 30 minutes de micro-actions en une semaine",
+        "icon": "clock",
+        "target": 30,
+        "metric": "week_minutes",
+        "reward": "Badge Investisseur",
+    },
+    {
+        "id": "community_5_sessions",
+        "title": "5 sessions ce mois",
+        "description": "Complète 5 sessions de micro-actions ce mois-ci",
+        "icon": "target",
+        "target": 5,
+        "metric": "month_sessions",
+        "reward": "Badge Régulier",
+    },
+    {
+        "id": "community_3_categories",
+        "title": "Explorateur",
+        "description": "Pratique dans 3 catégories différentes ce mois-ci",
+        "icon": "compass",
+        "target": 3,
+        "metric": "categories",
+        "reward": "Badge Explorateur",
+    },
+]
+
+
+@api_router.get("/challenges/community")
+@limiter.limit("15/minute")
+async def get_community_challenges(request: Request, user: dict = Depends(get_current_user)):
+    """Get community challenges open to all users with progress + leaderboard."""
+    now = datetime.now(timezone.utc)
+    today = now.date()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    week_start = (today - timedelta(days=today.weekday())).isoformat()
+    user_id = user["user_id"]
+
+    # Get user's month sessions
+    month_sessions = await db.user_sessions_history.find(
+        {"user_id": user_id, "completed": True, "started_at": {"$gte": month_start}},
+        {"_id": 0, "actual_duration": 1, "category": 1, "started_at": 1}
+    ).to_list(200)
+
+    # Get week sessions
+    week_sessions = [s for s in month_sessions if s.get("started_at", "") >= week_start]
+
+    # Compute metrics
+    streak = user.get("streak_days", 0)
+    week_minutes = sum(s.get("actual_duration", 0) for s in week_sessions)
+    month_session_count = len(month_sessions)
+    categories = len(set(s.get("category", "") for s in month_sessions if s.get("category")))
+
+    metric_values = {
+        "streak": streak,
+        "week_minutes": week_minutes,
+        "month_sessions": month_session_count,
+        "categories": categories,
+    }
+
+    # Leaderboard: count how many users completed each challenge
+    month_key = now.strftime("%Y-%m")
+    leaderboard_pipeline = [
+        {"$match": {"month": month_key, "completed": True}},
+        {"$group": {"_id": "$challenge_id", "count": {"$sum": 1}}},
+    ]
+    leaderboard_data = await db.user_challenges.aggregate(leaderboard_pipeline).to_list(20)
+    leaderboard_map = {item["_id"]: item["count"] for item in leaderboard_data}
+
+    # Build response
+    challenges = []
+    for ch in COMMUNITY_CHALLENGES:
+        progress = min(metric_values.get(ch["metric"], 0), ch["target"])
+        is_completed = progress >= ch["target"]
+
+        # Auto-record completion
+        if is_completed:
+            await db.user_challenges.update_one(
+                {"user_id": user_id, "challenge_id": ch["id"], "month": month_key},
+                {"$set": {"completed": True, "completed_at": now.isoformat(), "progress": progress}},
+                upsert=True,
+            )
+
+        challenges.append({
+            "id": ch["id"],
+            "title": ch["title"],
+            "description": ch["description"],
+            "icon": ch["icon"],
+            "target": ch["target"],
+            "progress": progress,
+            "completed": is_completed,
+            "reward": ch["reward"],
+            "participants_completed": leaderboard_map.get(ch["id"], 0),
+        })
+
+    return {
+        "challenges": challenges,
+        "month": month_key,
+    }
+
+
 @api_router.get("/premium/analytics")
 async def get_premium_analytics(user: dict = Depends(get_current_user)):
     """Get advanced analytics for premium users"""
