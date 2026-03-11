@@ -165,6 +165,19 @@ class ObjectiveUpdate(BaseModel):
     daily_minutes: Optional[int] = None
     status: Optional[str] = None  # active, paused, completed, abandoned
 
+class RoutineCreate(BaseModel):
+    name: str  # "Routine matinale", "Pause déjeuner productive"
+    description: Optional[str] = None
+    time_of_day: Optional[str] = "morning"  # morning, afternoon, evening, anytime
+    items: Optional[List[dict]] = []  # [{type: "action"|"objective_step", ref_id, title, duration_minutes, order}]
+
+class RoutineUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    time_of_day: Optional[str] = None
+    items: Optional[List[dict]] = None
+    is_active: Optional[bool] = None
+
 class ICalConnectRequest(BaseModel):
     url: str
     name: Optional[str] = "Mon calendrier iCal"
@@ -4895,6 +4908,148 @@ async def complete_objective_step(request: Request, objective_id: str, user: dic
     }
 
 
+# ============== ROUTINES ==============
+
+@api_router.post("/routines")
+@limiter.limit("10/minute")
+async def create_routine(request: Request, routine: RoutineCreate, user: dict = Depends(get_current_user)):
+    """Create a new routine (ordered sequence of micro-actions / objective steps)."""
+    # Free: max 3 routines, Premium: 20
+    count = await db.routines.count_documents({"user_id": user["user_id"], "deleted": {"$ne": True}})
+    max_routines = 3 if user.get("subscription_tier") != "premium" else 20
+    if count >= max_routines:
+        raise HTTPException(status_code=400, detail=f"Limite atteinte ({max_routines} routines).")
+
+    now = datetime.now(timezone.utc).isoformat()
+    routine_id = f"rtn_{uuid.uuid4().hex[:12]}"
+
+    # Validate and normalize items
+    validated_items = []
+    for i, item in enumerate(routine.items or []):
+        validated_items.append({
+            "type": item.get("type", "action"),  # action | objective_step
+            "ref_id": item.get("ref_id", ""),
+            "title": item.get("title", "Sans titre"),
+            "duration_minutes": min(max(int(item.get("duration_minutes", 5)), 1), 120),
+            "order": i,
+        })
+
+    doc = {
+        "routine_id": routine_id,
+        "user_id": user["user_id"],
+        "name": routine.name.strip()[:100],
+        "description": (routine.description or "").strip()[:500],
+        "time_of_day": routine.time_of_day if routine.time_of_day in ("morning", "afternoon", "evening", "anytime") else "morning",
+        "items": validated_items,
+        "is_active": True,
+        "total_minutes": sum(it["duration_minutes"] for it in validated_items),
+        "times_completed": 0,
+        "last_completed_at": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.routines.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/routines")
+@limiter.limit("30/minute")
+async def list_routines(request: Request, user: dict = Depends(get_current_user)):
+    """List all routines for the user."""
+    routines = await db.routines.find(
+        {"user_id": user["user_id"], "deleted": {"$ne": True}},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    return {"routines": routines, "count": len(routines)}
+
+
+@api_router.get("/routines/{routine_id}")
+@limiter.limit("30/minute")
+async def get_routine(request: Request, routine_id: str, user: dict = Depends(get_current_user)):
+    """Get a single routine by ID."""
+    routine = await db.routines.find_one(
+        {"routine_id": routine_id, "user_id": user["user_id"], "deleted": {"$ne": True}},
+        {"_id": 0}
+    )
+    if not routine:
+        raise HTTPException(status_code=404, detail="Routine non trouvée.")
+    return routine
+
+
+@api_router.put("/routines/{routine_id}")
+@limiter.limit("15/minute")
+async def update_routine(request: Request, routine_id: str, update: RoutineUpdate, user: dict = Depends(get_current_user)):
+    """Update a routine (name, items, active status, etc.)."""
+    routine = await db.routines.find_one(
+        {"routine_id": routine_id, "user_id": user["user_id"], "deleted": {"$ne": True}}
+    )
+    if not routine:
+        raise HTTPException(status_code=404, detail="Routine non trouvée.")
+
+    now = datetime.now(timezone.utc).isoformat()
+    updates = {"updated_at": now}
+
+    if update.name is not None:
+        updates["name"] = update.name.strip()[:100]
+    if update.description is not None:
+        updates["description"] = update.description.strip()[:500]
+    if update.time_of_day is not None and update.time_of_day in ("morning", "afternoon", "evening", "anytime"):
+        updates["time_of_day"] = update.time_of_day
+    if update.is_active is not None:
+        updates["is_active"] = update.is_active
+    if update.items is not None:
+        validated_items = []
+        for i, item in enumerate(update.items):
+            validated_items.append({
+                "type": item.get("type", "action"),
+                "ref_id": item.get("ref_id", ""),
+                "title": item.get("title", "Sans titre"),
+                "duration_minutes": min(max(int(item.get("duration_minutes", 5)), 1), 120),
+                "order": i,
+            })
+        updates["items"] = validated_items
+        updates["total_minutes"] = sum(it["duration_minutes"] for it in validated_items)
+
+    await db.routines.update_one({"routine_id": routine_id}, {"$set": updates})
+    updated = await db.routines.find_one({"routine_id": routine_id}, {"_id": 0})
+    return updated
+
+
+@api_router.delete("/routines/{routine_id}")
+@limiter.limit("10/minute")
+async def delete_routine(request: Request, routine_id: str, user: dict = Depends(get_current_user)):
+    """Soft-delete a routine."""
+    result = await db.routines.update_one(
+        {"routine_id": routine_id, "user_id": user["user_id"], "deleted": {"$ne": True}},
+        {"$set": {"deleted": True, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Routine non trouvée.")
+    return {"status": "deleted", "routine_id": routine_id}
+
+
+@api_router.post("/routines/{routine_id}/complete")
+@limiter.limit("20/minute")
+async def complete_routine(request: Request, routine_id: str, user: dict = Depends(get_current_user)):
+    """Mark a routine as completed (increments counter, updates last_completed_at)."""
+    routine = await db.routines.find_one(
+        {"routine_id": routine_id, "user_id": user["user_id"], "deleted": {"$ne": True}}
+    )
+    if not routine:
+        raise HTTPException(status_code=404, detail="Routine non trouvée.")
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.routines.update_one(
+        {"routine_id": routine_id},
+        {
+            "$inc": {"times_completed": 1},
+            "$set": {"last_completed_at": now, "updated_at": now},
+        }
+    )
+    return {"status": "completed", "routine_id": routine_id, "times_completed": (routine.get("times_completed", 0) + 1)}
+
+
 # ============== REFLECTIONS / JOURNAL ==============
 
 class ReflectionCreate(BaseModel):
@@ -5608,6 +5763,11 @@ async def startup_event():
     await db.objectives.create_index([("user_id", 1), ("status", 1)])
     await db.objectives.create_index("objective_id", unique=True)
     logger.info("objectives indexes ensured")
+
+    # Create indexes for routines collection
+    await db.routines.create_index([("user_id", 1), ("is_active", 1)])
+    await db.routines.create_index("routine_id", unique=True)
+    logger.info("routines indexes ensured")
 
     # Start daily action generation background loop
     from services.action_generator import daily_generation_loop
