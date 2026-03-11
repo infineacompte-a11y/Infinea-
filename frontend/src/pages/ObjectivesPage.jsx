@@ -27,6 +27,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
+import VoiceInput from "@/components/VoiceInput";
 import { API, authFetch, useAuth } from "@/App";
 import { toast } from "sonner";
 
@@ -354,9 +355,18 @@ export default function ObjectivesPage() {
 
                 {/* Description (optional — rich context for AI) */}
                 <div>
-                  <label className="text-sm font-medium mb-1.5 block">
-                    Contexte & détails <span className="text-muted-foreground">(optionnel — plus tu donnes de détails, meilleur sera ton parcours)</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-medium">
+                      Contexte & détails <span className="text-muted-foreground">(optionnel)</span>
+                    </label>
+                    <VoiceInput
+                      variant="pill"
+                      onResult={(text) => setForm((f) => ({ ...f, description: f.description ? f.description + " " + text : text }))}
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mb-1.5">
+                    Plus tu donnes de détails, meilleur sera ton parcours.
+                  </p>
                   <textarea
                     className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y min-h-[80px]"
                     placeholder="Niveau actuel, objectif précis, contraintes, ressources disponibles, ce que tu veux atteindre à la fin du parcours..."

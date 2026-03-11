@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import VoiceInput from "@/components/VoiceInput";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -79,13 +80,21 @@ export default function CreateActionModal({ open, onOpenChange, onActionCreated 
 
         {!generatedAction ? (
           <div className="py-4 space-y-4">
-            <Textarea
-              placeholder="Ex: Je veux apprendre 5 mots de vocabulaire anglais en 3 minutes..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="min-h-24 resize-none"
-              data-testid="action-description-input"
-            />
+            <div className="relative">
+              <Textarea
+                placeholder="Ex: Je veux apprendre 5 mots de vocabulaire anglais en 3 minutes..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="min-h-24 resize-none pr-12"
+                data-testid="action-description-input"
+              />
+              <div className="absolute right-2 bottom-2">
+                <VoiceInput
+                  variant="icon"
+                  onResult={(text) => setDescription((prev) => prev ? prev + " " + text : text)}
+                />
+              </div>
+            </div>
             <Button
               onClick={handleGenerate}
               className="w-full h-11 rounded-xl"
