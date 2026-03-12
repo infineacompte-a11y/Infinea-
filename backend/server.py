@@ -233,6 +233,16 @@ class ShareCreate(BaseModel):
     share_type: str = Field(default="weekly_recap", description="Type of share: weekly_recap, milestone, badge, objective")
     objective_id: Optional[str] = Field(default=None, description="Objective to highlight (optional)")
 
+class GroupCreate(BaseModel):
+    """Request body for creating a duo/group."""
+    name: str = Field(min_length=1, max_length=50)
+    objective_title: Optional[str] = Field(default=None, max_length=100, description="Shared objective label")
+    category: Optional[str] = Field(default=None)
+
+class GroupInvite(BaseModel):
+    """Request body for inviting someone to a group."""
+    email: EmailStr
+
 # ============== AI HELPER FUNCTIONS ==============
 
 AI_SYSTEM_MESSAGE = """Tu es le coach IA InFinea, expert en productivité, apprentissage et bien-être.
@@ -7012,6 +7022,310 @@ async def test_integration(service: str, user: dict = Depends(get_current_user))
         )
         return {"ok": False, "error": error_msg}
 
+# ============== DUO / GROUPE (D.3) ==============
+# Pattern: Duolingo Friends Quest — small bounded groups (2-10), embedded members.
+# Single-document design (MongoDB best practice for bounded arrays <50 elements).
+
+GROUP_MAX_MEMBERS = 10
+GROUP_CATEGORIES = {"learning", "productivity", "well_being", "creativity", "fitness", "mindfulness"}
+
+
+async def _refresh_group_member_stats(group_doc: dict) -> dict:
+    """Refresh live stats for all members of a group. Lightweight — only reads user docs."""
+    user_ids = [m["user_id"] for m in group_doc.get("members", [])]
+    if not user_ids:
+        return group_doc
+    users = await db.users.find(
+        {"user_id": {"$in": user_ids}},
+        {"_id": 0, "user_id": 1, "streak_days": 1, "total_time_invested": 1}
+    ).to_list(GROUP_MAX_MEMBERS)
+    user_map = {u["user_id"]: u for u in users}
+
+    now = datetime.now(timezone.utc)
+    week_start = (now.date() - timedelta(days=now.weekday())).isoformat()
+
+    # Batch query: week minutes per member
+    week_pipeline = [
+        {"$match": {"user_id": {"$in": user_ids}, "completed": True, "completed_at": {"$gte": week_start}}},
+        {"$group": {"_id": "$user_id", "week_minutes": {"$sum": "$actual_duration"}, "week_sessions": {"$sum": 1}}}
+    ]
+    week_stats = {s["_id"]: s for s in await db.user_sessions_history.aggregate(week_pipeline).to_list(GROUP_MAX_MEMBERS)}
+
+    for member in group_doc["members"]:
+        uid = member["user_id"]
+        u = user_map.get(uid, {})
+        ws = week_stats.get(uid, {})
+        member["stats"] = {
+            "streak_days": u.get("streak_days", 0),
+            "total_time_invested": u.get("total_time_invested", 0),
+            "week_minutes": ws.get("week_minutes", 0),
+            "week_sessions": ws.get("week_sessions", 0),
+        }
+    return group_doc
+
+
+@api_router.post("/groups")
+@limiter.limit("5/minute")
+async def create_group(request: Request, body: GroupCreate, user: dict = Depends(get_current_user)):
+    """Create a new duo/group. The creator becomes the owner."""
+    # Check user isn't in too many groups (limit: 5 active)
+    existing = await db.groups.count_documents(
+        {"members.user_id": user["user_id"], "status": "active"}
+    )
+    if existing >= 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 groupes actifs autorisés")
+
+    group_id = f"grp_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+
+    group_doc = {
+        "group_id": group_id,
+        "name": body.name.strip(),
+        "objective_title": (body.objective_title or "").strip() or None,
+        "category": body.category if body.category in GROUP_CATEGORIES else None,
+        "owner_id": user["user_id"],
+        "members": [{
+            "user_id": user["user_id"],
+            "name": user.get("name", ""),
+            "role": "owner",
+            "joined_at": now,
+            "stats": {
+                "streak_days": user.get("streak_days", 0),
+                "total_time_invested": user.get("total_time_invested", 0),
+                "week_minutes": 0,
+                "week_sessions": 0,
+            },
+        }],
+        "invites": [],
+        "max_members": GROUP_MAX_MEMBERS,
+        "status": "active",
+        "created_at": now,
+    }
+    await db.groups.insert_one(group_doc)
+    return {"group_id": group_id, "message": "Groupe créé"}
+
+
+@api_router.get("/groups")
+async def list_groups(user: dict = Depends(get_current_user)):
+    """List all groups the user belongs to."""
+    groups = await db.groups.find(
+        {"members.user_id": user["user_id"], "status": "active"},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(10)
+
+    # Refresh stats for all groups
+    for g in groups:
+        await _refresh_group_member_stats(g)
+    return {"groups": groups}
+
+
+@api_router.get("/groups/{group_id}")
+async def get_group(group_id: str, user: dict = Depends(get_current_user)):
+    """Get a single group with refreshed member stats."""
+    group = await db.groups.find_one(
+        {"group_id": group_id, "members.user_id": user["user_id"], "status": "active"},
+        {"_id": 0}
+    )
+    if not group:
+        raise HTTPException(status_code=404, detail="Groupe introuvable")
+    await _refresh_group_member_stats(group)
+    return group
+
+
+@api_router.post("/groups/{group_id}/invite")
+@limiter.limit("10/minute")
+async def invite_to_group(request: Request, group_id: str, body: GroupInvite, user: dict = Depends(get_current_user)):
+    """Invite someone to a group by email."""
+    group = await db.groups.find_one(
+        {"group_id": group_id, "members.user_id": user["user_id"], "status": "active"}
+    )
+    if not group:
+        raise HTTPException(status_code=404, detail="Groupe introuvable")
+
+    if len(group.get("members", [])) + len([i for i in group.get("invites", []) if i["status"] == "pending"]) >= GROUP_MAX_MEMBERS:
+        raise HTTPException(status_code=400, detail=f"Maximum {GROUP_MAX_MEMBERS} membres par groupe")
+
+    # Check if already member
+    if any(m["user_id"] == body.email for m in group.get("members", [])):
+        raise HTTPException(status_code=400, detail="Déjà membre du groupe")
+
+    # Check if already invited (pending)
+    if any(i["email"] == body.email and i["status"] == "pending" for i in group.get("invites", [])):
+        raise HTTPException(status_code=400, detail="Invitation déjà envoyée")
+
+    now = datetime.now(timezone.utc)
+    invite = {
+        "invite_id": f"ginv_{uuid.uuid4().hex[:12]}",
+        "email": body.email,
+        "inviter_name": user.get("name", ""),
+        "status": "pending",
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(days=7)).isoformat(),
+    }
+
+    await db.groups.update_one(
+        {"group_id": group_id},
+        {"$push": {"invites": invite}}
+    )
+
+    # If the invitee already has an account, create a notification
+    invitee = await db.users.find_one({"email": body.email}, {"user_id": 1})
+    if invitee:
+        await db.notifications.insert_one({
+            "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+            "user_id": invitee["user_id"],
+            "type": "group_invite",
+            "title": "Invitation à un groupe",
+            "message": f"{user.get('name', 'Quelqu\'un')} t'invite à rejoindre « {group['name']} »",
+            "icon": "users",
+            "data": {"group_id": group_id, "invite_id": invite["invite_id"]},
+            "read": False,
+            "created_at": now.isoformat(),
+        })
+        try:
+            await send_push_to_user(
+                invitee["user_id"],
+                "Invitation à un groupe",
+                f"{user.get('name', 'Quelqu\'un')} t'invite à rejoindre « {group['name']} »",
+                url="/groups",
+                tag="group-invite",
+            )
+        except Exception:
+            pass  # Push is best-effort, never blocks
+
+    return {"message": "Invitation envoyée", "invite_id": invite["invite_id"]}
+
+
+@api_router.post("/groups/{group_id}/join")
+async def join_group(group_id: str, user: dict = Depends(get_current_user)):
+    """Accept an invitation and join a group."""
+    group = await db.groups.find_one({"group_id": group_id, "status": "active"})
+    if not group:
+        raise HTTPException(status_code=404, detail="Groupe introuvable")
+
+    # Check if already a member
+    if any(m["user_id"] == user["user_id"] for m in group.get("members", [])):
+        raise HTTPException(status_code=400, detail="Déjà membre de ce groupe")
+
+    # Check pending invite for this user
+    email = user.get("email", "")
+    invite_found = False
+    for inv in group.get("invites", []):
+        if inv["email"] == email and inv["status"] == "pending":
+            invite_found = True
+            break
+
+    if not invite_found:
+        raise HTTPException(status_code=403, detail="Aucune invitation en attente pour ce compte")
+
+    if len(group.get("members", [])) >= GROUP_MAX_MEMBERS:
+        raise HTTPException(status_code=400, detail="Groupe complet")
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Add member + mark invite as accepted (atomic)
+    await db.groups.update_one(
+        {"group_id": group_id, "invites.email": email, "invites.status": "pending"},
+        {
+            "$push": {"members": {
+                "user_id": user["user_id"],
+                "name": user.get("name", ""),
+                "role": "member",
+                "joined_at": now,
+                "stats": {
+                    "streak_days": user.get("streak_days", 0),
+                    "total_time_invested": user.get("total_time_invested", 0),
+                    "week_minutes": 0, "week_sessions": 0,
+                },
+            }},
+            "$set": {"invites.$[inv].status": "accepted"},
+        },
+        array_filters=[{"inv.email": email, "inv.status": "pending"}],
+    )
+
+    # Notify group owner
+    await db.notifications.insert_one({
+        "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+        "user_id": group["owner_id"],
+        "type": "group_member_joined",
+        "title": "Nouveau membre",
+        "message": f"{user.get('name', 'Quelqu\'un')} a rejoint « {group['name']} »",
+        "icon": "user-plus",
+        "read": False,
+        "created_at": now,
+    })
+
+    return {"message": f"Bienvenue dans « {group['name']} » !"}
+
+
+@api_router.post("/groups/{group_id}/leave")
+async def leave_group(group_id: str, user: dict = Depends(get_current_user)):
+    """Leave a group. Owner cannot leave — must archive instead."""
+    group = await db.groups.find_one(
+        {"group_id": group_id, "members.user_id": user["user_id"], "status": "active"}
+    )
+    if not group:
+        raise HTTPException(status_code=404, detail="Groupe introuvable")
+
+    if group["owner_id"] == user["user_id"]:
+        raise HTTPException(status_code=400, detail="Le créateur ne peut pas quitter le groupe. Utilisez l'archivage.")
+
+    await db.groups.update_one(
+        {"group_id": group_id},
+        {"$pull": {"members": {"user_id": user["user_id"]}}}
+    )
+    return {"message": "Vous avez quitté le groupe"}
+
+
+@api_router.delete("/groups/{group_id}")
+async def archive_group(group_id: str, user: dict = Depends(get_current_user)):
+    """Archive a group (owner only). Soft delete — never hard delete."""
+    group = await db.groups.find_one({"group_id": group_id, "status": "active"})
+    if not group:
+        raise HTTPException(status_code=404, detail="Groupe introuvable")
+    if group["owner_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Seul le créateur peut archiver le groupe")
+
+    await db.groups.update_one(
+        {"group_id": group_id},
+        {"$set": {"status": "archived", "archived_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"message": "Groupe archivé"}
+
+
+@api_router.get("/groups/{group_id}/feed")
+async def get_group_feed(group_id: str, user: dict = Depends(get_current_user)):
+    """Get recent activity feed for a group — last 7 days of sessions from all members.
+    Pattern: Strava Club activity feed — chronological, lightweight."""
+    group = await db.groups.find_one(
+        {"group_id": group_id, "members.user_id": user["user_id"], "status": "active"}
+    )
+    if not group:
+        raise HTTPException(status_code=404, detail="Groupe introuvable")
+
+    member_ids = [m["user_id"] for m in group.get("members", [])]
+    member_names = {m["user_id"]: m["name"] for m in group["members"]}
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+
+    sessions = await db.user_sessions_history.find(
+        {"user_id": {"$in": member_ids}, "completed": True, "completed_at": {"$gte": week_ago}},
+        {"_id": 0, "user_id": 1, "action_title": 1, "category": 1, "actual_duration": 1, "completed_at": 1}
+    ).sort("completed_at", -1).limit(50).to_list(50)
+
+    # Enrich with member name (never expose user_id to frontend)
+    feed = []
+    for s in sessions:
+        feed.append({
+            "member_name": member_names.get(s["user_id"], "Membre"),
+            "action_title": s.get("action_title", "Session"),
+            "category": s.get("category", ""),
+            "duration": s.get("actual_duration", 0),
+            "completed_at": s.get("completed_at", ""),
+        })
+
+    return {"feed": feed, "group_name": group["name"]}
+
+
 # ============== SHARE PROGRESSION (D.2) ==============
 
 SHARE_TYPES = {"weekly_recap", "milestone", "badge", "objective"}
@@ -7208,6 +7522,11 @@ async def startup_event():
     await db.shares.create_index([("user_id", 1), ("created_at", -1)])
     await db.shares.create_index("expires_at", expireAfterSeconds=0)  # MongoDB TTL: auto-delete expired docs
     logger.info("shares indexes ensured")
+
+    # Create indexes for groups collection (D.3 duo/groupe)
+    await db.groups.create_index("group_id", unique=True)
+    await db.groups.create_index([("members.user_id", 1), ("status", 1)])
+    logger.info("groups indexes ensured")
 
     # Start daily action generation background loop
     from services.action_generator import daily_generation_loop
