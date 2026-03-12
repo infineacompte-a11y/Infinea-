@@ -77,98 +77,11 @@ from auth import create_token, verify_token, get_current_user, hash_password, ve
 from routes.auth_routes import router as auth_router
 api_router.include_router(auth_router)
 
-# ============== ONBOARDING ROUTES ==============
-
-@api_router.post("/onboarding/profile")
-async def save_onboarding_profile(
-    profile: OnboardingProfile,
-    user: dict = Depends(get_current_user)
-):
-    """Save user onboarding profile and generate AI welcome message"""
-    profile_dict = profile.model_dump()
-
-    await db.users.update_one(
-        {"user_id": user["user_id"]},
-        {"$set": {
-            "user_profile": profile_dict,
-            "onboarding_completed": True
-        }}
-    )
-
-    user["user_profile"] = profile_dict
-    user_context = await build_user_context(user)
-
-    goals_map = {"learning": "apprentissage", "productivity": "productivité", "well_being": "bien-être"}
-    goals_fr = ", ".join([goals_map.get(g, g) for g in profile.goals])
-
-    prompt = f"""{user_context}
-
-L'utilisateur vient de créer son compte et de compléter son profil.
-Ses objectifs principaux sont : {goals_fr}.
-
-Génère un message d'accueil personnalisé et chaleureux, puis recommande une première micro-action adaptée à son profil.
-Réponds en JSON:
-{{
-    "welcome_message": "Message d'accueil personnalisé (2-3 phrases)",
-    "first_recommendation": "Description de la première action recommandée (1-2 phrases)"
-}}"""
-
-    ai_response = await call_ai(f"onboarding_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt)
-    ai_result = parse_ai_json(ai_response)
-
-    default_welcome = f"Bienvenue sur InFinea, {user.get('name', '')} ! Prêt(e) à transformer vos moments perdus en micro-victoires ?"
-    default_reco = "Commencez par une session de respiration de 2 minutes pour vous recentrer."
-
-    return {
-        "welcome_message": ai_result.get("welcome_message", default_welcome) if ai_result else default_welcome,
-        "first_recommendation": ai_result.get("first_recommendation", default_reco) if ai_result else default_reco,
-        "user_profile": profile_dict
-    }
-
-@api_router.get("/onboarding/profile")
-async def get_onboarding_profile(user: dict = Depends(get_current_user)):
-    """Get user's onboarding profile"""
-    profile = user.get("user_profile")
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    return profile
-
-# ============== MICRO-ACTIONS ROUTES ==============
-
-@api_router.get("/actions", response_model=List[MicroAction])
-async def get_actions(
-    category: Optional[str] = None,
-    duration: Optional[int] = None,
-    energy: Optional[str] = None
-):
-    query = {}
-    if category:
-        query["category"] = category
-    if energy:
-        query["energy_level"] = energy
-    
-    actions = await db.micro_actions.find(query, {"_id": 0}).to_list(5000)
-    
-    if duration:
-        actions = [a for a in actions if a["duration_min"] <= duration <= a["duration_max"]]
-    
-    return actions
-
-@api_router.get("/actions/custom")
-async def get_custom_actions(user: dict = Depends(get_current_user)):
-    """Get user's custom AI-generated actions"""
-    actions = await db.user_custom_actions.find(
-        {"created_by": user["user_id"]},
-        {"_id": 0}
-    ).to_list(50)
-    return actions
-
-@api_router.get("/actions/{action_id}")
-async def get_action(action_id: str):
-    action = await db.micro_actions.find_one({"action_id": action_id}, {"_id": 0})
-    if not action:
-        raise HTTPException(status_code=404, detail="Action not found")
-    return action
+# ============== ONBOARDING + ACTIONS ROUTES (imported) ==============
+from routes.onboarding import router as onboarding_router
+from routes.actions import router as actions_router
+api_router.include_router(onboarding_router)
+api_router.include_router(actions_router)
 
 # ============== AI SUGGESTIONS ROUTE ==============
 
