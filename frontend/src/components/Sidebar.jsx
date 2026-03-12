@@ -60,6 +60,7 @@ function useUnreadCount(intervalMs = 60000) {
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { to: "/my-day", label: "Ma Journée", icon: Zap },
+  { to: "/micro-instants", label: "Micro-Instants", icon: Timer },
   { to: "/objectives", label: "Mes Objectifs", icon: Target },
   { to: "/routines", label: "Mes Habitudes", icon: CalendarClock },
   { to: "/actions", label: "Bibliothèque", icon: Sparkles },
