@@ -31,6 +31,9 @@ VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_CLAIMS_EMAIL", "mailto:contact@infine
 # ── Stripe ──
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
+# ── Redis (Cache) ──
+REDIS_URL = os.environ.get("REDIS_URL", "")
+
 # ── Rate Limiting ──
 from slowapi import Limiter
 from slowapi.util import get_remote_address

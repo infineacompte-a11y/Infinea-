@@ -18,3 +18,4 @@ icalendar>=5.0.0
 slowapi>=0.1.9
 pywebpush>=2.0.0
 stripe>=8.0.0
+redis[hiredis]>=5.0.0
