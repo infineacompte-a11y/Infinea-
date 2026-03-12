@@ -144,7 +144,6 @@ jobs:
             exit 1
           fi
           npm install -g vercel
-          cd frontend
           vercel --prod --token=$VERCEL_TOKEN --yes
           echo "✅ Frontend déployé en production sur Vercel"
         env:
