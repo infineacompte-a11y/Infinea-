@@ -5399,6 +5399,48 @@ async def get_next_objective_session(request: Request, objective_id: str, user: 
     if not curriculum:
         return {"status": "generating", "message": "Le curriculum est en cours de génération..."}
 
+    # ── Spaced repetition: check for overdue reviews ──
+    from services.spaced_repetition import get_review_queue, seed_reviews_from_curriculum
+    await seed_reviews_from_curriculum(db, user["user_id"], objective_id, curriculum)
+    review_queue = await get_review_queue(db, user["user_id"], objective_id)
+
+    if review_queue:
+        # Overdue review takes priority over new material
+        top_review = review_queue[0]
+        # Find a completed step matching this skill to use as review template
+        review_step = None
+        for step in reversed(curriculum):
+            if step.get("completed") and (step.get("focus") or "").strip() == top_review["skill"]:
+                review_step = step
+                break
+
+        if review_step:
+            return {
+                "status": "review",
+                "objective_id": objective_id,
+                "objective_title": obj["title"],
+                "step": {
+                    **review_step,
+                    "completed": False,
+                    "title": f"Révision : {review_step.get('title', top_review['skill'])}",
+                    "review": True,
+                    "review_skill": top_review["skill"],
+                    "days_overdue": top_review["days_overdue"],
+                },
+                "review_info": {
+                    "skill": top_review["skill"],
+                    "days_overdue": top_review["days_overdue"],
+                    "reviews_due": len(review_queue),
+                },
+                "progress": {
+                    "current_day": obj.get("current_day", 0),
+                    "total_days": obj["target_duration_days"],
+                    "total_sessions": obj.get("total_sessions", 0),
+                    "total_minutes": obj.get("total_minutes", 0),
+                    "percent": round((obj.get("current_day", 0) / max(obj["target_duration_days"], 1)) * 100, 1),
+                },
+            }
+
     # Find next uncompleted step
     current_day = obj.get("current_day", 0)
     next_step = None
@@ -5702,6 +5744,52 @@ async def get_objective_skills(request: Request, objective_id: str, user: dict =
         "level": overall_level,
         "review_needed": review_count,
     }
+
+
+# ============== SPACED REPETITION FEEDBACK ==============
+
+@api_router.post("/objectives/{objective_id}/review-feedback")
+@limiter.limit("30/minute")
+async def submit_review_feedback(
+    request: Request,
+    objective_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Record the user's recall quality after a review session.
+
+    Body: { "skill": "...", "quality": 1-5 }
+    Quality scale:
+      1 = total blackout, 2 = wrong but recognized, 3 = correct with difficulty,
+      4 = correct with hesitation, 5 = perfect recall
+    """
+    body = await request.json()
+    skill = body.get("skill", "").strip()
+    quality = body.get("quality")
+
+    if not skill:
+        raise HTTPException(status_code=400, detail="Le champ 'skill' est requis")
+    if not isinstance(quality, int) or quality < 1 or quality > 5:
+        raise HTTPException(status_code=400, detail="'quality' doit être un entier entre 1 et 5")
+
+    # Verify objective belongs to user
+    obj = await db.objectives.find_one(
+        {"objective_id": objective_id, "user_id": user["user_id"]},
+        {"_id": 0, "objective_id": 1}
+    )
+    if not obj:
+        raise HTTPException(status_code=404, detail="Objectif non trouvé")
+
+    from services.spaced_repetition import record_review
+    result = await record_review(db, user["user_id"], objective_id, skill, quality)
+
+    await track_event(db, user["user_id"], "sr_review_submitted", {
+        "objective_id": objective_id,
+        "skill": skill,
+        "quality": quality,
+        "next_interval": result["next_interval_days"],
+    })
+
+    return result
 
 
 # ============== OBJECTIVE INSIGHTS ==============
