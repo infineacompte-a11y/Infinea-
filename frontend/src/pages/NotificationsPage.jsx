@@ -131,10 +131,20 @@ export default function NotificationsPage() {
           toast.error("Permission refusée");
           return;
         }
+        // Fetch VAPID public key from backend
+        const vapidRes = await authFetch(`${API}/notifications/vapid-public-key`);
+        if (!vapidRes.ok) throw new Error("VAPID key unavailable");
+        const { public_key } = await vapidRes.json();
+        // Convert base64url to Uint8Array for PushManager
+        const padding = "=".repeat((4 - (public_key.length % 4)) % 4);
+        const raw = atob(public_key.replace(/-/g, "+").replace(/_/g, "/") + padding);
+        const applicationServerKey = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) applicationServerKey[i] = raw.charCodeAt(i);
+
         const registration = await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: null,
+          applicationServerKey,
         });
         await authFetch(`${API}/notifications/subscribe`, {
           method: "POST",

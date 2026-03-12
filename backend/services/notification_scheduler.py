@@ -37,7 +37,7 @@ async def _notif_exists_recent(db, user_id: str, notif_type: str, days: int) -> 
 
 
 async def _create_notification(db, user_id: str, notif_type: str, title: str, message: str, icon: str = "bell"):
-    """Insert a notification into the DB."""
+    """Insert a notification into the DB and send a Web Push if subscribed."""
     doc = {
         "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
         "user_id": user_id,
@@ -49,6 +49,12 @@ async def _create_notification(db, user_id: str, notif_type: str, title: str, me
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.notifications.insert_one(doc)
+    # Send Web Push (imported here to avoid circular imports)
+    try:
+        from server import send_push_to_user
+        await send_push_to_user(user_id, title, message, url="/notifications", tag=notif_type)
+    except Exception as e:
+        logger.debug(f"Push send skipped for {user_id}: {e}")
     return doc
 
 
