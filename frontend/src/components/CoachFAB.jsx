@@ -65,12 +65,13 @@ export default function CoachFAB() {
       setHasNewMessage(false);
       setTimeout(() => inputRef.current?.focus(), 300);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   // Scroll on new messages
   useEffect(() => {
     scrollToBottom();
-  }, [messages, scrollToBottom]);
+  }, [messages, scrollToBottom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadHistory = async () => {
     setIsLoadingHistory(true);

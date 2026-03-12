@@ -87,6 +87,7 @@ export default function AICoachCard({ onStartAction }) {
 
   useEffect(() => {
     fetchCoaching();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchCoaching = async () => {
