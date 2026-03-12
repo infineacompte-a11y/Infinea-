@@ -28,6 +28,8 @@ import MyDayPage from "@/pages/MyDayPage";
 import PrivacyPage from "@/pages/PrivacyPage";
 import CGUPage from "@/pages/CGUPage";
 import PublicSharePage from "@/pages/PublicSharePage";
+import GroupsPage from "@/pages/GroupsPage";
+import GroupDetailPage from "@/pages/GroupDetailPage";
 import NotFound from "@/pages/NotFound";
 import CoachFAB from "@/components/CoachFAB";
 
@@ -384,6 +386,22 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <OnboardingPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/groups"
+        element={
+          <ProtectedRoute>
+            <GroupsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/groups/:groupId"
+        element={
+          <ProtectedRoute>
+            <GroupDetailPage />
           </ProtectedRoute>
         }
       />
