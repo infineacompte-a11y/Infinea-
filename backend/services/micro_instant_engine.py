@@ -35,6 +35,14 @@ SAFETY_BUFFER_MINUTES = 3     # Buffer before next event
 MAX_INSTANTS_PER_DAY = 8      # Don't overwhelm the user
 MIN_CONFIDENCE = 0.30         # Below this, don't suggest
 
+# ── F.4 Feedback loop constants ──
+RELIABILITY_LOOKBACK_DAYS = 7       # Compute reliability over last 7 days
+MIN_OUTCOMES_FOR_RELIABILITY = 5    # Need 5+ outcomes before reliability kicks in
+SUPPRESS_THRESHOLD = 0.10           # Suppress slots with < 10% exploitation
+BOOST_THRESHOLD = 0.70              # Boost slots with > 70% exploitation
+RELIABILITY_BOOST_FACTOR = 1.15     # 15% confidence boost for reliable slots
+RELIABILITY_PENALTY_FACTOR = 0.70   # 30% confidence penalty for unreliable slots
+
 
 # ═══════════════════════════════════════════════════════════════════
 # 1. Collect candidate windows
@@ -243,19 +251,83 @@ async def _collect_behavioral_patterns(db, user_id: str) -> List[Dict]:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# 1b. Slot reliability (F.4 Feedback Loop)
+# ═══════════════════════════════════════════════════════════════════
+
+
+async def _compute_slot_reliability(db, user_id: str) -> Dict[int, Dict]:
+    """
+    Compute exploitation reliability per hour-of-day slot over RELIABILITY_LOOKBACK_DAYS.
+
+    Returns:
+        {hour: {"exploited": n, "skipped": n, "dismissed": n, "total": n,
+                "reliability": float, "suppress": bool}}
+
+    Reliability = exploited / total.
+    A slot is marked for suppression if reliability < SUPPRESS_THRESHOLD
+    and total >= MIN_OUTCOMES_FOR_RELIABILITY.
+
+    Benchmark: contextual multi-armed bandit approach — exploitation rate
+    per slot determines whether to explore (continue suggesting) or suppress.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=RELIABILITY_LOOKBACK_DAYS)).isoformat()
+
+    outcomes = await db.micro_instant_outcomes.find(
+        {"user_id": user_id, "recorded_at": {"$gte": cutoff}},
+        {"_id": 0, "outcome": 1, "recorded_at": 1},
+    ).to_list(500)
+
+    if not outcomes:
+        return {}
+
+    # Group outcomes by hour of recorded_at
+    hour_stats: Dict[int, Dict] = {}
+
+    for o in outcomes:
+        try:
+            dt = datetime.fromisoformat(o["recorded_at"].replace("Z", "+00:00"))
+            hour = dt.hour
+        except (ValueError, TypeError, KeyError):
+            continue
+
+        if hour not in hour_stats:
+            hour_stats[hour] = {"exploited": 0, "skipped": 0, "dismissed": 0, "total": 0}
+
+        outcome = o.get("outcome", "dismissed")
+        hour_stats[hour]["total"] += 1
+        if outcome in hour_stats[hour]:
+            hour_stats[hour][outcome] += 1
+
+    # Compute reliability per slot
+    for hour, stats in hour_stats.items():
+        total = stats["total"]
+        if total >= MIN_OUTCOMES_FOR_RELIABILITY:
+            stats["reliability"] = stats["exploited"] / total
+            stats["suppress"] = stats["reliability"] < SUPPRESS_THRESHOLD
+        else:
+            stats["reliability"] = 0.5  # Neutral until enough data
+            stats["suppress"] = False
+
+    return hour_stats
+
+
+# ═══════════════════════════════════════════════════════════════════
 # 2. Enrich with confidence score
 # ═══════════════════════════════════════════════════════════════════
 
 
 async def _enrich_with_confidence(
-    windows: List[Dict], features: Optional[Dict]
+    windows: List[Dict],
+    features: Optional[Dict],
+    slot_reliability: Optional[Dict[int, Dict]] = None,
 ) -> List[Dict]:
     """
-    Adjust confidence based on user behavioral features.
+    Adjust confidence based on user behavioral features and slot reliability.
     Multipliers:
     - Time-of-day performance (strong signal)
     - Engagement trend (momentum indicator)
     - Consistency index (reliability indicator)
+    - F.4 Slot reliability: boost high-exploitation slots, penalize low ones
     """
     if not features:
         for w in windows:
@@ -283,6 +355,34 @@ async def _enrich_with_confidence(
         momentum = features.get("session_momentum", 0)
         if momentum >= 3:
             confidence *= 1.1  # 10% boost for active streaks
+
+        # ── F.4 Slot reliability adjustment ──
+        if slot_reliability:
+            # Extract hour from window_start
+            try:
+                ws = datetime.fromisoformat(w["window_start"].replace("Z", "+00:00"))
+                slot_hour = ws.hour
+            except (ValueError, TypeError, KeyError):
+                slot_hour = None
+
+            if slot_hour is not None and slot_hour in slot_reliability:
+                slot = slot_reliability[slot_hour]
+                rel = slot.get("reliability", 0.5)
+
+                if slot.get("suppress"):
+                    # Slot systematically ignored → hard suppress
+                    confidence = 0.0
+                    w["context"]["feedback_suppressed"] = True
+                elif rel >= BOOST_THRESHOLD:
+                    # High exploitation → reward this slot
+                    confidence *= RELIABILITY_BOOST_FACTOR
+                    w["context"]["feedback_boosted"] = True
+                elif rel < 0.30 and slot["total"] >= MIN_OUTCOMES_FOR_RELIABILITY:
+                    # Low exploitation (but not suppressed) → soft penalty
+                    confidence *= RELIABILITY_PENALTY_FACTOR
+
+                w["context"]["slot_reliability"] = round(rel, 3)
+                w["context"]["slot_outcomes_total"] = slot["total"]
 
         # Clamp to [0, 1]
         w["confidence_score"] = round(min(max(confidence, 0.0), 1.0), 3)
@@ -544,7 +644,10 @@ async def predict_micro_instants(
             {"user_id": user_id}, {"_id": 0}
         )
 
-    all_windows = await _enrich_with_confidence(all_windows, features)
+    # F.4: Compute slot reliability from micro-instant outcomes
+    slot_reliability = await _compute_slot_reliability(db, user_id)
+
+    all_windows = await _enrich_with_confidence(all_windows, features, slot_reliability)
 
     # ── Step 3: Deduplicate overlapping windows ──
     unique_windows = _deduplicate_windows(all_windows)
