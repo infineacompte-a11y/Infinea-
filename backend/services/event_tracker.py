@@ -29,6 +29,10 @@ EVENT_TYPES = {
     # Calendar / Slots
     "calendar_slot_detected",
     "slot_dismissed",
+    # Micro-Instants
+    "micro_instant_exploited",
+    "micro_instant_skipped",
+    "micro_instant_dismissed",
     # Auth
     "user_registered",
     "user_logged_in",

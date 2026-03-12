@@ -258,6 +258,8 @@ async def _enrich_with_confidence(
     - Consistency index (reliability indicator)
     """
     if not features:
+        for w in windows:
+            w["confidence_score"] = w["base_confidence"]
         return windows
 
     for w in windows:
