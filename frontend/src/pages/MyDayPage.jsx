@@ -8,7 +8,6 @@ import {
   Sunrise,
   Sun,
   Moon,
-  Infinity,
   Clock,
   Flame,
   CheckCircle2,
@@ -20,6 +19,11 @@ import {
   Sparkles,
   Trophy,
   Zap,
+  Timer,
+  Calendar,
+  Repeat,
+  TrendingUp,
+  SkipForward,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { API, authFetch, useAuth } from "@/App";
@@ -192,6 +196,145 @@ function SmartCTAs({ routines, objectives, routinesCompletedToday, todaySessions
   );
 }
 
+// ─── Micro-Instants Section ───────────────────────────────
+const MI_SOURCE_CONFIG = {
+  calendar_gap: { icon: Calendar, label: "Calendrier", color: "text-blue-400", bgColor: "bg-blue-500/10" },
+  routine_window: { icon: Repeat, label: "Routine", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+  behavioral_pattern: { icon: TrendingUp, label: "Pattern", color: "text-purple-400", bgColor: "bg-purple-500/10" },
+};
+
+function formatInstantTime(isoString) {
+  if (!isoString) return "";
+  return new Date(isoString).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function isInstantActive(instant) {
+  const now = new Date();
+  return now >= new Date(instant.window_start) && now <= new Date(instant.window_end);
+}
+
+function isInstantPast(instant) {
+  return new Date() > new Date(instant.window_end);
+}
+
+function MicroInstantsSection({ instants, onExploit, onSkip, loadingId, navigate }) {
+  // Only show active (now) or future instants that haven't been acted on
+  const visible = instants.filter(
+    (i) => !i._exploited && !i._skipped && !isInstantPast(i)
+  );
+  const acted = instants.filter((i) => i._exploited);
+
+  if (visible.length === 0 && acted.length === 0) return null;
+
+  return (
+    <div className="mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Timer className="w-5 h-5 text-primary" />
+          <h2 className="text-sm font-semibold">Micro-instants</h2>
+          {visible.length > 0 && (
+            <Badge className="text-[9px] bg-primary/10 text-primary border-primary/20 h-4 px-1.5">
+              {visible.length} dispo
+            </Badge>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-xs text-muted-foreground h-7 gap-1"
+          onClick={() => navigate("/micro-instants")}
+        >
+          Tout voir
+          <ChevronRight className="w-3 h-3" />
+        </Button>
+      </div>
+
+      <div className="space-y-2">
+        {visible.slice(0, 3).map((instant) => {
+          const source = MI_SOURCE_CONFIG[instant.source] || MI_SOURCE_CONFIG.behavioral_pattern;
+          const SourceIcon = source.icon;
+          const action = instant.recommended_action || {};
+          const isNow = isInstantActive(instant);
+
+          return (
+            <Card
+              key={instant.instant_id}
+              className={`p-3.5 transition-all ${
+                isNow
+                  ? "border-primary/40 shadow-md shadow-primary/5 ring-1 ring-primary/15"
+                  : "hover:border-primary/30"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className={`w-8 h-8 rounded-lg ${source.bgColor} flex items-center justify-center shrink-0`}>
+                    <SourceIcon className={`w-4 h-4 ${source.color}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium truncate">
+                        {action.title || "Action recommandée"}
+                      </p>
+                      {isNow && (
+                        <Badge className="bg-primary/20 text-primary text-[8px] px-1 py-0 shrink-0 animate-pulse">
+                          NOW
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {formatInstantTime(instant.window_start)} – {formatInstantTime(instant.window_end)}
+                      </span>
+                      {instant.duration_minutes && (
+                        <span>{instant.duration_minutes} min</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                  <Button
+                    size="sm"
+                    className={`h-8 text-xs gap-1 ${isNow ? "bg-primary shadow-sm" : ""}`}
+                    variant={isNow ? "default" : "outline"}
+                    disabled={loadingId === instant.instant_id || !action.action_id}
+                    onClick={() => onExploit(instant.instant_id, action.action_id)}
+                  >
+                    {loadingId === instant.instant_id ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Play className="w-3 h-3" />
+                    )}
+                    Go
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 text-muted-foreground"
+                    disabled={loadingId === instant.instant_id}
+                    onClick={() => onSkip(instant.instant_id)}
+                  >
+                    <SkipForward className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+
+        {/* Exploited count */}
+        {acted.length > 0 && (
+          <p className="text-[11px] text-emerald-500 flex items-center gap-1 pl-1 pt-1">
+            <CheckCircle2 className="w-3 h-3" />
+            {acted.length} micro-instant{acted.length > 1 ? "s" : ""} exploité{acted.length > 1 ? "s" : ""} aujourd'hui
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────
 export default function MyDayPage() {
   const navigate = useNavigate();
@@ -199,14 +342,17 @@ export default function MyDayPage() {
   const [routines, setRoutines] = useState([]);
   const [objectives, setObjectives] = useState([]);
   const [stats, setStats] = useState(null);
+  const [microInstants, setMicroInstants] = useState([]);
+  const [miActionLoading, setMiActionLoading] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadData = useCallback(async () => {
     try {
-      const [routinesRes, objectivesRes, statsRes] = await Promise.all([
+      const [routinesRes, objectivesRes, statsRes, miRes] = await Promise.all([
         authFetch(`${API}/routines`),
         authFetch(`${API}/objectives`),
         authFetch(`${API}/stats`),
+        authFetch(`${API}/micro-instants/today`),
       ]);
 
       if (routinesRes.ok) {
@@ -220,6 +366,10 @@ export default function MyDayPage() {
       if (statsRes.ok) {
         const data = await statsRes.json();
         setStats(data);
+      }
+      if (miRes.ok) {
+        const data = await miRes.json();
+        setMicroInstants(data.instants || []);
       }
     } catch {
       toast.error("Erreur de chargement");
@@ -249,6 +399,43 @@ export default function MyDayPage() {
     } catch {
       toast.error("Erreur");
     }
+  };
+
+  // ── Micro-instant handlers ──────────────────
+  const handleMiExploit = async (instantId, actionId) => {
+    setMiActionLoading(instantId);
+    try {
+      const res = await authFetch(`${API}/micro-instants/${instantId}/exploit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action_id: actionId }),
+      });
+      if (res.ok) {
+        setMicroInstants((prev) =>
+          prev.map((i) => i.instant_id === instantId ? { ...i, _exploited: true } : i)
+        );
+        toast.success("Micro-instant exploité !");
+      }
+    } catch {
+      toast.error("Erreur réseau");
+    } finally {
+      setMiActionLoading(null);
+    }
+  };
+
+  const handleMiSkip = async (instantId) => {
+    setMiActionLoading(instantId);
+    try {
+      await authFetch(`${API}/micro-instants/${instantId}/skip`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "not_interested" }),
+      });
+      setMicroInstants((prev) =>
+        prev.map((i) => i.instant_id === instantId ? { ...i, _skipped: true } : i)
+      );
+    } catch { /* silent */ }
+    finally { setMiActionLoading(null); }
   };
 
   // ── Computed data ────────────────────────────
@@ -355,6 +542,15 @@ export default function MyDayPage() {
                   <p className="text-[10px] text-muted-foreground">Streak</p>
                 </Card>
               </div>
+
+              {/* ── Micro-instants disponibles ──────── */}
+              <MicroInstantsSection
+                instants={microInstants}
+                onExploit={handleMiExploit}
+                onSkip={handleMiSkip}
+                loadingId={miActionLoading}
+                navigate={navigate}
+              />
 
               {/* ── Progression du jour ───────────── */}
               {totalPlannedMin > 0 && (
