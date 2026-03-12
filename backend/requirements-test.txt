@@ -1,0 +1,8 @@
+# E.3 — Test dependencies
+# Install: pip install -r requirements-test.txt
+
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+httpx>=0.27.0
+mongomock-motor>=0.0.30
