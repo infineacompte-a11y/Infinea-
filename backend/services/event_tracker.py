@@ -33,6 +33,7 @@ EVENT_TYPES = {
     "micro_instant_exploited",
     "micro_instant_skipped",
     "micro_instant_dismissed",
+    "micro_instant_push_sent",
     # Auth
     "user_registered",
     "user_logged_in",
