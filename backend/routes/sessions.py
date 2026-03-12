@@ -202,7 +202,7 @@ async def complete_session(
 ):
     """Complete a micro-action session and update stats"""
     # Lazy import to avoid circular dependency
-    from server import check_and_award_badges
+    from routes.badges import check_and_award_badges
 
     session = await db.user_sessions_history.find_one(
         {"session_id": completion.session_id, "user_id": user["user_id"]},
