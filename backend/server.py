@@ -2005,6 +2005,129 @@ async def start_session(
         "started_at": session_doc["started_at"]
     }
 
+async def _auto_sync_session(user_id: str, session_data: dict):
+    """Auto-export a completed session to connected integrations (Todoist, Notion, Slack).
+    Runs silently — errors are logged but never block the main flow."""
+    try:
+        integrations = await db.user_integrations.find(
+            {"user_id": user_id, "sync_enabled": True},
+            {"_id": 0}
+        ).to_list(10)
+
+        if not integrations:
+            return
+
+        session_id = session_data.get("session_id")
+        title = session_data.get("action_title", "Micro-action")
+        duration = session_data.get("actual_duration", 5)
+        category = session_data.get("category", "N/A")
+        completed_at = session_data.get("completed_at", "")
+
+        async with httpx.AsyncClient(timeout=10.0) as http_client:
+            for integration in integrations:
+                service = integration.get("service")
+                access_token = integration.get("access_token")
+                if not access_token:
+                    continue
+
+                # Decrypt token
+                try:
+                    decrypted = decrypt_token(access_token)
+                    if decrypted:
+                        access_token = decrypted
+                except Exception:
+                    pass
+
+                # Skip if already synced
+                already = await db.synced_events.find_one({
+                    "user_id": user_id, "service": service,
+                    "session_id": session_id
+                })
+                if already:
+                    continue
+
+                try:
+                    if service == "todoist":
+                        resp = await http_client.post(
+                            "https://api.todoist.com/rest/v2/tasks",
+                            json={"content": f"✅ {title}", "description": f"Session InFinea complétée — {duration} min"},
+                            headers={"Authorization": f"Bearer {access_token}"}
+                        )
+                        if resp.status_code in (200, 201):
+                            task_id = resp.json().get("id")
+                            await http_client.post(
+                                f"https://api.todoist.com/rest/v2/tasks/{task_id}/close",
+                                headers={"Authorization": f"Bearer {access_token}"}
+                            )
+                            await db.synced_events.insert_one({
+                                "user_id": user_id, "service": service,
+                                "session_id": session_id,
+                                "external_id": str(task_id),
+                                "synced_at": datetime.now(timezone.utc).isoformat()
+                            })
+
+                    elif service == "notion":
+                        # Find parent page
+                        search_resp = await http_client.post(
+                            "https://api.notion.com/v1/search",
+                            json={"query": "InFinea Sessions", "filter": {"property": "object", "value": "page"}},
+                            headers={"Authorization": f"Bearer {access_token}", "Notion-Version": "2022-06-28"}
+                        )
+                        parent_page_id = None
+                        if search_resp.status_code == 200:
+                            results = search_resp.json().get("results", [])
+                            if results:
+                                parent_page_id = results[0]["id"]
+                        if not parent_page_id:
+                            fallback = await http_client.post(
+                                "https://api.notion.com/v1/search",
+                                json={"filter": {"property": "object", "value": "page"}, "page_size": 1},
+                                headers={"Authorization": f"Bearer {access_token}", "Notion-Version": "2022-06-28"}
+                            )
+                            if fallback.status_code == 200:
+                                pages = fallback.json().get("results", [])
+                                if pages:
+                                    parent_page_id = pages[0]["id"]
+
+                        if parent_page_id:
+                            page_data = {
+                                "parent": {"page_id": parent_page_id},
+                                "properties": {"title": {"title": [{"text": {"content": f"✅ {title} — {duration} min"}}]}},
+                                "children": [{"object": "block", "type": "paragraph", "paragraph": {
+                                    "rich_text": [{"text": {"content": f"Catégorie: {category}\nDurée: {duration} min\nDate: {completed_at[:10] if completed_at else 'N/A'}"}}]
+                                }}]
+                            }
+                            resp = await http_client.post(
+                                "https://api.notion.com/v1/pages", json=page_data,
+                                headers={"Authorization": f"Bearer {access_token}", "Notion-Version": "2022-06-28"}
+                            )
+                            if resp.status_code in (200, 201):
+                                await db.synced_events.insert_one({
+                                    "user_id": user_id, "service": service,
+                                    "session_id": session_id,
+                                    "external_id": resp.json().get("id"),
+                                    "synced_at": datetime.now(timezone.utc).isoformat()
+                                })
+
+                    elif service == "slack":
+                        cat_map = {"learning": "📚 Apprentissage", "productivity": "🎯 Productivité", "well_being": "💚 Bien-être"}
+                        message = f"✅ *{title}* complétée — {duration} min ({cat_map.get(category, category)})"
+                        if access_token.startswith("https://hooks.slack.com/"):
+                            await http_client.post(access_token, json={"text": message})
+                        else:
+                            await http_client.post(
+                                "https://slack.com/api/chat.postMessage",
+                                json={"channel": "me", "text": message, "mrkdwn": True},
+                                headers={"Authorization": f"Bearer {access_token}"}
+                            )
+
+                except Exception as e:
+                    logger.warning(f"Auto-sync to {service} failed for session {session_id}: {e}")
+
+    except Exception as e:
+        logger.warning(f"Auto-sync failed for user {user_id}: {e}")
+
+
 @api_router.post("/sessions/complete")
 async def complete_session(
     completion: SessionComplete,
@@ -2122,6 +2245,16 @@ async def complete_session(
             }
             await db.notifications.insert_one(notification)
         
+        # Auto-export to connected integrations (non-blocking)
+        session_data = {
+            "session_id": completion.session_id,
+            "action_title": session.get("action_title"),
+            "actual_duration": completion.actual_duration,
+            "category": session.get("category"),
+            "completed_at": datetime.now(timezone.utc).isoformat()
+        }
+        await _auto_sync_session(user["user_id"], session_data)
+
         return {
             "message": "Session completed!",
             "time_added": completion.actual_duration,
@@ -2129,7 +2262,7 @@ async def complete_session(
             "total_time": user_doc.get("total_time_invested", 0) + completion.actual_duration,
             "new_badges": new_badges
         }
-    
+
     return {"message": "Session recorded"}
 
 @api_router.get("/stats")
