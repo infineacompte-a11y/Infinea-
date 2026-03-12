@@ -141,6 +141,27 @@ async def generate_proactive_notifications(db):
                         stats["objective_nudges"] += 1
                         break  # Max 1 objective nudge per cycle per user
 
+            # ── 4. Spaced repetition review reminder (max 1/day) ──
+            if not await _notif_exists_today(db, user_id, "sr_review_due"):
+                try:
+                    from services.spaced_repetition import get_review_queue
+                    for obj in active_objectives:
+                        due = await get_review_queue(db, user_id, obj["objective_id"])
+                        if due:
+                            skill_name = due[0]["skill"]
+                            count = len(due)
+                            msg = f"« {skill_name} » a besoin d'être révisé" + (f" (+{count - 1} autres)" if count > 1 else "")
+                            await _create_notification(
+                                db, user_id, "sr_review_due",
+                                title="🧠 Révision recommandée",
+                                message=msg,
+                                icon="brain"
+                            )
+                            stats["sr_reviews"] = stats.get("sr_reviews", 0) + 1
+                            break  # Max 1 SR notification per user per cycle
+                except Exception as e:
+                    logger.debug(f"SR review check skipped for {user_id}: {e}")
+
         except Exception as e:
             logger.warning(f"Notification generation failed for user {user_id}: {e}")
             continue
