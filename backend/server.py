@@ -5915,6 +5915,161 @@ async def complete_routine(request: Request, routine_id: str, user: dict = Depen
     }
 
 
+# ============== iCAL EXPORT ==============
+
+def _ical_escape(text: str) -> str:
+    """Escape special characters for iCal format."""
+    return text.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+def _fold_line(line: str) -> str:
+    """Fold long iCal lines at 75 octets per RFC 5545."""
+    result = []
+    while len(line.encode("utf-8")) > 75:
+        # Find a safe split point
+        cut = 75
+        while len(line[:cut].encode("utf-8")) > 75:
+            cut -= 1
+        result.append(line[:cut])
+        line = " " + line[cut:]
+    result.append(line)
+    return "\r\n".join(result)
+
+@api_router.get("/routines/{routine_id}/ical")
+async def export_routine_ical(routine_id: str, user: dict = Depends(get_current_user)):
+    """Generate a .ics file for a routine — recurring event matching the routine's frequency."""
+    routine = await db.routines.find_one(
+        {"routine_id": routine_id, "user_id": user["user_id"], "deleted": {"$ne": True}}
+    )
+    if not routine:
+        raise HTTPException(status_code=404, detail="Routine non trouvée.")
+
+    name = _ical_escape(routine.get("name", "Routine InFinea"))
+    desc_parts = [routine.get("description", "")]
+    items = routine.get("items", [])
+    if items:
+        desc_parts.append("Actions :")
+        for i, item in enumerate(items, 1):
+            desc_parts.append(f"{i}. {item.get('title', '')} ({item.get('duration_minutes', 5)} min)")
+    description = _ical_escape("\\n".join(p for p in desc_parts if p))
+
+    total_min = routine.get("total_minutes", 15)
+    tod = routine.get("time_of_day", "morning")
+    start_hour = {"morning": "08", "afternoon": "13", "evening": "19", "anytime": "09"}.get(tod, "09")
+
+    # Frequency mapping
+    freq = routine.get("frequency", "daily")
+    freq_days = routine.get("frequency_days", [])
+    if freq == "daily":
+        rrule = "RRULE:FREQ=DAILY"
+    elif freq == "weekdays":
+        rrule = "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
+    elif freq == "weekends":
+        rrule = "RRULE:FREQ=WEEKLY;BYDAY=SA,SU"
+    elif freq == "custom" and freq_days:
+        day_map = {0: "MO", 1: "TU", 2: "WE", 3: "TH", 4: "FR", 5: "SA", 6: "SU"}
+        days = ",".join(day_map.get(d, "MO") for d in sorted(freq_days))
+        rrule = f"RRULE:FREQ=WEEKLY;BYDAY={days}"
+    else:
+        rrule = "RRULE:FREQ=DAILY"
+
+    now = datetime.now(timezone.utc)
+    # Start tomorrow
+    tomorrow = now + timedelta(days=1)
+    dtstart = tomorrow.strftime(f"%Y%m%dT{start_hour}0000")
+    # End = start + duration
+    end_h = int(start_hour) + (total_min // 60)
+    end_m = total_min % 60
+    dtend = tomorrow.strftime(f"%Y%m%dT{end_h:02d}{end_m:02d}00")
+    uid = f"routine-{routine_id}@infinea.app"
+    stamp = now.strftime("%Y%m%dT%H%M%SZ")
+
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//InFinea//Routine Export//FR",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        f"UID:{uid}",
+        f"DTSTAMP:{stamp}",
+        f"DTSTART:{dtstart}",
+        f"DTEND:{dtend}",
+        rrule,
+        _fold_line(f"SUMMARY:{name}"),
+        _fold_line(f"DESCRIPTION:{description}"),
+        "BEGIN:VALARM",
+        "TRIGGER:-PT5M",
+        "ACTION:DISPLAY",
+        f"DESCRIPTION:Routine {name} dans 5 minutes",
+        "END:VALARM",
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ]
+    ics_content = "\r\n".join(lines) + "\r\n"
+
+    filename = f"infinea-routine-{routine_id[:8]}.ics"
+    return Response(
+        content=ics_content,
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+@api_router.get("/objectives/{objective_id}/ical")
+async def export_objective_ical(objective_id: str, user: dict = Depends(get_current_user)):
+    """Generate a .ics file for an objective — daily session for the duration of the parcours."""
+    obj = await db.objectives.find_one(
+        {"objective_id": objective_id, "user_id": user["user_id"], "deleted": {"$ne": True}}
+    )
+    if not obj:
+        raise HTTPException(status_code=404, detail="Objectif non trouvé.")
+
+    name = _ical_escape(obj.get("title", "Objectif InFinea"))
+    daily_min = obj.get("daily_minutes", 10)
+    duration_days = obj.get("target_duration_days", 30)
+    description = _ical_escape(f"Parcours InFinea : {name}\\n{daily_min} min/jour pendant {duration_days} jours")
+
+    now = datetime.now(timezone.utc)
+    tomorrow = now + timedelta(days=1)
+    dtstart = tomorrow.strftime("%Y%m%dT090000")
+    end_m = daily_min % 60
+    end_h = 9 + (daily_min // 60)
+    dtend = tomorrow.strftime(f"%Y%m%dT{end_h:02d}{end_m:02d}00")
+    until = (tomorrow + timedelta(days=duration_days)).strftime("%Y%m%dT235959Z")
+    uid = f"objective-{objective_id}@infinea.app"
+    stamp = now.strftime("%Y%m%dT%H%M%SZ")
+
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//InFinea//Objective Export//FR",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        f"UID:{uid}",
+        f"DTSTAMP:{stamp}",
+        f"DTSTART:{dtstart}",
+        f"DTEND:{dtend}",
+        f"RRULE:FREQ=DAILY;UNTIL={until}",
+        _fold_line(f"SUMMARY:{name}"),
+        _fold_line(f"DESCRIPTION:{description}"),
+        "BEGIN:VALARM",
+        "TRIGGER:-PT5M",
+        "ACTION:DISPLAY",
+        f"DESCRIPTION:Session {name} dans 5 minutes",
+        "END:VALARM",
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ]
+    ics_content = "\r\n".join(lines) + "\r\n"
+
+    filename = f"infinea-objectif-{objective_id[:8]}.ics"
+    return Response(
+        content=ics_content,
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ============== REFLECTIONS / JOURNAL ==============
 
 class ReflectionCreate(BaseModel):

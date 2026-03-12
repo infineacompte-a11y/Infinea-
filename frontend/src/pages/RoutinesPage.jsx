@@ -35,6 +35,7 @@ import {
   Sparkles,
   Timer,
   SkipForward,
+  CalendarPlus,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { VoiceTextArea } from "@/components/VoiceInput";
@@ -257,6 +258,26 @@ function ExecutionDialog({ routine, open, onClose, onComplete }) {
   );
 }
 
+// ─── iCal download helper ────────────────────────────────
+async function downloadIcal(endpoint) {
+  try {
+    const res = await authFetch(`${API}/${endpoint}`);
+    if (!res.ok) throw new Error("Erreur");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = endpoint.includes("routine") ? "routine.ics" : "objectif.ics";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success("Fichier .ics téléchargé — ouvre-le pour l'ajouter à ton calendrier");
+  } catch {
+    toast.error("Erreur lors du téléchargement");
+  }
+}
+
 // ─── Habit Card ─────────────────────────────────────────
 function HabitCard({ routine, onEdit, onToggle, onComplete, onLaunch }) {
   const tod = timeLabel(routine.time_of_day);
@@ -310,6 +331,10 @@ function HabitCard({ routine, onEdit, onToggle, onComplete, onLaunch }) {
         </div>
 
         <div className="flex items-center gap-1 shrink-0 ml-2">
+          <button onClick={(e) => { e.stopPropagation(); downloadIcal(`routines/${routine.routine_id}/ical`); }}
+            className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors" title="Ajouter au calendrier">
+            <CalendarPlus className="w-4 h-4 text-muted-foreground" />
+          </button>
           <button onClick={(e) => { e.stopPropagation(); onToggle(); }}
             className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors"
             title={routine.is_active ? "Mettre en pause" : "Activer"}>
