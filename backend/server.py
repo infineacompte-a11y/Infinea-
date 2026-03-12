@@ -17,6 +17,7 @@ import httpx
 import json
 import asyncio
 from pywebpush import webpush, WebPushException
+import stripe as stripe_lib
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -48,6 +49,9 @@ JWT_EXPIRATION_HOURS = 168  # 7 days
 VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY', '')
 VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', '')
 VAPID_CLAIMS_EMAIL = os.environ.get('VAPID_CLAIMS_EMAIL', 'mailto:contact@infinea.app')
+
+# Stripe webhook signature verification
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 
 async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/notifications", tag: str = "infinea"):
     """Send a Web Push notification to a user if they have an active subscription.
@@ -2568,7 +2572,8 @@ async def get_payment_status(
 
 @api_router.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
-    """Handle Stripe webhooks for subscription lifecycle"""
+    """Handle Stripe webhooks for subscription lifecycle.
+    Verifies webhook signature using STRIPE_WEBHOOK_SECRET (Stripe standard)."""
     stripe_key = os.environ.get('STRIPE_API_KEY')
     if not stripe_key:
         return {"status": "error", "message": "Not configured"}
@@ -2576,9 +2581,25 @@ async def stripe_webhook(request: Request):
     body = await request.body()
 
     try:
-        event = json.loads(body)
-        event_type = event.get("type", "")
-        event_data = event.get("data", {}).get("object", {})
+        # Verify webhook signature (Stripe security best practice)
+        if STRIPE_WEBHOOK_SECRET:
+            sig_header = request.headers.get("stripe-signature", "")
+            try:
+                event = stripe_lib.Webhook.construct_event(body, sig_header, STRIPE_WEBHOOK_SECRET)
+            except stripe_lib.error.SignatureVerificationError:
+                logger.warning("Stripe webhook signature verification failed")
+                raise HTTPException(status_code=400, detail="Invalid signature")
+            except ValueError:
+                logger.warning("Stripe webhook invalid payload")
+                raise HTTPException(status_code=400, detail="Invalid payload")
+        else:
+            # Fallback for local dev without webhook secret — log warning
+            logger.warning("STRIPE_WEBHOOK_SECRET not set — webhook signature NOT verified")
+            event = json.loads(body)
+
+        event_type = event.get("type", "") if isinstance(event, dict) else event["type"]
+        event_data = (event.get("data", {}).get("object", {}) if isinstance(event, dict)
+                      else event["data"]["object"])
 
         if event_type == "checkout.session.completed":
             if event_data.get("payment_status") == "paid":
