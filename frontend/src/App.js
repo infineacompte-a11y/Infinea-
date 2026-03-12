@@ -25,6 +25,7 @@ import ObjectivesPage from "@/pages/ObjectivesPage";
 import ObjectiveDetailPage from "@/pages/ObjectiveDetailPage";
 import RoutinesPage from "@/pages/RoutinesPage";
 import MyDayPage from "@/pages/MyDayPage";
+import MicroInstantsPage from "@/pages/MicroInstantsPage";
 import PrivacyPage from "@/pages/PrivacyPage";
 import CGUPage from "@/pages/CGUPage";
 import PublicSharePage from "@/pages/PublicSharePage";
@@ -378,6 +379,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <MyDayPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/micro-instants"
+        element={
+          <ProtectedRoute>
+            <MicroInstantsPage />
           </ProtectedRoute>
         }
       />
