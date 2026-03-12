@@ -2,7 +2,6 @@ from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, Respons
 from fastapi.responses import JSONResponse, RedirectResponse
 import urllib.parse
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
@@ -30,15 +29,11 @@ except ImportError:
     ICAL_AVAILABLE = False
 
 from config import (
-    MONGO_URL, DB_NAME,
     JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRATION_HOURS,
     VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_CLAIMS_EMAIL,
     STRIPE_WEBHOOK_SECRET,
 )
-
-# MongoDB connection
-client = AsyncIOMotorClient(MONGO_URL)
-db = client[DB_NAME]
+from database import db, client
 
 async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/notifications", tag: str = "infinea"):
     """Send a Web Push notification to a user if they have an active subscription.
