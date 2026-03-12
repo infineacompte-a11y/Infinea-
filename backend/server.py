@@ -154,6 +154,13 @@ async def startup_event():
     await db.groups.create_index([("members.user_id", 1), ("status", 1)])
     await db.micro_instant_outcomes.create_index([("user_id", 1), ("recorded_at", -1)])
     await db.micro_instant_outcomes.create_index("instant_id")
+
+    # Indexes identifiés par audit CTO — collections à fort trafic
+    await db.notifications.create_index([("user_id", 1), ("type", 1), ("created_at", -1)])
+    await db.user_sessions_history.create_index([("user_id", 1), ("started_at", -1)])
+    await db.user_sessions_history.create_index("session_id", unique=True)
+    await db.users.create_index("user_id", unique=True)
+
     logger.info("All indexes ensured")
 
     # Start background tasks
