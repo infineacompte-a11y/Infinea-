@@ -25,9 +25,9 @@ import {
   Trophy,
   Loader2,
   ArrowLeft,
-  CalendarPlus,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
+import AddToCalendarMenu from "@/components/AddToCalendarMenu";
 import { VoiceTextArea } from "@/components/VoiceInput";
 import { API, authFetch, useAuth } from "@/App";
 import { toast } from "sonner";
@@ -95,26 +95,6 @@ const STATUS_MAP = {
   abandoned: { label: "Abandonné", color: "bg-red-500/10 text-red-500 border-red-500/20", icon: Target },
 };
 
-// ─── iCal download helper ────────────────────────────────
-async function downloadIcal(endpoint) {
-  try {
-    const res = await authFetch(`${API}/${endpoint}`);
-    if (!res.ok) throw new Error("Erreur");
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "objectif.ics";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success("Fichier .ics téléchargé — ouvre-le pour l'ajouter à ton calendrier");
-  } catch {
-    toast.error("Erreur lors du téléchargement");
-  }
-}
-
 function ObjectiveCard({ objective, onClick }) {
   const status = STATUS_MAP[objective.status] || STATUS_MAP.active;
   const category = CATEGORY_MAP[objective.category] || CATEGORY_MAP.learning;
@@ -148,10 +128,7 @@ function ObjectiveCard({ objective, onClick }) {
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0 ml-2">
-          <button onClick={(e) => { e.stopPropagation(); downloadIcal(`objectives/${objective.objective_id}/ical`); }}
-            className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors opacity-0 group-hover:opacity-100" title="Ajouter au calendrier">
-            <CalendarPlus className="w-4 h-4 text-muted-foreground" />
-          </button>
+          <AddToCalendarMenu type="objective" item={objective} className="opacity-0 group-hover:opacity-100" />
           <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
         </div>
       </div>
