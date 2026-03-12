@@ -6930,6 +6930,10 @@ async def startup_event():
     from services.feature_calculator import feature_computation_loop
     asyncio.create_task(feature_computation_loop(db))
 
+    # Start proactive notification scheduler (streak alerts, routine reminders, objective nudges)
+    from services.notification_scheduler import notification_scheduler_loop
+    asyncio.create_task(notification_scheduler_loop(db))
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
