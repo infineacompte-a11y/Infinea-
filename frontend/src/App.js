@@ -49,16 +49,19 @@ export const authFetch = (url, options = {}) => {
   });
 };
 
-// Unregister Service Worker — was caching old builds and blocking deployments
+// Register Service Worker for Web Push notifications
 const registerServiceWorker = async () => {
   if ("serviceWorker" in navigator) {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    for (const registration of registrations) {
-      await registration.unregister();
-    }
-    const cacheNames = await caches.keys();
-    for (const name of cacheNames) {
-      await caches.delete(name);
+    try {
+      // Clear old caches from previous CRA service worker
+      const cacheNames = await caches.keys();
+      for (const name of cacheNames) {
+        await caches.delete(name);
+      }
+      // Register push-capable service worker
+      await navigator.serviceWorker.register("/sw.js");
+    } catch (err) {
+      console.warn("SW registration failed:", err);
     }
   }
 };

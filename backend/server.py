@@ -16,6 +16,7 @@ import bcrypt
 import httpx
 import json
 import asyncio
+from pywebpush import webpush, WebPushException
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -42,6 +43,35 @@ if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET environment variable is required. Server cannot start without it.")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 168  # 7 days
+
+# VAPID keys for Web Push notifications
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY', '')
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', '')
+VAPID_CLAIMS_EMAIL = os.environ.get('VAPID_CLAIMS_EMAIL', 'mailto:contact@infinea.app')
+
+async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/notifications", tag: str = "infinea"):
+    """Send a Web Push notification to a user if they have an active subscription.
+    Silently fails if no subscription or VAPID not configured — never blocks the caller."""
+    if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
+        return
+    sub_doc = await db.push_subscriptions.find_one({"user_id": user_id})
+    if not sub_doc or not sub_doc.get("subscription"):
+        return
+    try:
+        webpush(
+            subscription_info=sub_doc["subscription"],
+            data=json.dumps({"title": title, "body": body, "url": url, "tag": tag}),
+            vapid_private_key=VAPID_PRIVATE_KEY,
+            vapid_claims={"sub": VAPID_CLAIMS_EMAIL},
+        )
+    except WebPushException as e:
+        # 410 Gone = subscription expired, clean up
+        if "410" in str(e):
+            await db.push_subscriptions.delete_one({"user_id": user_id})
+        else:
+            logging.warning(f"Web Push failed for {user_id}: {e}")
+    except Exception as e:
+        logging.warning(f"Web Push unexpected error for {user_id}: {e}")
 
 # Create the main app
 app = FastAPI(title="InFinea API")
@@ -1859,6 +1889,7 @@ Réponds en JSON: {{"title": "Titre court", "message": "Message motivant (1-2 ph
                     "created_at": datetime.now(timezone.utc).isoformat()
                 }
                 await db.notifications.insert_one(notification)
+                await send_push_to_user(user["user_id"], title, message, url="/notifications", tag="streak")
                 await track_event(db, user["user_id"], "ai_streak_check_served", {
                     "streak_days": streak,
                     "at_risk": True,
@@ -2244,7 +2275,8 @@ async def complete_session(
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
             await db.notifications.insert_one(notification)
-        
+            await send_push_to_user(user["user_id"], notification["title"], notification["message"], url="/notifications", tag="badge")
+
         # Auto-export to connected integrations (non-blocking)
         session_data = {
             "session_id": completion.session_id,
@@ -4681,6 +4713,13 @@ async def update_notification_preferences(
     )
     
     return prefs_doc
+
+@api_router.get("/notifications/vapid-public-key")
+async def get_vapid_public_key():
+    """Return VAPID public key so the frontend can subscribe to Web Push."""
+    if not VAPID_PUBLIC_KEY:
+        raise HTTPException(status_code=503, detail="Web Push not configured")
+    return {"public_key": VAPID_PUBLIC_KEY}
 
 @api_router.post("/notifications/subscribe")
 async def subscribe_push_notifications(
