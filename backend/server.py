@@ -1,12 +1,10 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Depends, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 import urllib.parse
-from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
-from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 import uuid
@@ -31,28 +29,16 @@ try:
 except ImportError:
     ICAL_AVAILABLE = False
 
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+from config import (
+    MONGO_URL, DB_NAME,
+    JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRATION_HOURS,
+    VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_CLAIMS_EMAIL,
+    STRIPE_WEBHOOK_SECRET,
+)
 
 # MongoDB connection
-mongo_url = os.environ.get('MONGO_URL') or os.environ.get('MONGODB_URI', '')
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ.get('DB_NAME', 'infinea')]
-
-# JWT Config
-JWT_SECRET = os.environ.get('JWT_SECRET')
-if not JWT_SECRET:
-    raise RuntimeError("JWT_SECRET environment variable is required. Server cannot start without it.")
-JWT_ALGORITHM = "HS256"
-JWT_EXPIRATION_HOURS = 168  # 7 days
-
-# VAPID keys for Web Push notifications
-VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY', '')
-VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', '')
-VAPID_CLAIMS_EMAIL = os.environ.get('VAPID_CLAIMS_EMAIL', 'mailto:contact@infinea.app')
-
-# Stripe webhook signature verification
-STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+client = AsyncIOMotorClient(MONGO_URL)
+db = client[DB_NAME]
 
 async def send_push_to_user(user_id: str, title: str, body: str, url: str = "/notifications", tag: str = "infinea"):
     """Send a Web Push notification to a user if they have an active subscription.
@@ -87,9 +73,7 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from config import logger
 
 # ============== MODELS ==============
 
