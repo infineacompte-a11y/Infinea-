@@ -64,6 +64,45 @@ async def root():
     return {"message": "InFinea API - Investissez vos instants perdus"}
 
 
+# ── Health Check (no auth, no /api prefix — for Render/uptime monitors) ──
+@app.get("/health")
+async def health_check():
+    """Structured health check: MongoDB + Redis + background task status."""
+    from datetime import datetime, timezone
+    from services.cache import cache_ping
+
+    checks = {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+    # MongoDB connectivity
+    try:
+        await db.command("ping")
+        checks["mongo"] = "connected"
+    except Exception as e:
+        checks["mongo"] = f"error: {e}"
+        checks["status"] = "degraded"
+
+    # Redis connectivity
+    redis_ok = await cache_ping()
+    checks["redis"] = "connected" if redis_ok else "unavailable"
+    if not redis_ok:
+        checks["status"] = "degraded" if checks["status"] == "ok" else checks["status"]
+
+    # Last feature computation (background job health indicator)
+    try:
+        last_comp = await db.feature_computation_logs.find_one(
+            sort=[("computed_at", -1)]
+        )
+        if last_comp:
+            checks["last_feature_computation"] = last_comp.get("computed_at", "unknown")
+            checks["last_computation_users"] = last_comp.get("users_processed", 0)
+        else:
+            checks["last_feature_computation"] = "never"
+    except Exception:
+        checks["last_feature_computation"] = "error"
+
+    return checks
+
+
 # ── Mount router + CORS ──
 app.include_router(api_router)
 
