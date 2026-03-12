@@ -254,3 +254,142 @@ class TestMicroInstantStats:
         ]
         for key in required:
             assert key in data, f"Missing key: {key}"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# GET /api/micro-instants/dashboard (F.5)
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestMicroInstantDashboard:
+
+    @pytest.mark.asyncio
+    async def test_dashboard_empty(self, client, mock_db):
+        """No outcomes → empty dashboard with correct structure."""
+        with patch("routes.micro_instants.db", mock_db):
+            resp = await client.get("/api/micro-instants/dashboard")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_instants"] == 0
+        assert data["exploitation_rate"] == 0.0
+        assert data["hourly_rates"] == {}
+        assert data["best_slots"] == []
+        assert isinstance(data["daily_chart"], list)
+        assert len(data["daily_chart"]) == 7
+        assert data["exploit_streak_days"] == 0
+
+    @pytest.mark.asyncio
+    async def test_dashboard_has_all_fields(self, client, mock_db):
+        """Dashboard response contains all required sections."""
+        with patch("routes.micro_instants.db", mock_db):
+            resp = await client.get("/api/micro-instants/dashboard")
+
+        data = resp.json()
+        required = [
+            # Summary
+            "period_days", "total_instants", "exploited", "skipped",
+            "dismissed", "exploitation_rate", "total_minutes_invested",
+            # Trend
+            "this_week_rate", "last_week_rate", "weekly_trend",
+            "this_week_exploited", "last_week_exploited",
+            # Distribution
+            "hourly_rates", "best_slots", "source_distribution",
+            # Daily chart
+            "daily_chart",
+            # Consistency
+            "exploit_streak_days", "avg_instants_per_active_day", "active_days_count",
+            # Objectives
+            "objective_progress",
+        ]
+        for key in required:
+            assert key in data, f"Missing key: {key}"
+
+    @pytest.mark.asyncio
+    async def test_dashboard_with_outcomes(self, client, mock_db):
+        """Dashboard correctly computes from outcome data."""
+        now = datetime.now(timezone.utc)
+        outcomes = [
+            {"user_id": "user_test_abc123", "instant_id": "mi_d1", "outcome": "exploited",
+             "recorded_at": (now - timedelta(hours=2)).replace(hour=14).isoformat(),
+             "duration": 7, "source": "calendar_gap"},
+            {"user_id": "user_test_abc123", "instant_id": "mi_d2", "outcome": "exploited",
+             "recorded_at": (now - timedelta(hours=3)).replace(hour=14).isoformat(),
+             "duration": 5, "source": "calendar_gap"},
+            {"user_id": "user_test_abc123", "instant_id": "mi_d3", "outcome": "skipped",
+             "recorded_at": (now - timedelta(hours=4)).replace(hour=9).isoformat(),
+             "source": "routine_window"},
+            {"user_id": "user_test_abc123", "instant_id": "mi_d4", "outcome": "exploited",
+             "recorded_at": (now - timedelta(days=1)).replace(hour=14).isoformat(),
+             "duration": 10, "source": "behavioral_pattern"},
+        ]
+        await mock_db.micro_instant_outcomes.insert_many(outcomes)
+
+        with patch("routes.micro_instants.db", mock_db):
+            resp = await client.get("/api/micro-instants/dashboard")
+
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["total_instants"] == 4
+        assert data["exploited"] == 3
+        assert data["skipped"] == 1
+        assert data["total_minutes_invested"] == 22  # 7+5+10
+
+        # Hourly: hour 14 should have 3 outcomes
+        assert "14" in data["hourly_rates"]
+        assert data["hourly_rates"]["14"]["total"] == 3
+
+        # Best slots: hour 14 should be first (100% rate, 3 outcomes)
+        assert len(data["best_slots"]) >= 1
+        assert data["best_slots"][0]["hour"] == 14
+
+        # Source distribution
+        assert data["source_distribution"]["calendar_gap"]["total"] == 2
+        assert data["source_distribution"]["routine_window"]["total"] == 1
+
+        # Daily chart has 7 entries
+        assert len(data["daily_chart"]) == 7
+
+    @pytest.mark.asyncio
+    async def test_dashboard_streak_computation(self, client, mock_db):
+        """Exploit streak counts consecutive days with exploited instants."""
+        now = datetime.now(timezone.utc)
+        # 3 consecutive days of exploitation
+        for i in range(3):
+            await mock_db.micro_instant_outcomes.insert_one({
+                "user_id": "user_test_abc123",
+                "instant_id": f"mi_streak_{i}",
+                "outcome": "exploited",
+                "recorded_at": (now - timedelta(days=i)).isoformat(),
+                "duration": 5,
+            })
+
+        with patch("routes.micro_instants.db", mock_db):
+            resp = await client.get("/api/micro-instants/dashboard")
+
+        data = resp.json()
+        assert data["exploit_streak_days"] == 3
+
+    @pytest.mark.asyncio
+    async def test_dashboard_objective_correlation(self, client, mock_db):
+        """Dashboard includes active objective progress."""
+        await mock_db.objectives.insert_one({
+            "user_id": "user_test_abc123",
+            "objective_id": "obj_dash_001",
+            "title": "Apprendre le thaï",
+            "status": "active",
+            "stats": {
+                "total_time_invested": 120,
+                "total_steps_completed": 8,
+                "current_streak": 5,
+            },
+        })
+
+        with patch("routes.micro_instants.db", mock_db):
+            resp = await client.get("/api/micro-instants/dashboard")
+
+        data = resp.json()
+        assert len(data["objective_progress"]) == 1
+        assert data["objective_progress"][0]["title"] == "Apprendre le thaï"
+        assert data["objective_progress"][0]["total_time_invested"] == 120
