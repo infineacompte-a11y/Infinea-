@@ -16,3 +16,4 @@ google-auth-httplib2==0.3.0
 google-auth-oauthlib==1.2.4
 icalendar>=5.0.0
 slowapi>=0.1.9
+pywebpush>=2.0.0
