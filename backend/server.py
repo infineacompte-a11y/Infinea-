@@ -4573,6 +4573,16 @@ async def subscribe_push_notifications(
     
     return {"message": "Subscribed to push notifications"}
 
+@api_router.get("/notifications/unread-count")
+async def get_unread_notification_count(
+    user: dict = Depends(get_current_user),
+):
+    """Lightweight endpoint for sidebar badge — returns unread count only."""
+    count = await db.notifications.count_documents(
+        {"user_id": user["user_id"], "read": {"$ne": True}}
+    )
+    return {"unread_count": count}
+
 @api_router.get("/notifications")
 async def get_user_notifications(
     user: dict = Depends(get_current_user),
@@ -4583,7 +4593,7 @@ async def get_user_notifications(
         {"user_id": user["user_id"]},
         {"_id": 0}
     ).sort("created_at", -1).limit(limit).to_list(limit)
-    
+
     return notifications
 
 @api_router.post("/notifications/mark-read")

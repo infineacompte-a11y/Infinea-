@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -20,7 +20,41 @@ import {
   CalendarClock,
   Zap,
 } from "lucide-react";
-import { useAuth } from "@/App";
+import { API, authFetch, useAuth } from "@/App";
+
+// ─── Lightweight poll for unread notification count ───
+function useUnreadCount(intervalMs = 60000) {
+  const [count, setCount] = useState(0);
+  const location = useLocation();
+
+  const fetch_ = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API}/notifications/unread-count`);
+      if (res.ok) {
+        const data = await res.json();
+        setCount(data.unread_count || 0);
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  // Poll every intervalMs
+  useEffect(() => {
+    fetch_();
+    const id = setInterval(fetch_, intervalMs);
+    return () => clearInterval(id);
+  }, [fetch_, intervalMs]);
+
+  // Reset when user visits /notifications
+  useEffect(() => {
+    if (location.pathname === "/notifications") {
+      // Small delay to let the page mark-read call go through
+      const t = setTimeout(() => fetch_(), 2000);
+      return () => clearTimeout(t);
+    }
+  }, [location.pathname, fetch_]);
+
+  return count;
+}
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -38,7 +72,7 @@ const navItems = [
   { to: "/profile", label: "Profil", icon: User },
 ];
 
-function NavLinks({ mobile = false, onNavigate }) {
+function NavLinks({ mobile = false, onNavigate, unreadCount = 0 }) {
   const location = useLocation();
 
   return (
@@ -46,6 +80,7 @@ function NavLinks({ mobile = false, onNavigate }) {
       {navItems.map(({ to, label, icon: Icon }) => {
         const isActive = location.pathname === to ||
           (to === "/dashboard" && location.pathname === "/");
+        const isNotif = to === "/notifications";
 
         return (
           <Link
@@ -58,7 +93,14 @@ function NavLinks({ mobile = false, onNavigate }) {
             }`}
             onClick={() => mobile && onNavigate?.()}
           >
-            <Icon className="w-5 h-5" />
+            <div className="relative">
+              <Icon className="w-5 h-5" />
+              {isNotif && unreadCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold leading-none">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </div>
             <span>{label}</span>
           </Link>
         );
@@ -71,6 +113,7 @@ export default function Sidebar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const unreadCount = useUnreadCount();
 
   const handleLogout = async () => {
     await logout();
@@ -89,7 +132,7 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex flex-col gap-1 flex-1">
-          <NavLinks />
+          <NavLinks unreadCount={unreadCount} />
         </nav>
 
         <div className="pt-4 border-t border-border">
@@ -116,13 +159,16 @@ export default function Sidebar() {
 
           <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" data-testid="mobile-menu-btn">
+              <Button variant="ghost" size="icon" data-testid="mobile-menu-btn" className="relative">
                 <Menu className="w-6 h-6" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-background" />
+                )}
               </Button>
             </SheetTrigger>
             <SheetContent side="right" className="w-72 bg-card p-6">
               <nav className="flex flex-col gap-1 mt-8">
-                <NavLinks mobile onNavigate={() => setMobileMenuOpen(false)} />
+                <NavLinks mobile onNavigate={() => setMobileMenuOpen(false)} unreadCount={unreadCount} />
               </nav>
               <div className="mt-auto pt-4 border-t border-border absolute bottom-6 left-6 right-6">
                 <button
