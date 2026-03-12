@@ -37,6 +37,7 @@ from routes.features import router as features_router
 from routes.social import router as social_router, public_router as social_public_router
 from routes.objectives import router as objectives_router
 from routes.routines import router as routines_router
+from routes.micro_instants import router as micro_instants_router
 
 api_router.include_router(auth_router)
 api_router.include_router(onboarding_router)
@@ -53,6 +54,7 @@ api_router.include_router(features_router)
 api_router.include_router(social_router)
 api_router.include_router(objectives_router)
 api_router.include_router(routines_router)
+api_router.include_router(micro_instants_router)
 
 # Public routes (no /api prefix)
 app.include_router(social_public_router)
@@ -150,6 +152,8 @@ async def startup_event():
     await db.shares.create_index("expires_at", expireAfterSeconds=0)
     await db.groups.create_index("group_id", unique=True)
     await db.groups.create_index([("members.user_id", 1), ("status", 1)])
+    await db.micro_instant_outcomes.create_index([("user_id", 1), ("recorded_at", -1)])
+    await db.micro_instant_outcomes.create_index("instant_id")
     logger.info("All indexes ensured")
 
     # Start background tasks
