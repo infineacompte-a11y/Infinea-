@@ -137,16 +137,26 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install & Deploy Vercel
+      - name: Deploy to Vercel Production
         run: |
           if [ -z "$VERCEL_TOKEN" ]; then
-            echo "⏭ VERCEL_TOKEN non configuré, skip deploy frontend"
-            echo "ℹ️ Vercel auto-deploy depuis GitHub gère le frontend"
-            exit 0
+            echo "❌ VERCEL_TOKEN manquant — le frontend ne sera PAS déployé en production"
+            echo ""
+            echo "Pour corriger :"
+            echo "  1. Créer un token sur https://vercel.com/account/tokens"
+            echo "  2. L'ajouter dans GitHub > Settings > Secrets > VERCEL_TOKEN"
+            echo "  3. Ajouter aussi VERCEL_ORG_ID=team_Ecog0vCc3uwh9whgkYnn9tJQ"
+            echo "  4. Ajouter aussi VERCEL_PROJECT_ID=prj_NxEZ1i7s4ip3l7TdofbvibOO2gt6"
+            echo ""
+            echo "⚠️ Sans ces secrets, l'auto-deploy Vercel ne cible que Preview (pas Production)"
+            exit 1
           fi
           npm install -g vercel
           cd frontend
-          vercel --prod --token=$VERCEL_TOKEN --yes
+          vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+          vercel build --prod --token=$VERCEL_TOKEN
+          vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
+          echo "✅ Frontend déployé en production sur Vercel"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
