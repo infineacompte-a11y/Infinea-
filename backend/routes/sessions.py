@@ -316,6 +316,10 @@ async def complete_session(
             await db.notifications.insert_one(notification)
             await send_push_to_user(user["user_id"], notification["title"], notification["message"], url="/notifications", tag="badge")
 
+        # Invalidate cached features (session data changed)
+        from services.cache import cache_delete
+        await cache_delete(f"user_features:{user['user_id']}")
+
         # Auto-export to connected integrations (non-blocking)
         session_data = {
             "session_id": completion.session_id,

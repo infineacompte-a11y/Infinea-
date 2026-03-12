@@ -185,10 +185,15 @@ async def rank_actions_for_user(
     if not actions:
         return []
 
-    # Fetch user features
-    features = await db.user_features.find_one(
-        {"user_id": user_id}, {"_id": 0}
-    )
+    # Fetch user features (cache-first, fallback to MongoDB)
+    from services.cache import cache_get, cache_set, TTL_USER_FEATURES
+    features = await cache_get(f"user_features:{user_id}")
+    if not features:
+        features = await db.user_features.find_one(
+            {"user_id": user_id}, {"_id": 0}
+        )
+        if features:
+            await cache_set(f"user_features:{user_id}", features, ttl=TTL_USER_FEATURES)
     if not features:
         logger.info(f"No features for user {user_id}, skipping scoring")
         return actions

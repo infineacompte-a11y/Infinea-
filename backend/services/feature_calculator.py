@@ -364,6 +364,11 @@ async def compute_all_users_features(db) -> Dict[str, Any]:
                 {"$set": features},
                 upsert=True,
             )
+
+            # Cache in Redis for fast reads by scoring engine
+            from services.cache import cache_set, TTL_USER_FEATURES
+            await cache_set(f"user_features:{uid}", features, ttl=TTL_USER_FEATURES)
+
             processed += 1
         except Exception as e:
             logger.error(f"Feature computation failed for user {uid}: {e}")

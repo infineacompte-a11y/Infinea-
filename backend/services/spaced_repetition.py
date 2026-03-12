@@ -82,6 +82,13 @@ async def get_review_queue(db, user_id: str, objective_id: str) -> list:
     Reads from the sr_reviews collection which tracks per-skill review state.
     Falls back to curriculum-based detection if no review data exists.
     """
+    # Cache-first read
+    from services.cache import cache_get, cache_set, TTL_REVIEW_QUEUE
+    cache_key = f"sr_queue:{user_id}:{objective_id}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     now = datetime.now(timezone.utc)
 
     # Fetch all review records for this objective
@@ -114,6 +121,9 @@ async def get_review_queue(db, user_id: str, objective_id: str) -> list:
 
     # Sort by most overdue first
     due_reviews.sort(key=lambda r: r["days_overdue"], reverse=True)
+
+    # Cache result
+    await cache_set(cache_key, due_reviews, ttl=TTL_REVIEW_QUEUE)
     return due_reviews
 
 
@@ -181,6 +191,10 @@ async def record_review(db, user_id: str, objective_id: str, skill: str, quality
         }},
         upsert=True,
     )
+
+    # Invalidate cached review queue (content changed)
+    from services.cache import cache_delete
+    await cache_delete(f"sr_queue:{user_id}:{objective_id}")
 
     return {
         "skill": skill,
