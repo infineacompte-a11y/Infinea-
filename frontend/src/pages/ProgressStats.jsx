@@ -19,11 +19,9 @@ import {
   Brain,
   Rocket,
   Share2,
-  Copy,
-  Check,
 } from "lucide-react";
 import { toast } from "sonner";
-import { API, authFetch, useAuth } from "@/App";
+import { API, authFetch } from "@/App";
 import Sidebar from "@/components/Sidebar";
 import {
   BarChart,
@@ -38,6 +36,7 @@ import {
   Cell,
 } from "recharts";
 import PremiumAnalytics from "@/components/PremiumAnalytics";
+import ShareDialog from "@/components/ShareDialog";
 
 const categoryColors = {
   learning: "#3b82f6",
@@ -68,10 +67,9 @@ const categoryLabels = {
 };
 
 export default function ProgressStats() {
-  const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [shareState, setShareState] = useState("idle"); // idle | copied
+  const [shareOpen, setShareOpen] = useState(false);
   useEffect(() => {
     fetchStats();
   }, []);
@@ -127,39 +125,13 @@ export default function ProgressStats() {
                 variant="outline"
                 size="sm"
                 className="gap-1.5 shrink-0"
-                onClick={async () => {
-                  const name = user?.name?.split(" ")[0] || "Un utilisateur";
-                  const text = [
-                    `${name} sur InFinea :`,
-                    `${stats.total_time_invested || 0} min investies`,
-                    `${stats.total_sessions || 0} sessions complétées`,
-                    `${stats.streak_days || 0} jours de streak`,
-                    ``,
-                    `Rejoins-moi sur InFinea — programme tes micro-avancements !`,
-                  ].join("\n");
-
-                  if (navigator.share) {
-                    try {
-                      await navigator.share({ title: "Ma progression InFinea", text });
-                    } catch {
-                      // User cancelled
-                    }
-                  } else {
-                    await navigator.clipboard.writeText(text);
-                    setShareState("copied");
-                    toast.success("Copié dans le presse-papier !");
-                    setTimeout(() => setShareState("idle"), 2000);
-                  }
-                }}
+                onClick={() => setShareOpen(true)}
               >
-                {shareState === "copied" ? (
-                  <Check className="w-4 h-4 text-emerald-500" />
-                ) : (
-                  <Share2 className="w-4 h-4" />
-                )}
+                <Share2 className="w-4 h-4" />
                 Partager
               </Button>
             )}
+            <ShareDialog open={shareOpen} onOpenChange={setShareOpen} shareType="weekly_recap" />
           </div>
 
           {isLoading ? (

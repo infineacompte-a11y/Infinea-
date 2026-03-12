@@ -27,6 +27,7 @@ import RoutinesPage from "@/pages/RoutinesPage";
 import MyDayPage from "@/pages/MyDayPage";
 import PrivacyPage from "@/pages/PrivacyPage";
 import CGUPage from "@/pages/CGUPage";
+import PublicSharePage from "@/pages/PublicSharePage";
 import NotFound from "@/pages/NotFound";
 import CoachFAB from "@/components/CoachFAB";
 
@@ -386,6 +387,7 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
+      <Route path="/p/:shareId" element={<PublicSharePage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

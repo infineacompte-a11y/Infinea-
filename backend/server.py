@@ -10,6 +10,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 import uuid
+import secrets
 from datetime import datetime, timezone, timedelta
 import jwt
 import bcrypt
@@ -226,6 +227,11 @@ class TokenConnectRequest(BaseModel):
 
 class PromoCodeRequest(BaseModel):
     code: str
+
+class ShareCreate(BaseModel):
+    """Request body for creating a share card."""
+    share_type: str = Field(default="weekly_recap", description="Type of share: weekly_recap, milestone, badge, objective")
+    objective_id: Optional[str] = Field(default=None, description="Objective to highlight (optional)")
 
 # ============== AI HELPER FUNCTIONS ==============
 
@@ -7006,6 +7012,133 @@ async def test_integration(service: str, user: dict = Depends(get_current_user))
         )
         return {"ok": False, "error": error_msg}
 
+# ============== SHARE PROGRESSION (D.2) ==============
+
+SHARE_TYPES = {"weekly_recap", "milestone", "badge", "objective"}
+SHARE_TTL_DAYS = 90  # Auto-cleanup after 90 days
+
+@api_router.post("/share/create")
+@limiter.limit("10/minute")
+async def create_share(request: Request, body: ShareCreate, user: dict = Depends(get_current_user)):
+    """Create an immutable snapshot of user progression for sharing.
+    Returns a share_id that can be used to view the public share page.
+    Pattern: Spotify Wrapped / Strava Activity Cards — snapshot at creation time."""
+    user_id = user["user_id"]
+
+    if body.share_type not in SHARE_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid share_type. Must be one of: {', '.join(SHARE_TYPES)}")
+
+    now = datetime.now(timezone.utc)
+    today = now.date()
+    today_iso = today.isoformat()
+    week_start = (today - timedelta(days=today.weekday())).isoformat()
+
+    # ── Snapshot: core stats ─────────────────────
+    total_sessions = await db.user_sessions_history.count_documents(
+        {"user_id": user_id, "completed": True}
+    )
+
+    week_sessions = await db.user_sessions_history.find(
+        {"user_id": user_id, "completed": True, "completed_at": {"$gte": week_start}},
+        {"_id": 0, "actual_duration": 1, "category": 1, "completed_at": 1}
+    ).to_list(200)
+
+    week_minutes = sum(s.get("actual_duration", 0) for s in week_sessions)
+    week_count = len(week_sessions)
+
+    week_by_day = {}
+    for s in week_sessions:
+        day = s.get("completed_at", "")[:10]
+        if day:
+            week_by_day[day] = week_by_day.get(day, 0) + s.get("actual_duration", 0)
+
+    # ── Snapshot: objectives ─────────────────────
+    obj_filter = {"user_id": user_id, "status": "active", "deleted": {"$ne": True}}
+    if body.objective_id:
+        obj_filter["objective_id"] = body.objective_id
+
+    objectives = await db.objectives.find(
+        obj_filter,
+        {"_id": 0, "objective_id": 1, "title": 1, "current_day": 1, "streak_days": 1,
+         "total_sessions": 1, "total_minutes": 1, "curriculum": 1, "category": 1}
+    ).to_list(20)
+
+    obj_snapshots = []
+    for obj in objectives:
+        curriculum = obj.get("curriculum", [])
+        total_completed = sum(1 for s in curriculum if s.get("completed"))
+        total_steps = len(curriculum)
+        obj_snapshots.append({
+            "objective_id": obj["objective_id"],
+            "title": obj["title"],
+            "category": obj.get("category", ""),
+            "streak_days": obj.get("streak_days", 0),
+            "progress_percent": round((total_completed / max(total_steps, 1)) * 100),
+            "total_completed": total_completed,
+            "total_steps": total_steps,
+            "total_minutes": obj.get("total_minutes", 0),
+        })
+
+    # ── Snapshot: badges ─────────────────────────
+    user_badges = user.get("badges", [])
+
+    # ── Build share document ─────────────────────
+    share_id = secrets.token_urlsafe(12)  # 16 chars, 96 bits entropy (Bitly-grade)
+
+    share_doc = {
+        "share_id": share_id,
+        "user_id": user_id,
+        "share_type": body.share_type,
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(days=SHARE_TTL_DAYS)).isoformat(),
+        "author": {
+            "name": user.get("name", "Utilisateur InFinea"),
+            "subscription_tier": user.get("subscription_tier", "free"),
+        },
+        "snapshot": {
+            "streak_days": user.get("streak_days", 0),
+            "total_time_invested": user.get("total_time_invested", 0),
+            "total_sessions": total_sessions,
+            "week": {
+                "sessions": week_count,
+                "minutes": week_minutes,
+                "by_day": week_by_day,
+            },
+            "objectives": obj_snapshots,
+            "badges_count": len(user_badges),
+            "recent_badges": user_badges[-3:] if user_badges else [],
+        },
+    }
+
+    await db.shares.insert_one(share_doc)
+
+    return {
+        "share_id": share_id,
+        "share_url": f"/p/{share_id}",
+        "expires_at": share_doc["expires_at"],
+    }
+
+
+@app.get("/share/{share_id}")
+@limiter.limit("30/minute")
+async def get_public_share(share_id: str, request: Request):
+    """Public endpoint — no auth required. Returns the share snapshot for display.
+    Route is on app (not api_router) for clean public URLs."""
+    share = await db.shares.find_one(
+        {"share_id": share_id},
+        {"_id": 0, "user_id": 0}  # Never expose internal user_id publicly
+    )
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found or expired")
+
+    # Check expiration
+    expires_at = share.get("expires_at", "")
+    if expires_at and expires_at < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(status_code=410, detail="This share has expired")
+
+    return share
+
+
 # ============== ROOT ROUTE ==============
 
 @api_router.get("/")
@@ -7069,6 +7202,12 @@ async def startup_event():
     await db.routines.create_index([("user_id", 1), ("is_active", 1)])
     await db.routines.create_index("routine_id", unique=True)
     logger.info("routines indexes ensured")
+
+    # Create indexes for shares collection (D.2 share progression)
+    await db.shares.create_index("share_id", unique=True)
+    await db.shares.create_index([("user_id", 1), ("created_at", -1)])
+    await db.shares.create_index("expires_at", expireAfterSeconds=0)  # MongoDB TTL: auto-delete expired docs
+    logger.info("shares indexes ensured")
 
     # Start daily action generation background loop
     from services.action_generator import daily_generation_loop
