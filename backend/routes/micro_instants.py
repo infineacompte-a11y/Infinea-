@@ -108,7 +108,7 @@ async def exploit_instant(
     action_id = body.action_id
 
     if not action_id:
-        return HTTPException(status_code=400, detail="action_id required")
+        raise HTTPException(status_code=400, detail="action_id required")
 
     # Verify action exists
     action = await db.micro_actions.find_one(
