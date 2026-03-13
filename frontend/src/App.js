@@ -38,20 +38,74 @@ import MicroInstantBanner from "@/components/MicroInstantBanner";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
 export const API = `${BACKEND_URL}/api`;
 
-// Helper fetch that always includes auth token from localStorage
-export const authFetch = (url, options = {}) => {
+// Helper fetch with automatic token refresh on 401.
+// If access token is expired, transparently rotates via refresh token
+// and retries the original request once.
+let _refreshPromise = null; // Deduplicate concurrent refresh calls
+
+async function _tryRefresh() {
+  const refreshToken = localStorage.getItem("infinea_refresh_token");
+  if (!refreshToken) return false;
+
+  try {
+    const res = await fetch(`${API}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) {
+      // Refresh failed — clear tokens, user must re-login
+      localStorage.removeItem("infinea_token");
+      localStorage.removeItem("infinea_refresh_token");
+      return false;
+    }
+    const data = await res.json();
+    localStorage.setItem("infinea_token", data.token);
+    localStorage.setItem("infinea_refresh_token", data.refresh_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const authFetch = async (url, options = {}) => {
   const token = localStorage.getItem("infinea_token");
-  const headers = {
-    ...options.headers,
-  };
+  const headers = { ...options.headers };
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  return fetch(url, {
+
+  const res = await fetch(url, {
     ...options,
     credentials: "include",
     headers,
   });
+
+  // If 401, attempt refresh once and retry
+  if (res.status === 401 && localStorage.getItem("infinea_refresh_token")) {
+    // Deduplicate: if a refresh is already in flight, wait for it
+    if (!_refreshPromise) {
+      _refreshPromise = _tryRefresh().finally(() => { _refreshPromise = null; });
+    }
+    const refreshed = await _refreshPromise;
+
+    if (refreshed) {
+      // Retry with new token
+      const newToken = localStorage.getItem("infinea_token");
+      const retryHeaders = { ...options.headers };
+      if (newToken) {
+        retryHeaders["Authorization"] = `Bearer ${newToken}`;
+      }
+      return fetch(url, {
+        ...options,
+        credentials: "include",
+        headers: retryHeaders,
+      });
+    }
+  }
+
+  return res;
 };
 
 // Register Service Worker for Web Push notifications
@@ -116,9 +170,12 @@ const AuthCallback = () => {
 
         const userData = await response.json();
 
-        // Store token in localStorage
+        // Store tokens in localStorage
         if (userData.token) {
           localStorage.setItem("infinea_token", userData.token);
+        }
+        if (userData.refresh_token) {
+          localStorage.setItem("infinea_refresh_token", userData.refresh_token);
         }
 
         setUser(userData);
@@ -437,6 +494,7 @@ const AuthProvider = ({ children }) => {
       console.error("Logout error:", e);
     }
     localStorage.removeItem("infinea_token");
+    localStorage.removeItem("infinea_refresh_token");
     setUser(null);
   };
 

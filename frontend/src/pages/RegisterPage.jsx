@@ -56,9 +56,12 @@ export default function RegisterPage() {
         throw new Error(data.detail || "Erreur lors de l'inscription");
       }
 
-      // Store token in localStorage as backup for cross-site cookie issues
+      // Store tokens in localStorage
       if (data.token) {
         localStorage.setItem("infinea_token", data.token);
+      }
+      if (data.refresh_token) {
+        localStorage.setItem("infinea_refresh_token", data.refresh_token);
       }
 
       setUser(data);

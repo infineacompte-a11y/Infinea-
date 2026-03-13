@@ -39,9 +39,12 @@ export default function LoginPage() {
         throw new Error(data.detail || "Erreur de connexion");
       }
 
-      // Store token in localStorage as backup for cross-site cookie issues
+      // Store tokens in localStorage
       if (data.token) {
         localStorage.setItem("infinea_token", data.token);
+      }
+      if (data.refresh_token) {
+        localStorage.setItem("infinea_refresh_token", data.refresh_token);
       }
 
       setUser(data);
