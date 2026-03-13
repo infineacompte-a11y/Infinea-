@@ -33,6 +33,7 @@ import GroupsPage from "@/pages/GroupsPage";
 import GroupDetailPage from "@/pages/GroupDetailPage";
 import NotFound from "@/pages/NotFound";
 import CoachFAB from "@/components/CoachFAB";
+import MicroInstantBanner from "@/components/MicroInstantBanner";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
 export const API = `${BACKEND_URL}/api`;
@@ -454,6 +455,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <MicroInstantBanner />
         <AppRouter />
         <Toaster position="top-right" richColors />
       </AuthProvider>
