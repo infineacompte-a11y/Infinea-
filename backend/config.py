@@ -21,7 +21,9 @@ JWT_SECRET = os.environ.get("JWT_SECRET")
 if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET environment variable is required. Server cannot start without it.")
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRATION_HOURS = 168  # 7 days
+ACCESS_TOKEN_EXPIRATION_HOURS = 1  # Short-lived access token
+REFRESH_TOKEN_EXPIRATION_DAYS = 30  # Long-lived refresh token
+JWT_EXPIRATION_HOURS = ACCESS_TOKEN_EXPIRATION_HOURS  # Backward compat alias
 
 # ── VAPID (Web Push) ──
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")

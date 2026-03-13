@@ -83,3 +83,4 @@ frontend/node_modules/.cache/default-development/8.pack
 
 # Exception : les fichiers .example sont des templates sans secrets
 !*.env.example
+*.bak

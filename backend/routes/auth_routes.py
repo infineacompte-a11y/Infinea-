@@ -11,9 +11,13 @@ from datetime import datetime, timezone, timedelta
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response, Depends
 
-from config import JWT_EXPIRATION_HOURS, logger, limiter
+from config import JWT_EXPIRATION_HOURS, ACCESS_TOKEN_EXPIRATION_HOURS, logger, limiter
 from database import db
-from auth import create_token, verify_token, get_current_user, hash_password, verify_password
+from auth import (
+    create_token, verify_token, get_current_user,
+    hash_password, verify_password,
+    create_refresh_token, rotate_refresh_token, revoke_refresh_tokens,
+)
 from models import UserCreate, UserLogin
 
 try:
@@ -49,6 +53,7 @@ async def register(request: Request, user_data: UserCreate, response: Response):
     await db.users.insert_one(user_doc)
 
     token = create_token(user_id)
+    refresh = await create_refresh_token(user_id)
     response.set_cookie(
         key="session_token",
         value=token,
@@ -56,7 +61,7 @@ async def register(request: Request, user_data: UserCreate, response: Response):
         secure=True,
         samesite="none",
         path="/",
-        max_age=JWT_EXPIRATION_HOURS * 3600
+        max_age=ACCESS_TOKEN_EXPIRATION_HOURS * 3600,
     )
 
     return {
@@ -64,7 +69,8 @@ async def register(request: Request, user_data: UserCreate, response: Response):
         "email": user_data.email,
         "name": user_data.name,
         "subscription_tier": "free",
-        "token": token
+        "token": token,
+        "refresh_token": refresh,
     }
 
 @router.post("/auth/login")
@@ -81,6 +87,7 @@ async def login(request: Request, user_data: UserLogin, response: Response):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_token(user["user_id"])
+    refresh = await create_refresh_token(user["user_id"])
     response.set_cookie(
         key="session_token",
         value=token,
@@ -88,7 +95,7 @@ async def login(request: Request, user_data: UserLogin, response: Response):
         secure=True,
         samesite="none",
         path="/",
-        max_age=JWT_EXPIRATION_HOURS * 3600
+        max_age=ACCESS_TOKEN_EXPIRATION_HOURS * 3600,
     )
 
     return {
@@ -98,7 +105,8 @@ async def login(request: Request, user_data: UserLogin, response: Response):
         "picture": user.get("picture"),
         "subscription_tier": user.get("subscription_tier", "free"),
         "user_profile": user.get("user_profile"),
-        "token": token
+        "token": token,
+        "refresh_token": refresh,
     }
 
 @router.get("/auth/google")
@@ -324,8 +332,9 @@ async def process_oauth_session(request: Request, response: Response):
         max_age=7 * 24 * 3600,
     )
 
-    # JWT en backup pour localStorage
+    # JWT access token + refresh token
     jwt_token = create_token(user_id)
+    refresh = await create_refresh_token(user_id)
 
     return {
         "user_id": user_id,
@@ -335,6 +344,7 @@ async def process_oauth_session(request: Request, response: Response):
         "subscription_tier": user.get("subscription_tier", "free"),
         "user_profile": user.get("user_profile"),
         "token": jwt_token,
+        "refresh_token": refresh,
     }
 
 @router.get("/auth/me")
@@ -356,29 +366,48 @@ async def logout(request: Request, response: Response):
     if session_token:
         await db.user_sessions.delete_one({"session_token": session_token})
 
+    # Revoke refresh tokens if user is authenticated
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        user_id = verify_token(token)
+        if user_id:
+            await revoke_refresh_tokens(user_id)
+
     response.delete_cookie(key="session_token", path="/", samesite="none", secure=True)
     return {"message": "Logged out successfully"}
 
 @router.post("/auth/refresh")
-async def refresh_token(request: Request, response: Response, user: dict = Depends(get_current_user)):
-    """Refresh JWT token for active users - extends session by 7 days"""
-    new_token = create_token(user["user_id"])
+async def refresh_token_endpoint(request: Request, response: Response):
+    """
+    Rotate refresh token — no access token required.
+    Accepts { refresh_token: "..." } in body.
+    Returns new access token + new refresh token (rotation).
+    Old refresh token is invalidated. Reuse = family revocation.
+    """
+    body = await request.json()
+    old_refresh = body.get("refresh_token")
+    if not old_refresh:
+        raise HTTPException(status_code=400, detail="refresh_token required")
+
+    new_access, new_refresh, user_id = await rotate_refresh_token(old_refresh)
+
     response.set_cookie(
         key="session_token",
-        value=new_token,
+        value=new_access,
         httponly=True,
         secure=True,
         samesite="none",
         path="/",
-        max_age=JWT_EXPIRATION_HOURS * 3600
+        max_age=ACCESS_TOKEN_EXPIRATION_HOURS * 3600,
     )
+
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+
     return {
-        "token": new_token,
-        "user_id": user["user_id"],
-        "email": user["email"],
-        "name": user["name"],
-        "picture": user.get("picture"),
-        "subscription_tier": user.get("subscription_tier", "free"),
-        "total_time_invested": user.get("total_time_invested", 0),
-        "streak_days": user.get("streak_days", 0)
+        "token": new_access,
+        "refresh_token": new_refresh,
+        "user_id": user_id,
+        "email": user.get("email", "") if user else "",
+        "name": user.get("name", "") if user else "",
     }

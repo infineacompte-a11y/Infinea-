@@ -160,6 +160,10 @@ async def startup_event():
     await db.user_sessions_history.create_index([("user_id", 1), ("started_at", -1)])
     await db.user_sessions_history.create_index("session_id", unique=True)
     await db.users.create_index("user_id", unique=True)
+    # H.2 — Refresh tokens (rotation, family tracking, TTL auto-cleanup)
+    await db.refresh_tokens.create_index("token", unique=True)
+    await db.refresh_tokens.create_index("user_id")
+    await db.refresh_tokens.create_index("family_id")
 
     logger.info("All indexes ensured")
 
