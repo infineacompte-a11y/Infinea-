@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
   Zap,
   Clock,
@@ -22,6 +21,11 @@ import {
   Sun,
   Sunrise,
   Moon,
+  BarChart3,
+  Award,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { API, authFetch, useAuth } from "@/App";
@@ -356,6 +360,405 @@ function EmptyState() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Analytics Dashboard — G.3
+// ═══════════════════════════════════════════════════════════════
+
+function WeeklyTrendBadge({ trend, thisWeekRate, lastWeekRate }) {
+  if (thisWeekRate === 0 && lastWeekRate === 0) return null;
+  const pct = Math.round(trend * 100);
+  const isUp = pct > 0;
+  const isFlat = pct === 0;
+  const Icon = isUp ? ArrowUpRight : isFlat ? Minus : ArrowDownRight;
+  const color = isUp
+    ? "text-emerald-400 bg-emerald-500/10"
+    : isFlat
+    ? "text-muted-foreground bg-muted/10"
+    : "text-red-400 bg-red-500/10";
+
+  return (
+    <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${color}`}>
+      <Icon className="w-3 h-3" />
+      {isUp ? "+" : ""}
+      {pct}% vs semaine dernière
+    </div>
+  );
+}
+
+function DailyChart({ dailyChart }) {
+  if (!dailyChart || dailyChart.length === 0) return null;
+  const maxTotal = Math.max(...dailyChart.map((d) => d.total), 1);
+
+  const dayNames = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+
+  return (
+    <Card className="border-border/30">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <BarChart3 className="w-4 h-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">7 derniers jours</span>
+        </div>
+        <div className="flex items-end gap-1.5 h-28">
+          {dailyChart.map((day) => {
+            const dt = new Date(day.date + "T12:00:00");
+            const dayName = dayNames[dt.getDay()];
+            const dayNum = dt.getDate();
+            const exploitedH = day.total > 0 ? (day.exploited / maxTotal) * 100 : 0;
+            const skippedH = day.total > 0 ? (day.skipped / maxTotal) * 100 : 0;
+            const rate = Math.round(day.rate * 100);
+
+            return (
+              <div key={day.date} className="flex-1 flex flex-col items-center gap-1 group relative">
+                {/* Tooltip */}
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-popover border border-border rounded-md px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-md">
+                  {day.exploited}/{day.total} · {rate}%
+                </div>
+                {/* Bars */}
+                <div className="w-full flex flex-col justify-end h-20 gap-0.5">
+                  {day.total === 0 ? (
+                    <div className="w-full rounded-sm bg-muted/20" style={{ height: "4px" }} />
+                  ) : (
+                    <>
+                      <div
+                        className="w-full rounded-t-sm bg-emerald-500/70 transition-all"
+                        style={{ height: `${Math.max(exploitedH, 4)}%` }}
+                      />
+                      {skippedH > 0 && (
+                        <div
+                          className="w-full bg-muted-foreground/20 transition-all"
+                          style={{ height: `${skippedH}%` }}
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
+                {/* Label */}
+                <div className="text-center">
+                  <p className="text-[10px] font-medium text-muted-foreground">{dayName}</p>
+                  <p className="text-[9px] text-muted-foreground/60">{dayNum}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {/* Legend */}
+        <div className="flex items-center gap-4 mt-3 justify-center">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-sm bg-emerald-500/70" />
+            <span className="text-[10px] text-muted-foreground">Exploités</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-sm bg-muted-foreground/20" />
+            <span className="text-[10px] text-muted-foreground">Passés</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function HourlyHeatmap({ hourlyRates }) {
+  if (!hourlyRates || Object.keys(hourlyRates).length === 0) return null;
+
+  // Group hours into time blocks
+  const blocks = [
+    { label: "Matin", range: [6, 12], icon: Sunrise },
+    { label: "Après-midi", range: [12, 18], icon: Sun },
+    { label: "Soir", range: [18, 24], icon: Moon },
+  ];
+
+  return (
+    <Card className="border-border/30">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Clock className="w-4 h-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">Heures d'exploitation</span>
+        </div>
+        <div className="space-y-3">
+          {blocks.map((block) => {
+            const BlockIcon = block.icon;
+            return (
+              <div key={block.label}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <BlockIcon className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-[11px] text-muted-foreground">{block.label}</span>
+                </div>
+                <div className="grid grid-cols-6 gap-1">
+                  {Array.from({ length: block.range[1] - block.range[0] }, (_, i) => {
+                    const h = block.range[0] + i;
+                    const data = hourlyRates[String(h)];
+                    const rate = data ? data.rate : 0;
+                    const total = data ? data.total : 0;
+
+                    // Intensity based on rate
+                    let bg = "bg-muted/20";
+                    if (total > 0) {
+                      if (rate >= 0.7) bg = "bg-emerald-500/70";
+                      else if (rate >= 0.4) bg = "bg-emerald-500/40";
+                      else if (rate > 0) bg = "bg-emerald-500/20";
+                      else bg = "bg-red-500/15";
+                    }
+
+                    return (
+                      <div
+                        key={h}
+                        className={`group relative h-7 rounded-md ${bg} flex items-center justify-center transition-all hover:ring-1 hover:ring-primary/30 cursor-default`}
+                      >
+                        <span className="text-[9px] font-medium text-foreground/60">{h}h</span>
+                        {total > 0 && (
+                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-popover border border-border rounded-md px-2 py-0.5 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-md">
+                            {Math.round(rate * 100)}% ({data.exploited}/{total})
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {/* Heatmap legend */}
+        <div className="flex items-center gap-1.5 mt-3 justify-center">
+          <span className="text-[9px] text-muted-foreground">0%</span>
+          <div className="flex gap-0.5">
+            <div className="w-4 h-2.5 rounded-sm bg-muted/20" />
+            <div className="w-4 h-2.5 rounded-sm bg-emerald-500/20" />
+            <div className="w-4 h-2.5 rounded-sm bg-emerald-500/40" />
+            <div className="w-4 h-2.5 rounded-sm bg-emerald-500/70" />
+          </div>
+          <span className="text-[9px] text-muted-foreground">100%</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BestSlotsCard({ bestSlots }) {
+  if (!bestSlots || bestSlots.length === 0) return null;
+
+  const medals = ["🥇", "🥈", "🥉"];
+
+  return (
+    <Card className="border-border/30">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Award className="w-4 h-4 text-amber-400" />
+          <span className="text-sm font-medium text-foreground">Meilleurs créneaux</span>
+        </div>
+        <div className="space-y-2">
+          {bestSlots.map((slot, i) => (
+            <div
+              key={slot.hour}
+              className="flex items-center gap-3 p-2.5 rounded-lg bg-card/50 border border-border/20"
+            >
+              <span className="text-lg">{medals[i]}</span>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">{slot.label}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {slot.exploited_count}/{slot.total_outcomes} exploités
+                </p>
+              </div>
+              <Badge
+                className={`text-xs ${
+                  slot.exploitation_rate >= 0.7
+                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                    : slot.exploitation_rate >= 0.4
+                    ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                    : "text-muted-foreground border-border/50"
+                }`}
+                variant="outline"
+              >
+                {Math.round(slot.exploitation_rate * 100)}%
+              </Badge>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SourceBreakdown({ sourceDistribution }) {
+  if (!sourceDistribution) return null;
+  const sources = Object.entries(sourceDistribution).filter(([, d]) => d.total > 0);
+  if (sources.length === 0) return null;
+
+  const totalAll = sources.reduce((s, [, d]) => s + d.total, 0);
+
+  return (
+    <Card className="border-border/30">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles className="w-4 h-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">Sources de détection</span>
+        </div>
+        <div className="space-y-3">
+          {sources.map(([src, data]) => {
+            const config = SOURCE_CONFIG[src] || SOURCE_CONFIG.behavioral_pattern;
+            const SrcIcon = config.icon;
+            const pct = totalAll > 0 ? Math.round((data.total / totalAll) * 100) : 0;
+            const rate = Math.round(data.rate * 100);
+
+            return (
+              <div key={src}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-6 h-6 rounded-md ${config.bgColor} flex items-center justify-center`}>
+                      <SrcIcon className={`w-3 h-3 ${config.color}`} />
+                    </div>
+                    <span className="text-sm text-foreground">{config.label}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-muted-foreground">{pct}%</span>
+                    <span className="text-[10px] text-muted-foreground/60 ml-1">
+                      ({rate}% exploités)
+                    </span>
+                  </div>
+                </div>
+                <div className="h-1.5 rounded-full bg-muted/30 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      src === "calendar_gap"
+                        ? "bg-blue-500/60"
+                        : src === "routine_window"
+                        ? "bg-emerald-500/60"
+                        : "bg-purple-500/60"
+                    }`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StreakConsistencyCard({ streak, avgPerDay, activeDays, totalMinutes }) {
+  return (
+    <Card className="border-border/30">
+      <CardContent className="p-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="text-center p-3 rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20">
+            <Flame className="w-5 h-5 text-amber-400 mx-auto mb-1" />
+            <p className="text-2xl font-bold text-foreground">{streak}</p>
+            <p className="text-[10px] text-muted-foreground">Jours consécutifs</p>
+          </div>
+          <div className="text-center p-3 rounded-xl bg-card border border-border/20">
+            <Target className="w-5 h-5 text-primary mx-auto mb-1" />
+            <p className="text-2xl font-bold text-foreground">{avgPerDay}</p>
+            <p className="text-[10px] text-muted-foreground">Moy. / jour actif</p>
+          </div>
+          <div className="text-center p-3 rounded-xl bg-card border border-border/20">
+            <Calendar className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+            <p className="text-2xl font-bold text-foreground">{activeDays}</p>
+            <p className="text-[10px] text-muted-foreground">Jours actifs (30j)</p>
+          </div>
+          <div className="text-center p-3 rounded-xl bg-card border border-border/20">
+            <Clock className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
+            <p className="text-2xl font-bold text-foreground">{formatDuration(totalMinutes)}</p>
+            <p className="text-[10px] text-muted-foreground">Temps investi</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AnalyticsDashboard() {
+  const [dashboard, setDashboard] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await authFetch(`${API}/micro-instants/dashboard`);
+        if (res.ok) {
+          setDashboard(await res.json());
+        }
+      } catch {
+        /* silent */
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!dashboard || dashboard.total_instants === 0) return null;
+
+  const summaryRate = Math.round(dashboard.exploitation_rate * 100);
+
+  return (
+    <div className="space-y-4">
+      {/* Analytics header + toggle */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between p-3 rounded-xl bg-card border border-border/30 hover:border-primary/20 transition-colors group"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
+            <BarChart3 className="w-4.5 h-4.5 text-primary" />
+          </div>
+          <div className="text-left">
+            <p className="text-sm font-medium text-foreground">Analytics (30 jours)</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs text-muted-foreground">
+                {dashboard.total_instants} instants · {summaryRate}% exploités
+              </span>
+              <WeeklyTrendBadge
+                trend={dashboard.weekly_trend}
+                thisWeekRate={dashboard.this_week_rate}
+                lastWeekRate={dashboard.last_week_rate}
+              />
+            </div>
+          </div>
+        </div>
+        <ChevronRight
+          className={`w-4 h-4 text-muted-foreground transition-transform ${
+            expanded ? "rotate-90" : ""
+          }`}
+        />
+      </button>
+
+      {expanded && (
+        <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+          {/* Streak & consistency */}
+          <StreakConsistencyCard
+            streak={dashboard.exploit_streak_days}
+            avgPerDay={dashboard.avg_instants_per_active_day}
+            activeDays={dashboard.active_days_count}
+            totalMinutes={dashboard.total_minutes_invested}
+          />
+
+          {/* 7-day chart */}
+          <DailyChart dailyChart={dashboard.daily_chart} />
+
+          {/* Hourly heatmap */}
+          <HourlyHeatmap hourlyRates={dashboard.hourly_rates} />
+
+          {/* Best slots + Source breakdown side by side on desktop */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <BestSlotsCard bestSlots={dashboard.best_slots} />
+            <SourceBreakdown sourceDistribution={dashboard.source_distribution} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Main Page
 // ═══════════════════════════════════════════════════════════════
 export default function MicroInstantsPage() {
@@ -538,16 +941,8 @@ export default function MicroInstantsPage() {
                 </div>
               </div>
 
-              {/* Link to full dashboard */}
-              <Button
-                variant="ghost"
-                className="w-full text-muted-foreground hover:text-foreground gap-2"
-                onClick={() => navigate("/progress")}
-              >
-                <Target className="w-4 h-4" />
-                Voir le dashboard complet
-                <ChevronRight className="w-4 h-4" />
-              </Button>
+              {/* Analytics Dashboard — G.3 */}
+              <AnalyticsDashboard />
             </>
           )}
         </div>
