@@ -1,8 +1,14 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Zap,
   Clock,
@@ -26,6 +32,12 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
+  Undo2,
+  Timer,
+  BriefcaseBusiness,
+  Clock3,
+  Ban,
+  MessageSquare,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { API, authFetch, useAuth } from "@/App";
@@ -115,11 +127,116 @@ function ConfidenceBadge({ score }) {
   );
 }
 
+// ─── Skip reasons ────────────────────────────────────────────
+const SKIP_REASONS = [
+  { value: "busy", label: "Occupé en ce moment", icon: BriefcaseBusiness },
+  { value: "wrong_time", label: "Mauvais moment", icon: Clock3 },
+  { value: "not_interested", label: "Pas intéressé", icon: Ban },
+  { value: "other", label: "Autre raison", icon: MessageSquare },
+];
+
+// ─── Skip Dialog ─────────────────────────────────────────────
+function SkipDialog({ open, onOpenChange, onConfirm, isLoading }) {
+  const [reason, setReason] = useState(null);
+
+  const handleConfirm = () => {
+    onConfirm(reason || "not_interested");
+    setReason(null);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-base">Passer ce micro-instant ?</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground -mt-1">
+          Ton feedback améliore les prochaines prédictions.
+        </p>
+        <div className="grid grid-cols-2 gap-2 mt-2">
+          {SKIP_REASONS.map((r) => {
+            const Icon = r.icon;
+            const selected = reason === r.value;
+            return (
+              <button
+                key={r.value}
+                onClick={() => setReason(r.value)}
+                className={`flex items-center gap-2 p-2.5 rounded-lg border text-left text-sm transition-all ${
+                  selected
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border/40 text-muted-foreground hover:border-border hover:text-foreground"
+                }`}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="text-xs leading-tight">{r.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex gap-2 mt-3">
+          <Button
+            variant="ghost"
+            className="flex-1"
+            onClick={() => onOpenChange(false)}
+          >
+            Annuler
+          </Button>
+          <Button
+            variant="default"
+            className="flex-1"
+            disabled={isLoading}
+            onClick={handleConfirm}
+          >
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Passer"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Countdown timer for active instants ─────────────────────
+function CountdownBadge({ windowEnd }) {
+  const [remaining, setRemaining] = useState("");
+
+  useEffect(() => {
+    function calc() {
+      const diff = new Date(windowEnd) - new Date();
+      if (diff <= 0) {
+        setRemaining("");
+        return;
+      }
+      const mins = Math.floor(diff / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+      if (mins > 30) {
+        setRemaining(`${mins} min`);
+      } else {
+        setRemaining(`${mins}:${secs.toString().padStart(2, "0")}`);
+      }
+    }
+    calc();
+    const id = setInterval(calc, 1000);
+    return () => clearInterval(id);
+  }, [windowEnd]);
+
+  if (!remaining) return null;
+
+  return (
+    <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30 animate-pulse gap-1">
+      <Timer className="w-3 h-3" />
+      {remaining}
+    </Badge>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Instant Card — the core interaction unit
 // ═══════════════════════════════════════════════════════════════
-function InstantCard({ instant, onExploit, onSkip, isLoading }) {
-  const navigate = useNavigate();
+function InstantCard({ instant, onExploit, onSkip, onUndoSkip, isLoading }) {
+  const [skipDialogOpen, setSkipDialogOpen] = useState(false);
+  const [undoCountdown, setUndoCountdown] = useState(0);
+  const undoTimerRef = useRef(null);
+
   const source = SOURCE_CONFIG[instant.source] || SOURCE_CONFIG.behavioral_pattern;
   const SourceIcon = source.icon;
   const now = isInstantNow(instant);
@@ -138,120 +255,190 @@ function InstantCard({ instant, onExploit, onSkip, isLoading }) {
     }
   };
 
+  const handleSkipConfirm = (reason) => {
+    setSkipDialogOpen(false);
+    onSkip(instant.instant_id, reason);
+    // Start undo countdown (5 seconds)
+    setUndoCountdown(5);
+    undoTimerRef.current = setInterval(() => {
+      setUndoCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(undoTimerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleUndo = () => {
+    clearInterval(undoTimerRef.current);
+    setUndoCountdown(0);
+    onUndoSkip(instant.instant_id);
+  };
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearInterval(undoTimerRef.current);
+    };
+  }, []);
+
   return (
-    <Card
-      className={`transition-all duration-300 ${
-        now
-          ? "border-primary/50 shadow-lg shadow-primary/5 ring-1 ring-primary/20"
-          : past
-          ? "opacity-50"
-          : "border-border/30"
-      } ${exploited ? "border-emerald-500/40 bg-emerald-500/5" : ""} ${
-        skipped ? "border-muted/40 bg-muted/5" : ""
-      }`}
-    >
-      <CardContent className="p-4">
-        {/* Header: time window + source */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className={`w-7 h-7 rounded-lg ${source.bgColor} flex items-center justify-center`}>
-              <SourceIcon className={`w-3.5 h-3.5 ${source.color}`} />
+    <>
+      <Card
+        className={`transition-all duration-300 ${
+          now
+            ? "border-primary/50 shadow-lg shadow-primary/5 ring-1 ring-primary/20"
+            : past
+            ? "opacity-50"
+            : "border-border/30"
+        } ${exploited ? "border-emerald-500/40 bg-emerald-500/5" : ""} ${
+          skipped ? "border-muted/40 bg-muted/5" : ""
+        }`}
+      >
+        <CardContent className="p-4">
+          {/* Header: time window + source */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className={`w-7 h-7 rounded-lg ${source.bgColor} flex items-center justify-center`}>
+                <SourceIcon className={`w-3.5 h-3.5 ${source.color}`} />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-foreground">
+                    {startTime} – {endTime}
+                  </span>
+                  {now && (
+                    <Badge className="bg-primary/20 text-primary text-[9px] px-1.5 py-0 animate-pulse">
+                      MAINTENANT
+                    </Badge>
+                  )}
+                </div>
+                <span className="text-[11px] text-muted-foreground">{source.label}</span>
+              </div>
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm font-medium text-foreground">
-                  {startTime} – {endTime}
-                </span>
-                {now && (
-                  <Badge className="bg-primary/20 text-primary text-[9px] px-1.5 py-0 animate-pulse">
-                    MAINTENANT
-                  </Badge>
+
+            <div className="flex items-center gap-1.5">
+              {/* Countdown for active instants */}
+              {now && <CountdownBadge windowEnd={instant.window_end} />}
+              <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/50">
+                <Clock className="w-3 h-3 mr-1" />
+                {formatDuration(duration)}
+              </Badge>
+              <ConfidenceBadge score={instant.confidence_score} />
+            </div>
+          </div>
+
+          {/* Recommended action */}
+          {action.title && (
+            <div className="mb-3 p-3 rounded-lg bg-card/50 border border-border/20">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground leading-tight">
+                    {action.title}
+                  </p>
+                  {action.category && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">
+                      {action.category.replace("_", " ")}
+                      {action.duration_min && action.duration_max && (
+                        <span> · {action.duration_min}–{action.duration_max} min</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Action buttons — active state */}
+          {!exploited && !skipped && !past && (
+            <div className="flex gap-2">
+              <Button
+                className={`flex-1 gap-2 ${
+                  now
+                    ? "bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md"
+                    : ""
+                }`}
+                variant={now ? "default" : "outline"}
+                disabled={isLoading || !action.action_id}
+                onClick={handleExploit}
+              >
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
+                {now ? "Commencer" : "Lancer"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-foreground shrink-0"
+                disabled={isLoading}
+                onClick={() => setSkipDialogOpen(true)}
+              >
+                <SkipForward className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+
+          {/* Exploited state — enriched feedback */}
+          {exploited && (
+            <div className="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+              <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-emerald-400">Exploité</p>
+                {action.title && (
+                  <p className="text-[11px] text-muted-foreground">{action.title}</p>
                 )}
               </div>
-              <span className="text-[11px] text-muted-foreground">{source.label}</span>
             </div>
-          </div>
+          )}
 
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/50">
-              <Clock className="w-3 h-3 mr-1" />
-              {formatDuration(duration)}
-            </Badge>
-            <ConfidenceBadge score={instant.confidence_score} />
-          </div>
-        </div>
-
-        {/* Recommended action */}
-        {action.title && (
-          <div className="mb-3 p-3 rounded-lg bg-card/50 border border-border/20">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                <Sparkles className="w-4 h-4 text-primary" />
+          {/* Skipped state — with undo option */}
+          {skipped && (
+            <div className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/5 border border-border/20">
+              <div className="w-8 h-8 rounded-full bg-muted/20 flex items-center justify-center shrink-0">
+                <XCircle className="w-4 h-4 text-muted-foreground" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground leading-tight">
-                  {action.title}
-                </p>
-                {action.category && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5 capitalize">
-                    {action.category.replace("_", " ")}
-                    {action.duration_min && action.duration_max && (
-                      <span> · {action.duration_min}–{action.duration_max} min</span>
-                    )}
+              <div className="flex-1">
+                <p className="text-sm text-muted-foreground">Passé</p>
+                {instant._skipReason && (
+                  <p className="text-[11px] text-muted-foreground/60">
+                    {SKIP_REASONS.find((r) => r.value === instant._skipReason)?.label || instant._skipReason}
                   </p>
                 )}
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Action buttons */}
-        {!exploited && !skipped && !past && (
-          <div className="flex gap-2">
-            <Button
-              className={`flex-1 gap-2 ${
-                now
-                  ? "bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md"
-                  : ""
-              }`}
-              variant={now ? "default" : "outline"}
-              disabled={isLoading || !action.action_id}
-              onClick={handleExploit}
-            >
-              {isLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Play className="w-4 h-4" />
+              {undoCountdown > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-primary hover:text-primary gap-1.5 shrink-0"
+                  onClick={handleUndo}
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                  Annuler ({undoCountdown}s)
+                </Button>
               )}
-              {now ? "Commencer" : "Lancer"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-foreground shrink-0"
-              disabled={isLoading}
-              onClick={() => onSkip(instant.instant_id)}
-            >
-              <SkipForward className="w-4 h-4" />
-            </Button>
-          </div>
-        )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Status badges for completed instants */}
-        {exploited && (
-          <div className="flex items-center gap-2 text-emerald-400 text-sm">
-            <CheckCircle2 className="w-4 h-4" />
-            <span>Exploité</span>
-          </div>
-        )}
-        {skipped && (
-          <div className="flex items-center gap-2 text-muted-foreground text-sm">
-            <XCircle className="w-4 h-4" />
-            <span>Passé</span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      {/* Skip confirmation dialog */}
+      <SkipDialog
+        open={skipDialogOpen}
+        onOpenChange={setSkipDialogOpen}
+        onConfirm={handleSkipConfirm}
+        isLoading={isLoading}
+      />
+    </>
   );
 }
 
@@ -814,15 +1001,17 @@ export default function MicroInstantsPage() {
 
       if (res.ok) {
         const data = await res.json();
-        // Mark instant as exploited locally
         setInstants((prev) =>
           prev.map((i) =>
             i.instant_id === instantId ? { ...i, _exploited: true } : i
           )
         );
-        toast.success("Micro-instant exploité !");
+        // Enriched success feedback
+        const actionTitle = data.action?.title || "Action lancée";
+        toast.success(`${actionTitle}`, {
+          description: "Micro-instant exploité — bravo !",
+        });
 
-        // Navigate to active session if available
         if (data.action?.action_id) {
           navigate(`/actions`);
         }
@@ -837,20 +1026,22 @@ export default function MicroInstantsPage() {
     }
   };
 
-  // ── Skip action ──
-  const handleSkip = async (instantId) => {
+  // ── Skip action (with reason from dialog) ──
+  const handleSkip = async (instantId, reason) => {
     setActionLoading(instantId);
     try {
       const res = await authFetch(`${API}/micro-instants/${instantId}/skip`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: "not_interested" }),
+        body: JSON.stringify({ reason }),
       });
 
       if (res.ok) {
         setInstants((prev) =>
           prev.map((i) =>
-            i.instant_id === instantId ? { ...i, _skipped: true } : i
+            i.instant_id === instantId
+              ? { ...i, _skipped: true, _skipReason: reason }
+              : i
           )
         );
       }
@@ -859,6 +1050,18 @@ export default function MicroInstantsPage() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  // ── Undo skip (local only — reverts optimistic state) ──
+  const handleUndoSkip = (instantId) => {
+    setInstants((prev) =>
+      prev.map((i) =>
+        i.instant_id === instantId
+          ? { ...i, _skipped: false, _skipReason: null }
+          : i
+      )
+    );
+    toast("Micro-instant restauré", { description: "Tu peux encore l'exploiter." });
   };
 
   // ── Determine hero instant (current or next available) ──
@@ -935,6 +1138,7 @@ export default function MicroInstantsPage() {
                         instant={instant}
                         onExploit={handleExploit}
                         onSkip={handleSkip}
+                        onUndoSkip={handleUndoSkip}
                         isLoading={actionLoading === instant.instant_id}
                       />
                     ))}
