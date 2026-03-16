@@ -318,7 +318,7 @@ export default function NotesPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-red-500"
+                                className="sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-red-500"
                                 onClick={() => setDeleteTarget(note.session_id)}
                               >
                                 <Trash2 className="w-4 h-4" />

@@ -139,7 +139,7 @@ export default function LandingPage() {
               <span className="text-sm text-primary">Une IA qui apprend de vous, une bibliothèque qui grandit sans cesse</span>
             </div>
             
-            <h1 className="font-heading text-5xl md:text-7xl font-bold tracking-tight mb-6 animate-fade-in stagger-1">
+            <h1 className="font-heading text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-6 animate-fade-in stagger-1">
               Investissez vos
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"> instants perdus</span>
             </h1>

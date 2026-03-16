@@ -275,7 +275,7 @@ export default function ProgressStats() {
                         <p>Pas encore de données</p>
                       </div>
                     )}
-                    <div className="flex justify-center gap-4 mt-4">
+                    <div className="flex justify-center flex-wrap gap-x-4 gap-y-1 mt-4">
                       {pieData.map((entry, i) => (
                         <div key={i} className="flex items-center gap-2">
                           <div
