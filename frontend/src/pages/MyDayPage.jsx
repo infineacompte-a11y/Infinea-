@@ -478,8 +478,8 @@ export default function MyDayPage() {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
-      <main className="lg:ml-16 pb-20">
-        <div className="max-w-2xl mx-auto px-4 py-6">
+      <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
+        <div className="max-w-2xl mx-auto">
           {/* Header */}
           <div className="mb-6">
             <h1 className="font-heading text-2xl font-bold">
@@ -518,7 +518,7 @@ export default function MyDayPage() {
           ) : (
             <>
               {/* ── Stats du jour ─────────────────── */}
-              <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
                 <Card className="p-3 text-center">
                   <div className="flex items-center justify-center gap-1.5 mb-1">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />

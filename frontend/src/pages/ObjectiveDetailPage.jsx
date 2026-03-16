@@ -379,7 +379,7 @@ function InsightsTab({ objectiveId }) {
         <div className="space-y-4">
           {/* Stats Grid — always visible */}
           {stats && (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <Card className="p-3 text-center">
                 <Activity className="w-4 h-4 text-blue-500 mx-auto mb-1" />
                 <div className="text-lg font-bold">{stats.completion_rate}%</div>
@@ -770,8 +770,8 @@ export default function ObjectiveDetailPage() {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
-      <main className="lg:ml-16 pb-20">
-        <div className="max-w-2xl mx-auto px-4 py-6">
+      <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
+        <div className="max-w-2xl mx-auto">
           {/* Back */}
           <button
             onClick={() => navigate("/objectives")}
@@ -843,7 +843,7 @@ export default function ObjectiveDetailPage() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="text-center p-2 rounded-lg bg-muted/30">
                 <Flame className="w-4 h-4 text-orange-500 mx-auto mb-1" />
                 <div className="text-lg font-bold">{objective.streak_days || 0}</div>

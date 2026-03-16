@@ -219,7 +219,7 @@ export default function NotesPage() {
 
           {/* Stats Cards — always visible */}
           {!isLoading && stats && (
-            <div className="grid grid-cols-3 gap-3 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
               <Card className="p-3 text-center">
                 <FileText className="w-4 h-4 text-primary mx-auto mb-1" />
                 <div className="text-lg font-bold">{stats.total_notes || 0}</div>

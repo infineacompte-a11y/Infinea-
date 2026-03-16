@@ -141,7 +141,7 @@ export default function ProgressStats() {
           ) : (
             <>
               {/* Stats Overview */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 <Card className="stat-card">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
@@ -208,7 +208,7 @@ export default function ProgressStats() {
               </div>
 
               {/* Charts */}
-              <div className="grid lg:grid-cols-2 gap-6 mb-8">
+              <div className="grid md:grid-cols-2 gap-6 mb-8">
                 {/* Time by Category */}
                 <Card>
                   <CardHeader>

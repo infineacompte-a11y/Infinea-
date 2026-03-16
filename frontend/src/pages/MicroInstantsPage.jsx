@@ -300,9 +300,9 @@ function InstantCard({ instant, onExploit, onSkip, onUndoSkip, isLoading }) {
       >
         <CardContent className="p-4">
           {/* Header: time window + source */}
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-2">
-              <div className={`w-7 h-7 rounded-lg ${source.bgColor} flex items-center justify-center`}>
+              <div className={`w-7 h-7 rounded-lg ${source.bgColor} flex items-center justify-center shrink-0`}>
                 <SourceIcon className={`w-3.5 h-3.5 ${source.color}`} />
               </div>
               <div>
@@ -320,7 +320,7 @@ function InstantCard({ instant, onExploit, onSkip, onUndoSkip, isLoading }) {
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               {/* Countdown for active instants */}
               {now && <CountdownBadge windowEnd={instant.window_end} />}
               <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/50">
@@ -500,7 +500,7 @@ function StatsSummary({ instants, stats }) {
   const available = instants.filter((i) => !isInstantPast(i) && !i._exploited && !i._skipped).length;
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
       <div className="text-center p-3 rounded-xl bg-card border border-border/20">
         <p className="text-2xl font-bold text-foreground">{total}</p>
         <p className="text-[11px] text-muted-foreground">Détectés</p>
@@ -670,7 +670,7 @@ function HourlyHeatmap({ hourlyRates }) {
                   <BlockIcon className="w-3 h-3 text-muted-foreground" />
                   <span className="text-[11px] text-muted-foreground">{block.label}</span>
                 </div>
-                <div className="grid grid-cols-6 gap-1">
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
                   {Array.from({ length: block.range[1] - block.range[0] }, (_, i) => {
                     const h = block.range[0] + i;
                     const data = hourlyRates[String(h)];

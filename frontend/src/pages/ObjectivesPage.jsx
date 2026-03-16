@@ -231,8 +231,8 @@ export default function ObjectivesPage() {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
-      <main className="lg:ml-16 pb-20">
-        <div className="max-w-2xl mx-auto px-4 py-6">
+      <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
+        <div className="max-w-2xl mx-auto">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -332,7 +332,7 @@ export default function ObjectivesPage() {
 
           {/* Create Dialog */}
           <Dialog open={showCreate} onOpenChange={setShowCreate}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-primary" />
