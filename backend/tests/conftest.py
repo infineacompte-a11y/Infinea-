@@ -52,21 +52,26 @@ TEST_USER_PREMIUM = {
 
 
 # ── Database Fixture ──
+# Single shared mock client so route modules' `from database import db`
+# binding always points to the same object. Collections are dropped
+# between tests to guarantee isolation.
+
+_mock_client = AsyncMongoMockClient()
+_mock_db = _mock_client["infinea_test"]
+
 
 @pytest.fixture
 async def mock_db():
-    """Fresh mongomock-motor database for each test."""
-    client = AsyncMongoMockClient()
-    db = client["infinea_test"]
-    yield db
-    client.close()
+    """Shared mongomock-motor database, cleaned between tests."""
+    for name in await _mock_db.list_collection_names():
+        await _mock_db.drop_collection(name)
+    yield _mock_db
 
 
 @pytest.fixture
 async def mock_db_with_user(mock_db):
     """Database pre-seeded with a test user."""
     await mock_db.users.insert_one({**TEST_USER, "_id": None})
-    # Remove _id=None (mongomock sets it)
     yield mock_db
 
 
@@ -75,13 +80,16 @@ async def mock_db_with_user(mock_db):
 @pytest.fixture
 async def app(mock_db):
     """FastAPI app with mocked DB, disabled limiter, overridden auth."""
-    # Patch database.db and database.client before importing the app
     with patch("database.db", mock_db), \
-         patch("database.client", AsyncMongoMockClient()):
+         patch("database.client", _mock_client):
 
         # Re-import to pick up patched db
         from server import app as _app
         from auth import get_current_user
+        from config import limiter
+
+        # Disable rate limiter in tests
+        limiter.enabled = False
 
         # Override auth dependency → always return test user
         async def mock_auth():
