@@ -614,7 +614,7 @@ export default function RoutinesPage() {
 
           {/* Summary bar (when habits exist) */}
           {!isLoading && activeRoutines.length > 0 && (
-            <Card className="p-3 mb-5 flex items-center justify-between">
+            <Card className="p-3 mb-5 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-1.5 text-sm">
                   <CheckCircle2 className={`w-4 h-4 ${doneToday === activeRoutines.length ? "text-emerald-500" : "text-muted-foreground"}`} />
@@ -746,7 +746,7 @@ export default function RoutinesPage() {
                 {/* Time of day */}
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Moment de la journée</label>
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                     {TIME_OF_DAY.map((tod) => {
                       const Icon = tod.icon;
                       const isActive = form.time_of_day === tod.value;
@@ -784,7 +784,7 @@ export default function RoutinesPage() {
 
                   {/* Custom days picker */}
                   {form.frequency === "custom" && (
-                    <div className="flex items-center gap-1.5 mt-2">
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
                       {DAY_LABELS.map((label, i) => {
                         const isSelected = (form.frequency_days || []).includes(i);
                         return (
@@ -793,7 +793,7 @@ export default function RoutinesPage() {
                               const days = form.frequency_days || [];
                               setForm({ ...form, frequency_days: isSelected ? days.filter((d) => d !== i) : [...days, i] });
                             }}
-                            className={`w-9 h-9 rounded-lg text-xs font-medium border transition-all ${
+                            className={`w-10 h-10 rounded-lg text-xs font-medium border transition-all ${
                               isSelected ? "bg-primary text-primary-foreground border-primary" : "bg-muted/30 border-border hover:border-primary/30"
                             }`}>
                             {label}
@@ -844,17 +844,19 @@ export default function RoutinesPage() {
                   )}
 
                   {/* Add item form */}
-                  <div className="flex gap-2">
-                    <input className="flex-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  <div className="flex flex-wrap gap-2">
+                    <input className="flex-1 min-w-0 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                       placeholder="Nom de l'action..." value={newItem.title}
                       onChange={(e) => setNewItem({ ...newItem, title: e.target.value })}
                       maxLength={100}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
                     />
-                    <DurationPicker value={newItem.duration_minutes} onChange={(v) => setNewItem({ ...newItem, duration_minutes: v })} />
-                    <Button type="button" size="sm" variant="outline" onClick={addItem} disabled={!newItem.title.trim()} className="shrink-0">
-                      <Plus className="w-4 h-4" />
-                    </Button>
+                    <div className="flex gap-2">
+                      <DurationPicker value={newItem.duration_minutes} onChange={(v) => setNewItem({ ...newItem, duration_minutes: v })} />
+                      <Button type="button" size="sm" variant="outline" onClick={addItem} disabled={!newItem.title.trim()} className="shrink-0">
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -332,7 +332,7 @@ export default function ObjectivesPage() {
 
           {/* Create Dialog */}
           <Dialog open={showCreate} onOpenChange={setShowCreate}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-primary" />

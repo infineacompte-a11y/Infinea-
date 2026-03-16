@@ -208,7 +208,7 @@ export default function ProgressStats() {
               </div>
 
               {/* Charts */}
-              <div className="grid lg:grid-cols-2 gap-6 mb-8">
+              <div className="grid md:grid-cols-2 gap-6 mb-8">
                 {/* Time by Category */}
                 <Card>
                   <CardHeader>

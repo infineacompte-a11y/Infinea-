@@ -96,7 +96,7 @@ export default function RecapCard() {
       </div>
 
       {/* Today stats row */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
         <div className="text-center p-2.5 rounded-lg bg-muted/30">
           <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
           <div className="text-lg font-bold tabular-nums">{today.sessions}</div>

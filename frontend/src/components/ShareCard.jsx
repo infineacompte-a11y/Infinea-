@@ -106,7 +106,7 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
         )}
 
         {/* ── Key stats row ── */}
-        <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
           <div className="text-center p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
             <Clock className="w-4 h-4 text-blue-400 mx-auto mb-1.5" />
             <div className="text-white text-xl font-bold tabular-nums leading-none">
