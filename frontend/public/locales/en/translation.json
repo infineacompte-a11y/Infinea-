@@ -1,0 +1,130 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "close": "Close",
+    "search": "Search",
+    "minutes": "minutes",
+    "hours": "hours",
+    "days": "days",
+    "sessions": "sessions"
+  },
+  "landing": {
+    "nav": {
+      "features": "Features",
+      "pricing": "Pricing",
+      "login": "Log in",
+      "getStarted": "Get started free"
+    },
+    "hero": {
+      "badge": "An AI that learns from you, an ever-growing library",
+      "titleStart": "Invest your",
+      "titleHighlight": " lost moments",
+      "subtitle": "Turn your spare time into micro-victories. An ever-evolving library of micro-actions, powered by an AI that adapts to your habits, energy, and rhythm.",
+      "cta": "Get started free",
+      "learnMore": "Learn more"
+    },
+    "stats": {
+      "timeValue": "2-15",
+      "timeLabel": "minutes/session",
+      "actionsValue": "700+",
+      "actionsLabel": "micro-actions & growing",
+      "gdprValue": "100%",
+      "gdprLabel": "GDPR compliant"
+    },
+    "problem": {
+      "title": "Time — your most precious resource",
+      "description": "Every day, dozens of minutes of available time slip away: commutes, waiting lines, breaks between meetings. These fragmented moments feel too short to be useful.",
+      "point1": "2 to 15 minutes lost, several times a day",
+      "point2": "Too short to be productive, too long to do nothing",
+      "point3": "Cognitive overload from too many apps"
+    },
+    "features": {
+      "title": "The InFinea solution",
+      "subtitle": "An infinite library of micro-actions, an AI that learns from you. What should you do now? InFinea knows.",
+      "time": {
+        "title": "2-15 minutes",
+        "description": "Micro-actions for every free moment, drawn from an ever-evolving library"
+      },
+      "ai": {
+        "title": "AI that knows you",
+        "description": "Personalized suggestions based on your habits, energy, and time of day"
+      },
+      "capital": {
+        "title": "Time Capital",
+        "description": "Each session enriches your profile. The more you act, the smarter the AI becomes"
+      }
+    },
+    "categories": {
+      "learning": {
+        "name": "Learning",
+        "ex1": "Vocabulary",
+        "ex2": "Reading",
+        "ex3": "Concepts"
+      },
+      "productivity": {
+        "name": "Productivity",
+        "ex1": "Planning",
+        "ex2": "Emails",
+        "ex3": "Brainstorm"
+      },
+      "wellBeing": {
+        "name": "Well-being",
+        "ex1": "Breathing",
+        "ex2": "Meditation",
+        "ex3": "Stretching"
+      }
+    },
+    "howItWorks": {
+      "title": "How it works",
+      "step1": { "num": "01", "title": "Open the app", "desc": "In under 60 seconds" },
+      "step2": { "num": "02", "title": "Set your time", "desc": "From 2 to 15 minutes" },
+      "step3": { "num": "03", "title": "Choose your energy", "desc": "Low, medium, or high" },
+      "step4": { "num": "04", "title": "Take action!", "desc": "The AI guides you" }
+    },
+    "pricing": {
+      "title": "Simple, transparent pricing",
+      "subtitle": "Start for free, go Premium for an AI that adapts to you",
+      "popular": "Popular",
+      "free": {
+        "name": "Free",
+        "price": "$0",
+        "period": "",
+        "feature1": "Access to basic micro-actions",
+        "feature2": "Limited AI suggestions",
+        "feature3": "Progress tracking",
+        "feature4": "3 action categories",
+        "cta": "Get started"
+      },
+      "premium": {
+        "name": "Premium",
+        "price": "$6.99",
+        "period": "/month",
+        "feature1": "700+ actions (11 categories)",
+        "feature2": "Advanced AI with personalized suggestions",
+        "feature3": "Proactive suggestions at the right time",
+        "feature4": "Streak Shield (1x/week)",
+        "feature5": "Advanced analytics & insights",
+        "feature6": "20 Premium badges",
+        "cta": "Discover Premium"
+      }
+    },
+    "cta": {
+      "title": "Ready to invest your lost moments?",
+      "subtitle": "Start now and transform your time into Time Capital.",
+      "button": "Start now"
+    },
+    "footer": {
+      "copyright": "© 2025 InFinea",
+      "privacy": "Privacy",
+      "terms": "Terms",
+      "contact": "Contact"
+    }
+  }
+}

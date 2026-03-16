@@ -1,0 +1,130 @@
+{
+  "common": {
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "confirm": "Confirmer",
+    "back": "Retour",
+    "next": "Suivant",
+    "close": "Fermer",
+    "search": "Rechercher",
+    "minutes": "minutes",
+    "hours": "heures",
+    "days": "jours",
+    "sessions": "sessions"
+  },
+  "landing": {
+    "nav": {
+      "features": "Fonctionnalités",
+      "pricing": "Tarifs",
+      "login": "Connexion",
+      "getStarted": "Commencer gratuitement"
+    },
+    "hero": {
+      "badge": "Une IA qui apprend de vous, une bibliothèque qui grandit sans cesse",
+      "titleStart": "Investissez vos",
+      "titleHighlight": " instants perdus",
+      "subtitle": "Transformez votre temps disponible en micro-victoires. Une bibliothèque de micro-actions en perpétuelle évolution, portée par une IA qui s'adapte à vos habitudes, votre énergie et votre rythme.",
+      "cta": "Commencer gratuitement",
+      "learnMore": "En savoir plus"
+    },
+    "stats": {
+      "timeValue": "2-15",
+      "timeLabel": "minutes/session",
+      "actionsValue": "700+",
+      "actionsLabel": "micro-actions et +",
+      "gdprValue": "100%",
+      "gdprLabel": "RGPD conforme"
+    },
+    "problem": {
+      "title": "Le temps, votre ressource la plus précieuse",
+      "description": "Chaque jour, des dizaines de minutes de temps disponible s'envolent : transports, files d'attente, pauses entre réunions. Ces moments fragmentés semblent trop courts pour être utiles.",
+      "point1": "2 à 15 minutes perdues, plusieurs fois par jour",
+      "point2": "Trop court pour être productif, trop long pour ne rien faire",
+      "point3": "Surcharge cognitive face aux nombreuses apps"
+    },
+    "features": {
+      "title": "La solution InFinea",
+      "subtitle": "Une bibliothèque infinie de micro-actions, une IA qui apprend de vous. Que faire maintenant ? InFinea sait.",
+      "time": {
+        "title": "2-15 minutes",
+        "description": "Des micro-actions pour chaque instant libre, puisées dans une bibliothèque en perpétuelle évolution"
+      },
+      "ai": {
+        "title": "IA qui vous connait",
+        "description": "Des suggestions personnalisées selon vos habitudes, votre énergie et le moment de la journée"
+      },
+      "capital": {
+        "title": "Capital-Temps",
+        "description": "Chaque session enrichit votre profil. Plus vous agissez, plus l'IA devient pertinente"
+      }
+    },
+    "categories": {
+      "learning": {
+        "name": "Apprentissage",
+        "ex1": "Vocabulaire",
+        "ex2": "Lecture",
+        "ex3": "Concepts"
+      },
+      "productivity": {
+        "name": "Productivité",
+        "ex1": "Planning",
+        "ex2": "Emails",
+        "ex3": "Brainstorm"
+      },
+      "wellBeing": {
+        "name": "Bien-être",
+        "ex1": "Respiration",
+        "ex2": "Méditation",
+        "ex3": "Étirements"
+      }
+    },
+    "howItWorks": {
+      "title": "Comment ça marche",
+      "step1": { "num": "01", "title": "Ouvrez l'app", "desc": "En moins de 60 secondes" },
+      "step2": { "num": "02", "title": "Indiquez votre temps", "desc": "De 2 à 15 minutes" },
+      "step3": { "num": "03", "title": "Choisissez l'énergie", "desc": "Basse, moyenne ou haute" },
+      "step4": { "num": "04", "title": "Agissez !", "desc": "L'IA vous guide" }
+    },
+    "pricing": {
+      "title": "Tarifs simples et transparents",
+      "subtitle": "Commencez gratuitement, passez Premium pour une IA qui s'adapte à vous",
+      "popular": "Populaire",
+      "free": {
+        "name": "Gratuit",
+        "price": "0€",
+        "period": "",
+        "feature1": "Accès aux micro-actions de base",
+        "feature2": "Suggestions IA limitées",
+        "feature3": "Suivi de progression",
+        "feature4": "3 catégories d'actions",
+        "cta": "Commencer"
+      },
+      "premium": {
+        "name": "Premium",
+        "price": "6,99€",
+        "period": "/mois",
+        "feature1": "700+ actions (11 catégories)",
+        "feature2": "IA avancée avec suggestions personnalisées",
+        "feature3": "Suggestion proactive au bon moment",
+        "feature4": "Bouclier de Streak (1x/semaine)",
+        "feature5": "Analytics avancées & insights",
+        "feature6": "20 badges Premium",
+        "cta": "Découvrir Premium"
+      }
+    },
+    "cta": {
+      "title": "Prêt à investir vos instants perdus ?",
+      "subtitle": "Commencez dès maintenant à transformer votre temps en Capital-Temps.",
+      "button": "Commencer maintenant"
+    },
+    "footer": {
+      "copyright": "© 2025 InFinea",
+      "privacy": "Confidentialité",
+      "terms": "CGU",
+      "contact": "Contact"
+    }
+  }
+}
