@@ -24,8 +24,8 @@ async def get_actions(
     skip: int = 0,
     limit: int = 50
 ):
-    # Cap limit to prevent abuse (max 2500 per request — library has ~2200 actions)
-    limit = min(max(limit, 1), 2500)
+    # Cap limit to prevent abuse (library grows daily via AI generator)
+    limit = min(max(limit, 1), 10000)
     skip = max(skip, 0)
 
     query = {}
