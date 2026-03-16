@@ -592,8 +592,8 @@ export default function RoutinesPage() {
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
-      <main className="lg:ml-16 pb-20">
-        <div className="max-w-2xl mx-auto px-4 py-6">
+      <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
+        <div className="max-w-2xl mx-auto">
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div>
