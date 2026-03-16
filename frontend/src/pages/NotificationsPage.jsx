@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -55,6 +56,7 @@ const SMART_ICON_COLOR_MAP = {
 export default function NotificationsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState("smart");
   const [notifications, setNotifications] = useState([]);
   const [smartNotifs, setSmartNotifs] = useState([]);
@@ -92,7 +94,7 @@ export default function NotificationsPage() {
       if (notifRes.ok) setNotifications(await notifRes.json());
       if (prefRes.ok) setPreferences(await prefRes.json());
     } catch {
-      toast.error("Erreur de chargement");
+      toast.error(t("notifications.errorLoading"));
     } finally {
       setIsLoading(false);
     }
@@ -115,7 +117,7 @@ export default function NotificationsPage() {
 
   const handleTogglePush = async () => {
     if (!isPushSupported) {
-      toast.error("Les notifications push ne sont pas supportées");
+      toast.error(t("notifications.pushNotSupported"));
       return;
     }
     try {
@@ -124,11 +126,11 @@ export default function NotificationsPage() {
         const subscription = await registration.pushManager.getSubscription();
         if (subscription) await subscription.unsubscribe();
         setIsPushEnabled(false);
-        toast.success("Notifications push désactivées");
+        toast.success(t("notifications.pushDisabled"));
       } else {
         const permission = await Notification.requestPermission();
         if (permission !== "granted") {
-          toast.error("Permission refusée");
+          toast.error(t("notifications.permissionDenied"));
           return;
         }
         // Fetch VAPID public key from backend
@@ -152,10 +154,10 @@ export default function NotificationsPage() {
           body: JSON.stringify({ subscription: subscription.toJSON() }),
         });
         setIsPushEnabled(true);
-        toast.success("Notifications push activées !");
+        toast.success(t("notifications.pushEnabled"));
       }
     } catch {
-      toast.error("Erreur lors de l'activation");
+      toast.error(t("notifications.errorActivating"));
     }
   };
 
@@ -168,9 +170,9 @@ export default function NotificationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newPrefs),
       });
-      toast.success("Préférences mises à jour");
+      toast.success(t("notifications.preferencesUpdated"));
     } catch {
-      toast.error("Erreur de mise à jour");
+      toast.error(t("notifications.errorUpdating"));
     }
   };
 
@@ -182,9 +184,9 @@ export default function NotificationsPage() {
         body: JSON.stringify({ notification_ids: [] }),
       });
       setNotifications(notifications.map((n) => ({ ...n, read: true })));
-      toast.success("Notifications marquées comme lues");
+      toast.success(t("notifications.markedAllRead"));
     } catch {
-      toast.error("Erreur");
+      toast.error(t("common.error"));
     }
   };
 
@@ -200,9 +202,9 @@ export default function NotificationsPage() {
   };
 
   const tabs = [
-    { key: "smart", label: "Coach", icon: Sparkles, badge: smartNotifs.length || null },
-    { key: "history", label: "Historique", icon: Bell, badge: unreadCount || null },
-    { key: "settings", label: "Réglages", icon: Clock },
+    { key: "smart", label: t("notifications.tabs.coach"), icon: Sparkles, badge: smartNotifs.length || null },
+    { key: "history", label: t("notifications.tabs.history"), icon: Bell, badge: unreadCount || null },
+    { key: "settings", label: t("notifications.tabs.settings"), icon: Clock },
   ];
 
   return (
@@ -215,10 +217,10 @@ export default function NotificationsPage() {
             <div>
               <h1 className="font-heading text-2xl font-bold flex items-center gap-2">
                 <Bell className="w-6 h-6 text-primary" />
-                Notifications
+                {t("notifications.title")}
               </h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Alertes intelligentes et rappels proactifs
+                {t("notifications.subtitle")}
               </p>
             </div>
           </div>
@@ -255,7 +257,7 @@ export default function NotificationsPage() {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs text-muted-foreground">
-                  Suggestions personnalisées basées sur ton activité
+                  {t("notifications.smart.description")}
                 </p>
                 <Button
                   variant="ghost"
@@ -265,7 +267,7 @@ export default function NotificationsPage() {
                   disabled={isSmartLoading}
                 >
                   <RefreshCw className={`w-3 h-3 ${isSmartLoading ? "animate-spin" : ""}`} />
-                  Actualiser
+                  {t("notifications.smart.refresh")}
                 </Button>
               </div>
 
@@ -320,9 +322,9 @@ export default function NotificationsPage() {
                   <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-3">
                     <Check className="w-8 h-8 text-emerald-500" />
                   </div>
-                  <h3 className="font-heading font-semibold mb-1">Tout est en ordre !</h3>
+                  <h3 className="font-heading font-semibold mb-1">{t("notifications.smart.allGood")}</h3>
                   <p className="text-sm text-muted-foreground">
-                    Aucune suggestion pour le moment. Continue comme ça !
+                    {t("notifications.smart.noSuggestions")}
                   </p>
                 </Card>
               )}
@@ -336,7 +338,7 @@ export default function NotificationsPage() {
                 <div className="flex justify-end mb-3">
                   <Button variant="outline" size="sm" onClick={handleMarkAllRead} className="gap-1.5 text-xs">
                     <Check className="w-3.5 h-3.5" />
-                    Tout marquer lu
+                    {t("notifications.history.markAllRead")}
                   </Button>
                 </div>
               )}
@@ -366,7 +368,7 @@ export default function NotificationsPage() {
                             <p className="font-medium text-sm">{notif.title}</p>
                             <p className="text-xs text-muted-foreground mt-0.5">{notif.message}</p>
                             <p className="text-[10px] text-muted-foreground/60 mt-1">
-                              {new Date(notif.created_at).toLocaleString("fr-FR")}
+                              {new Date(notif.created_at).toLocaleString(i18n.language)}
                             </p>
                           </div>
                           {!notif.read && (
@@ -380,7 +382,7 @@ export default function NotificationsPage() {
               ) : (
                 <Card className="p-8 text-center">
                   <Bell className="w-10 h-10 mx-auto mb-2 text-muted-foreground/30" />
-                  <p className="text-sm text-muted-foreground">Aucune notification</p>
+                  <p className="text-sm text-muted-foreground">{t("notifications.history.empty")}</p>
                 </Card>
               )}
             </div>
@@ -390,7 +392,7 @@ export default function NotificationsPage() {
           {activeTab === "settings" && (
             <Card>
               <CardHeader>
-                <CardTitle className="font-heading text-lg">Préférences</CardTitle>
+                <CardTitle className="font-heading text-lg">{t("notifications.settings.title")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-5">
                 {/* Push Notifications */}
@@ -402,11 +404,11 @@ export default function NotificationsPage() {
                       <BellOff className="w-5 h-5 text-muted-foreground" />
                     )}
                     <div>
-                      <Label>Notifications Push</Label>
+                      <Label>{t("notifications.settings.pushLabel")}</Label>
                       <p className="text-xs text-muted-foreground">
                         {isPushSupported
-                          ? "Alertes même quand l'app est fermée"
-                          : "Non supporté sur ce navigateur"}
+                          ? t("notifications.settings.pushSupportedDesc")
+                          : t("notifications.settings.pushNotSupportedDesc")}
                       </p>
                     </div>
                   </div>
@@ -421,9 +423,9 @@ export default function NotificationsPage() {
                   <>
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label>Rappel quotidien</Label>
+                        <Label>{t("notifications.settings.dailyReminderLabel")}</Label>
                         <p className="text-xs text-muted-foreground">
-                          Un rappel pour ta micro-action du jour
+                          {t("notifications.settings.dailyReminderDesc")}
                         </p>
                       </div>
                       <Switch
@@ -434,7 +436,7 @@ export default function NotificationsPage() {
 
                     {preferences.daily_reminder && (
                       <div className="flex items-center justify-between pl-8">
-                        <Label>Heure du rappel</Label>
+                        <Label>{t("notifications.settings.reminderTimeLabel")}</Label>
                         <Input
                           type="time"
                           value={preferences.reminder_time}
@@ -446,9 +448,9 @@ export default function NotificationsPage() {
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label>Alertes streak</Label>
+                        <Label>{t("notifications.settings.streakAlertsLabel")}</Label>
                         <p className="text-xs text-muted-foreground">
-                          Alerte si ton streak est en danger
+                          {t("notifications.settings.streakAlertsDesc")}
                         </p>
                       </div>
                       <Switch
@@ -459,9 +461,9 @@ export default function NotificationsPage() {
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label>Nouveaux badges</Label>
+                        <Label>{t("notifications.settings.newBadgesLabel")}</Label>
                         <p className="text-xs text-muted-foreground">
-                          Notification quand tu obtiens un badge
+                          {t("notifications.settings.newBadgesDesc")}
                         </p>
                       </div>
                       <Switch
@@ -472,9 +474,9 @@ export default function NotificationsPage() {
 
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label>Résumé hebdomadaire</Label>
+                        <Label>{t("notifications.settings.weeklySummaryLabel")}</Label>
                         <p className="text-xs text-muted-foreground">
-                          Résumé de ta progression chaque semaine
+                          {t("notifications.settings.weeklySummaryDesc")}
                         </p>
                       </div>
                       <Switch

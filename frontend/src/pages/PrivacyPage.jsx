@@ -2,8 +2,11 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Timer, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 
 export default function PrivacyPage() {
+  const { t, i18n } = useTranslation();
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
@@ -18,7 +21,7 @@ export default function PrivacyPage() {
           <Link to="/">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Retour
+              {t("common.back")}
             </Button>
           </Link>
         </div>
@@ -27,170 +30,170 @@ export default function PrivacyPage() {
       {/* Content */}
       <main className="pt-24 pb-16 px-4">
         <div className="max-w-3xl mx-auto prose prose-invert prose-sm">
-          <h1 className="font-heading text-3xl font-bold mb-2">Politique de Confidentialité</h1>
-          <p className="text-muted-foreground mb-8">Dernière mise à jour : 7 mars 2026</p>
+          <h1 className="font-heading text-3xl font-bold mb-2">{t("privacy.title")}</h1>
+          <p className="text-muted-foreground mb-8">{t("privacy.lastUpdated")}</p>
 
           <section className="mb-8">
-            <h2 className="font-heading text-xl font-semibold mb-3">1. Responsable du traitement</h2>
+            <h2 className="font-heading text-xl font-semibold mb-3">{t("privacy.dataController.heading")}</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Le responsable du traitement des données collectées sur InFinea est :<br />
+              {t("privacy.dataController.text")}<br />
               <strong className="text-foreground">InFinea</strong><br />
-              Email : <a href="mailto:infinea.compte@gmail.com" className="text-primary hover:underline">infinea.compte@gmail.com</a>
+              {t("privacy.dataController.email")} <a href="mailto:infinea.compte@gmail.com" className="text-primary hover:underline">infinea.compte@gmail.com</a>
             </p>
           </section>
 
           <section className="mb-8">
-            <h2 className="font-heading text-xl font-semibold mb-3">2. Données collectées</h2>
+            <h2 className="font-heading text-xl font-semibold mb-3">{t("privacy.dataCollected.heading")}</h2>
             <p className="text-muted-foreground leading-relaxed mb-3">
-              Dans le cadre de l'utilisation du service, nous collectons les données suivantes :
+              {t("privacy.dataCollected.intro")}
             </p>
             <ul className="text-muted-foreground space-y-2 list-disc list-inside">
-              <li><strong className="text-foreground">Données d'inscription :</strong> nom, adresse email, mot de passe (hashé)</li>
-              <li><strong className="text-foreground">Données de profil :</strong> objectifs, centres d'intérêt, préférences d'énergie</li>
-              <li><strong className="text-foreground">Données d'utilisation :</strong> sessions réalisées, temps investi, progression</li>
-              <li><strong className="text-foreground">Données de connexion :</strong> adresse IP, type de navigateur (via cookies analytiques)</li>
-              <li><strong className="text-foreground">Données d'intégration :</strong> tokens d'accès aux services tiers (chiffrés AES-256)</li>
-              <li><strong className="text-foreground">Données Google Calendar :</strong> informations d'agenda (titre, horaires, durée des événements) — accès en lecture seule</li>
+              <li><strong className="text-foreground">{t("privacy.dataCollected.registrationLabel")}</strong> {t("privacy.dataCollected.registrationText")}</li>
+              <li><strong className="text-foreground">{t("privacy.dataCollected.profileLabel")}</strong> {t("privacy.dataCollected.profileText")}</li>
+              <li><strong className="text-foreground">{t("privacy.dataCollected.usageLabel")}</strong> {t("privacy.dataCollected.usageText")}</li>
+              <li><strong className="text-foreground">{t("privacy.dataCollected.connectionLabel")}</strong> {t("privacy.dataCollected.connectionText")}</li>
+              <li><strong className="text-foreground">{t("privacy.dataCollected.integrationLabel")}</strong> {t("privacy.dataCollected.integrationText")}</li>
+              <li><strong className="text-foreground">{t("privacy.dataCollected.googleCalendarLabel")}</strong> {t("privacy.dataCollected.googleCalendarText")}</li>
             </ul>
           </section>
 
           <section className="mb-8">
-            <h2 className="font-heading text-xl font-semibold mb-3">3. Utilisation des données Google</h2>
+            <h2 className="font-heading text-xl font-semibold mb-3">{t("privacy.googleData.heading")}</h2>
             <p className="text-muted-foreground leading-relaxed mb-3">
-              InFinea utilise l'API Google Calendar avec un accès <strong className="text-foreground">en lecture seule</strong> (scope <code className="text-xs bg-muted px-1.5 py-0.5 rounded">calendar.readonly</code>). Cet accès est strictement limité aux finalités suivantes :
+              {t("privacy.googleData.intro")} <code className="text-xs bg-muted px-1.5 py-0.5 rounded">calendar.readonly</code>{t("privacy.googleData.introSuffix")}
             </p>
             <ul className="text-muted-foreground space-y-2 list-disc list-inside">
-              <li><strong className="text-foreground">Détection de créneaux libres :</strong> lecture de vos événements pour identifier les plages de temps disponibles et vous suggérer des micro-actions adaptées</li>
-              <li><strong className="text-foreground">Suggestions contextuelles :</strong> adaptation des recommandations en fonction de la durée de vos créneaux libres</li>
+              <li><strong className="text-foreground">{t("privacy.googleData.freeSlotLabel")}</strong> {t("privacy.googleData.freeSlotText")}</li>
+              <li><strong className="text-foreground">{t("privacy.googleData.contextualLabel")}</strong> {t("privacy.googleData.contextualText")}</li>
             </ul>
             <p className="text-muted-foreground leading-relaxed mt-3">
-              <strong className="text-foreground">Ce que nous ne faisons PAS avec vos données Google :</strong>
+              <strong className="text-foreground">{t("privacy.googleData.notDoTitle")}</strong>
             </p>
             <ul className="text-muted-foreground space-y-2 list-disc list-inside">
-              <li>Nous ne modifions, ne créons et ne supprimons aucun événement de votre calendrier</li>
-              <li>Nous ne partageons pas vos données Google Calendar avec des tiers</li>
-              <li>Nous ne stockons pas le contenu de vos événements de manière permanente — seuls les créneaux horaires sont analysés en temps réel</li>
-              <li>Nous n'utilisons pas vos données Google à des fins publicitaires</li>
-              <li>Nous ne transférons pas vos données Google à des outils d'intelligence artificielle ou de machine learning non liés au service</li>
+              <li>{t("privacy.googleData.notDo1")}</li>
+              <li>{t("privacy.googleData.notDo2")}</li>
+              <li>{t("privacy.googleData.notDo3")}</li>
+              <li>{t("privacy.googleData.notDo4")}</li>
+              <li>{t("privacy.googleData.notDo5")}</li>
             </ul>
             <p className="text-muted-foreground leading-relaxed mt-3">
-              L'utilisation des données reçues des API Google respecte la{" "}
+              {t("privacy.googleData.complianceText")}{" "}
               <a href="https://developers.google.com/terms/api-services-user-data-policy" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
-                Politique relative aux données utilisateur des services API Google
-              </a>, y compris les exigences d'utilisation limitée (Limited Use requirements).
+                {t("privacy.googleData.complianceLink")}
+              </a>{t("privacy.googleData.complianceSuffix")}
             </p>
             <p className="text-muted-foreground leading-relaxed mt-3">
-              Vous pouvez révoquer l'accès d'InFinea à votre Google Calendar à tout moment depuis la page{" "}
+              {t("privacy.googleData.revokeText")}{" "}
               <a href="https://myaccount.google.com/permissions" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
-                Autorisations de votre compte Google
+                {t("privacy.googleData.revokeLink")}
               </a>{" "}
-              ou depuis la page Intégrations de votre compte InFinea.
+              {t("privacy.googleData.revokeSuffix")}
             </p>
           </section>
 
           <section className="mb-8">
-            <h2 className="font-heading text-xl font-semibold mb-3">4. Finalités du traitement</h2>
+            <h2 className="font-heading text-xl font-semibold mb-3">{t("privacy.purposes.heading")}</h2>
             <ul className="text-muted-foreground space-y-2 list-disc list-inside">
-              <li>Fourniture et personnalisation du service (suggestions IA, micro-actions)</li>
-              <li>Gestion de votre compte utilisateur</li>
-              <li>Amélioration continue du service et de l'expérience utilisateur</li>
-              <li>Communication relative au service (notifications, mises à jour)</li>
-              <li>Gestion des paiements et abonnements via Stripe</li>
+              <li>{t("privacy.purposes.item1")}</li>
+              <li>{t("privacy.purposes.item2")}</li>
+              <li>{t("privacy.purposes.item3")}</li>
+              <li>{t("privacy.purposes.item4")}</li>
+              <li>{t("privacy.purposes.item5")}</li>
             </ul>
           </section>
 
           <section className="mb-8">
-            <h2 className="font-heading text-xl font-semibold mb-3">5. Base légale du traitement</h2>
+            <h2 className="font-heading text-xl font-semibold mb-3">{t("privacy.legalBasis.heading")}</h2>
             <ul className="text-muted-foreground space-y-2 list-disc list-inside">
-              <li><strong className="text-foreground">Exécution du contrat :</strong> traitement nécessaire à la fourniture du service (article 6.1.b du RGPD)</li>
-              <li><strong className="text-foreground">Consentement :</strong> pour les cookies analytiques et les communications optionnelles (article 6.1.a)</li>
-              <li><strong className="text-foreground">Intérêt légitime :</strong> pour l'amélioration du service et la sécurité (article 6.1.f)</li>
+              <li><strong className="text-foreground">{t("privacy.legalBasis.contractLabel")}</strong> {t("privacy.legalBasis.contractText")}</li>
+              <li><strong className="text-foreground">{t("privacy.legalBasis.consentLabel")}</strong> {t("privacy.legalBasis.consentText")}</li>
+              <li><strong className="text-foreground">{t("privacy.legalBasis.legitimateLabel")}</strong> {t("privacy.legalBasis.legitimateText")}</li>
             </ul>
           </section>
 
           <section className="mb-8">
-            <h2 className="font-heading text-xl font-semibold mb-3">6. Durée de conservation</h2>
+            <h2 className="font-heading text-xl font-semibold mb-3">{t("privacy.retention.heading")}</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Vos données sont conservées pendant la durée de votre utilisation du service. En cas de suppression de votre compte, vos données personnelles sont supprimées dans un délai de 30 jours, à l'exception des données nécessaires au respect de nos obligations légales (données de facturation : 10 ans).
+              {t("privacy.retention.text")}
             </p>
           </section>
 
           <section className="mb-8">
-            <h2 className="font-heading text-xl font-semibold mb-3">7. Vos droits</h2>
+            <h2 className="font-heading text-xl font-semibold mb-3">{t("privacy.rights.heading")}</h2>
             <p className="text-muted-foreground leading-relaxed mb-3">
-              Conformément au Règlement Général sur la Protection des Données (RGPD), vous disposez des droits suivants :
+              {t("privacy.rights.intro")}
             </p>
             <ul className="text-muted-foreground space-y-2 list-disc list-inside">
-              <li><strong className="text-foreground">Droit d'accès</strong> (article 15) : obtenir une copie de vos données personnelles</li>
-              <li><strong className="text-foreground">Droit de rectification</strong> (article 16) : corriger vos données inexactes</li>
-              <li><strong className="text-foreground">Droit à l'effacement</strong> (article 17) : demander la suppression de vos données</li>
-              <li><strong className="text-foreground">Droit à la portabilité</strong> (article 20) : recevoir vos données dans un format structuré</li>
-              <li><strong className="text-foreground">Droit d'opposition</strong> (article 21) : vous opposer au traitement de vos données</li>
-              <li><strong className="text-foreground">Droit à la limitation</strong> (article 18) : limiter le traitement dans certaines circonstances</li>
+              <li><strong className="text-foreground">{t("privacy.rights.accessLabel")}</strong> {t("privacy.rights.accessText")}</li>
+              <li><strong className="text-foreground">{t("privacy.rights.rectificationLabel")}</strong> {t("privacy.rights.rectificationText")}</li>
+              <li><strong className="text-foreground">{t("privacy.rights.erasureLabel")}</strong> {t("privacy.rights.erasureText")}</li>
+              <li><strong className="text-foreground">{t("privacy.rights.portabilityLabel")}</strong> {t("privacy.rights.portabilityText")}</li>
+              <li><strong className="text-foreground">{t("privacy.rights.objectionLabel")}</strong> {t("privacy.rights.objectionText")}</li>
+              <li><strong className="text-foreground">{t("privacy.rights.restrictionLabel")}</strong> {t("privacy.rights.restrictionText")}</li>
             </ul>
             <p className="text-muted-foreground leading-relaxed mt-3">
-              Pour exercer ces droits, contactez-nous à{" "}
+              {t("privacy.rights.contact")}{" "}
               <a href="mailto:infinea.compte@gmail.com" className="text-primary hover:underline">infinea.compte@gmail.com</a>.
-              Nous répondrons dans un délai de 30 jours.
+              {" "}{t("privacy.rights.responseTime")}
             </p>
           </section>
 
           <section className="mb-8">
-            <h2 className="font-heading text-xl font-semibold mb-3">8. Suppression de vos données</h2>
+            <h2 className="font-heading text-xl font-semibold mb-3">{t("privacy.deletion.heading")}</h2>
             <p className="text-muted-foreground leading-relaxed mb-3">
-              Vous pouvez demander la suppression de vos données de plusieurs manières :
+              {t("privacy.deletion.intro")}
             </p>
             <ul className="text-muted-foreground space-y-2 list-disc list-inside">
-              <li><strong className="text-foreground">Suppression du compte :</strong> depuis la page Profil de l'application, vous pouvez supprimer votre compte. Toutes vos données personnelles, y compris vos tokens d'intégration et votre historique de sessions, seront supprimées sous 30 jours</li>
-              <li><strong className="text-foreground">Révocation Google Calendar :</strong> vous pouvez déconnecter Google Calendar depuis la page Intégrations ou depuis les{" "}
-                <a href="https://myaccount.google.com/permissions" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">paramètres de votre compte Google</a>. Vos tokens d'accès Google seront immédiatement supprimés de nos serveurs</li>
-              <li><strong className="text-foreground">Demande par email :</strong> envoyez un email à{" "}
-                <a href="mailto:infinea.compte@gmail.com" className="text-primary hover:underline">infinea.compte@gmail.com</a> pour toute demande de suppression. Nous traiterons votre demande sous 30 jours</li>
+              <li><strong className="text-foreground">{t("privacy.deletion.accountLabel")}</strong> {t("privacy.deletion.accountText")}</li>
+              <li><strong className="text-foreground">{t("privacy.deletion.googleLabel")}</strong> {t("privacy.deletion.googleText")}{" "}
+                <a href="https://myaccount.google.com/permissions" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">{t("privacy.deletion.googleLink")}</a>{t("privacy.deletion.googleSuffix")}</li>
+              <li><strong className="text-foreground">{t("privacy.deletion.emailLabel")}</strong> {t("privacy.deletion.emailText")}{" "}
+                <a href="mailto:infinea.compte@gmail.com" className="text-primary hover:underline">infinea.compte@gmail.com</a> {t("privacy.deletion.emailSuffix")}</li>
             </ul>
           </section>
 
           <section className="mb-8">
-            <h2 className="font-heading text-xl font-semibold mb-3">9. Hébergement et sécurité</h2>
-            <p className="text-muted-foreground leading-relaxed mb-3">Vos données sont hébergées chez les prestataires suivants :</p>
+            <h2 className="font-heading text-xl font-semibold mb-3">{t("privacy.hosting.heading")}</h2>
+            <p className="text-muted-foreground leading-relaxed mb-3">{t("privacy.hosting.intro")}</p>
             <ul className="text-muted-foreground space-y-2 list-disc list-inside">
-              <li><strong className="text-foreground">MongoDB Atlas</strong> (base de données) — hébergement AWS, région EU</li>
-              <li><strong className="text-foreground">Render</strong> (serveur API) — hébergement aux États-Unis</li>
-              <li><strong className="text-foreground">Vercel</strong> (application web) — CDN mondial avec points de présence en Europe</li>
-              <li><strong className="text-foreground">Stripe</strong> (paiements) — certifié PCI DSS niveau 1</li>
-            </ul>
-            <p className="text-muted-foreground leading-relaxed mt-3">
-              Les tokens d'intégration sont chiffrés avec l'algorithme AES-256 (Fernet) avant stockage en base de données. Les mots de passe sont hashés avec bcrypt.
-            </p>
-          </section>
-
-          <section className="mb-8">
-            <h2 className="font-heading text-xl font-semibold mb-3">10. Cookies et traceurs</h2>
-            <p className="text-muted-foreground leading-relaxed mb-3">InFinea utilise les cookies suivants :</p>
-            <ul className="text-muted-foreground space-y-2 list-disc list-inside">
-              <li><strong className="text-foreground">Cookies essentiels :</strong> authentification (JWT), préférences de session</li>
-              <li><strong className="text-foreground">Cookies analytiques :</strong> PostHog (analyse d'usage anonymisée) — soumis à votre consentement</li>
+              <li><strong className="text-foreground">MongoDB Atlas</strong> {t("privacy.hosting.mongodb")}</li>
+              <li><strong className="text-foreground">Render</strong> {t("privacy.hosting.render")}</li>
+              <li><strong className="text-foreground">Vercel</strong> {t("privacy.hosting.vercel")}</li>
+              <li><strong className="text-foreground">Stripe</strong> {t("privacy.hosting.stripe")}</li>
             </ul>
             <p className="text-muted-foreground leading-relaxed mt-3">
-              Vous pouvez à tout moment désactiver les cookies analytiques via les paramètres de votre navigateur.
+              {t("privacy.hosting.encryption")}
             </p>
           </section>
 
           <section className="mb-8">
-            <h2 className="font-heading text-xl font-semibold mb-3">11. Transferts de données</h2>
-            <p className="text-muted-foreground leading-relaxed">
-              Certaines données peuvent être transférées vers les États-Unis (Render, Vercel). Ces transferts sont encadrés par les clauses contractuelles types de la Commission européenne et/ou le Data Privacy Framework EU-US.
+            <h2 className="font-heading text-xl font-semibold mb-3">{t("privacy.cookies.heading")}</h2>
+            <p className="text-muted-foreground leading-relaxed mb-3">{t("privacy.cookies.intro")}</p>
+            <ul className="text-muted-foreground space-y-2 list-disc list-inside">
+              <li><strong className="text-foreground">{t("privacy.cookies.essentialLabel")}</strong> {t("privacy.cookies.essentialText")}</li>
+              <li><strong className="text-foreground">{t("privacy.cookies.analyticsLabel")}</strong> {t("privacy.cookies.analyticsText")}</li>
+            </ul>
+            <p className="text-muted-foreground leading-relaxed mt-3">
+              {t("privacy.cookies.disable")}
             </p>
           </section>
 
           <section className="mb-8">
-            <h2 className="font-heading text-xl font-semibold mb-3">12. Contact et réclamation</h2>
+            <h2 className="font-heading text-xl font-semibold mb-3">{t("privacy.transfers.heading")}</h2>
             <p className="text-muted-foreground leading-relaxed">
-              Pour toute question relative à la protection de vos données, contactez-nous à{" "}
+              {t("privacy.transfers.text")}
+            </p>
+          </section>
+
+          <section className="mb-8">
+            <h2 className="font-heading text-xl font-semibold mb-3">{t("privacy.contactSection.heading")}</h2>
+            <p className="text-muted-foreground leading-relaxed">
+              {t("privacy.contactSection.text")}{" "}
               <a href="mailto:infinea.compte@gmail.com" className="text-primary hover:underline">infinea.compte@gmail.com</a>.
             </p>
             <p className="text-muted-foreground leading-relaxed mt-3">
-              Si vous estimez que le traitement de vos données constitue une violation du RGPD, vous pouvez introduire une réclamation auprès de la{" "}
-              <strong className="text-foreground">CNIL</strong> (Commission Nationale de l'Informatique et des Libertés) :{" "}
+              {t("privacy.contactSection.cnilText")}{" "}
+              <strong className="text-foreground">{t("privacy.contactSection.cnilName")}</strong> :{" "}
               <a href="https://www.cnil.fr" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">www.cnil.fr</a>.
             </p>
           </section>
@@ -208,9 +211,9 @@ export default function PrivacyPage() {
           </div>
           <div className="flex items-center gap-6 text-sm text-muted-foreground">
             <span>© 2025-2026 InFinea</span>
-            <span className="text-primary">Confidentialité</span>
-            <Link to="/cgu" className="hover:text-foreground transition-colors">CGU</Link>
-            <a href="mailto:infinea.compte@gmail.com" className="hover:text-foreground transition-colors">Contact</a>
+            <span className="text-primary">{t("common.privacy")}</span>
+            <Link to="/cgu" className="hover:text-foreground transition-colors">{t("common.terms")}</Link>
+            <a href="mailto:infinea.compte@gmail.com" className="hover:text-foreground transition-colors">{t("common.contact")}</a>
           </div>
         </div>
       </footer>

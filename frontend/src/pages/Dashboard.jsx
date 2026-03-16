@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
@@ -70,21 +71,14 @@ const categoryColors = {
   entrepreneurship: "text-orange-500 bg-orange-500/10",
 };
 
-const categoryLabels = {
-  learning: "Apprentissage",
-  productivity: "Productivité",
-  well_being: "Bien-être",
-  creativity: "Créativité",
-  fitness: "Fitness",
-  mindfulness: "Mindfulness",
-  leadership: "Leadership",
-  finance: "Finance",
-  relations: "Relations",
-  mental_health: "Santé mentale",
-  entrepreneurship: "Entrepreneuriat",
-};
+const CATEGORY_KEYS = [
+  "learning", "productivity", "well_being", "creativity", "fitness",
+  "mindfulness", "leadership", "finance", "relations", "mental_health",
+  "entrepreneurship",
+];
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [availableTime, setAvailableTime] = useState(5);
@@ -125,12 +119,12 @@ export default function Dashboard() {
         }),
       });
 
-      if (!response.ok) throw new Error("Erreur de suggestion");
+      if (!response.ok) throw new Error(t("dashboard.suggestions.errorGeneric"));
 
       const data = await response.json();
       setSuggestions(data);
     } catch (error) {
-      toast.error("Impossible de charger les suggestions");
+      toast.error(t("dashboard.suggestions.errorLoad"));
     } finally {
       setIsLoading(false);
     }
@@ -146,7 +140,7 @@ export default function Dashboard() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.detail || "Erreur");
+        throw new Error(error.detail || t("dashboard.errorSession"));
       }
 
       const data = await response.json();
@@ -169,7 +163,7 @@ export default function Dashboard() {
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-2">
               <h1 className="font-heading text-3xl font-semibold" data-testid="dashboard-welcome">
-                Bonjour, {user?.name?.split(" ")[0] || "Utilisateur"} 👋
+                {t("dashboard.greeting", { name: user?.name?.split(" ")[0] || t("dashboard.defaultUser") })} 👋
               </h1>
               {user?.subscription_tier === "premium" && (
                 <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-500 text-sm font-medium">
@@ -179,7 +173,7 @@ export default function Dashboard() {
               )}
             </div>
             <p className="text-muted-foreground">
-              Que pouvez-vous accomplir maintenant ?
+              {t("dashboard.subtitle")}
             </p>
           </div>
 
@@ -196,7 +190,7 @@ export default function Dashboard() {
           {nextSlot && (
             <div className="mb-8">
               <h2 className="text-sm font-medium text-muted-foreground mb-3">
-                📅 Prochain créneau libre détecté
+                📅 {t("dashboard.slotDetected")}
               </h2>
               <SlotCard 
                 slot={nextSlot} 
@@ -216,7 +210,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <p className="text-2xl font-heading font-bold">{user?.total_time_invested || 0}</p>
-                    <p className="text-xs text-muted-foreground">min investies</p>
+                    <p className="text-xs text-muted-foreground">{t("dashboard.stats.minutesInvested")}</p>
                   </div>
                 </div>
               </CardContent>
@@ -231,10 +225,10 @@ export default function Dashboard() {
                     <div className="flex items-center gap-1.5">
                       <p className="text-2xl font-heading font-bold">{user?.streak_days || 0}</p>
                       {user?.subscription_tier === "premium" && (
-                        <Shield className="w-4 h-4 text-emerald-500" title="Streak Shield actif" />
+                        <Shield className="w-4 h-4 text-emerald-500" title={t("dashboard.stats.streakShield")} />
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">jours streak</p>
+                    <p className="text-xs text-muted-foreground">{t("dashboard.stats.streakDays")}</p>
                   </div>
                 </div>
               </CardContent>
@@ -249,7 +243,7 @@ export default function Dashboard() {
                     <p className="text-2xl font-heading font-bold">
                       {user?.subscription_tier === "premium" ? "Pro" : "Free"}
                     </p>
-                    <p className="text-xs text-muted-foreground">abonnement</p>
+                    <p className="text-xs text-muted-foreground">{t("dashboard.stats.subscription")}</p>
                   </div>
                 </div>
               </CardContent>
@@ -263,14 +257,14 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle className="font-heading text-xl flex items-center gap-2">
                 <Zap className="w-5 h-5 text-primary" />
-                Configurez votre micro-action
+                {t("dashboard.config.title")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Time Slider */}
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm text-muted-foreground">Temps disponible</span>
+                  <span className="text-sm text-muted-foreground">{t("dashboard.config.availableTime")}</span>
                   <Badge variant="secondary" className="font-mono">
                     {availableTime} min
                   </Badge>
@@ -292,12 +286,12 @@ export default function Dashboard() {
 
               {/* Energy Level */}
               <div>
-                <span className="text-sm text-muted-foreground block mb-4">Niveau d'énergie</span>
+                <span className="text-sm text-muted-foreground block mb-4">{t("dashboard.config.energyLevel")}</span>
                 <div className="flex gap-3">
                   {[
-                    { value: "low", label: "Basse", icon: BatteryLow },
-                    { value: "medium", label: "Moyenne", icon: BatteryMedium },
-                    { value: "high", label: "Haute", icon: BatteryFull },
+                    { value: "low", icon: BatteryLow },
+                    { value: "medium", icon: BatteryMedium },
+                    { value: "high", icon: BatteryFull },
                   ].map((level) => (
                     <button
                       key={level.value}
@@ -310,7 +304,7 @@ export default function Dashboard() {
                       data-testid={`energy-${level.value}-btn`}
                     >
                       <level.icon className="w-5 h-5" />
-                      <span className="text-sm">{level.label}</span>
+                      <span className="text-sm">{t(`dashboard.energy.${level.value}`)}</span>
                     </button>
                   ))}
                 </div>
@@ -318,9 +312,9 @@ export default function Dashboard() {
 
               {/* Category Filter */}
               <div>
-                <span className="text-sm text-muted-foreground block mb-4">Catégorie (optionnel)</span>
+                <span className="text-sm text-muted-foreground block mb-4">{t("dashboard.config.categoryOptional")}</span>
                 <div className="flex flex-wrap gap-2">
-                  {Object.entries(categoryLabels).map(([key, label]) => {
+                  {CATEGORY_KEYS.map((key) => {
                     const Icon = categoryIcons[key];
                     return (
                       <button
@@ -334,7 +328,7 @@ export default function Dashboard() {
                         data-testid={`category-${key}-btn`}
                       >
                         <Icon className="w-4 h-4" />
-                        <span className="text-sm">{label}</span>
+                        <span className="text-sm">{t(`categories.${key}`)}</span>
                       </button>
                     );
                   })}
@@ -353,7 +347,7 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <Sparkles className="w-5 h-5 mr-2" />
-                    Obtenir des suggestions IA
+                    {t("dashboard.config.getSuggestions")}
                   </>
                 )}
               </Button>
@@ -364,8 +358,8 @@ export default function Dashboard() {
           {suggestions && (
             <div className="space-y-4 animate-fade-in" data-testid="suggestions-container">
               <div className="flex items-center justify-between">
-                <h2 className="font-heading text-xl font-semibold">Suggestions pour vous</h2>
-                <span className="text-sm text-muted-foreground">{availableTime} min • Énergie {energyLevel}</span>
+                <h2 className="font-heading text-xl font-semibold">{t("dashboard.suggestions.title")}</h2>
+                <span className="text-sm text-muted-foreground">{availableTime} min • {t("dashboard.suggestions.energy")} {t(`dashboard.energy.${energyLevel}`)}</span>
               </div>
 
               {suggestions.reasoning && (
@@ -384,8 +378,8 @@ export default function Dashboard() {
                       <div className="flex items-center gap-3">
                         <Crown className="w-5 h-5 text-amber-500" />
                         <p className="text-sm">
-                          <span className="font-medium">Passez Premium</span>
-                          <span className="text-muted-foreground"> — IA avancée qui apprend de vos habitudes</span>
+                          <span className="font-medium">{t("dashboard.suggestions.premiumUpsell")}</span>
+                          <span className="text-muted-foreground"> — {t("dashboard.suggestions.premiumDesc")}</span>
                         </p>
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
@@ -417,17 +411,17 @@ export default function Dashboard() {
                                   <Badge variant="secondary" className="text-xs">Premium</Badge>
                                 )}
                                 {i === 0 && (
-                                  <Badge className="text-xs bg-primary">Recommandé</Badge>
+                                  <Badge className="text-xs bg-primary">{t("dashboard.suggestions.recommended")}</Badge>
                                 )}
                                 {suggestions.scoring_metadata?.scored && (
-                                  <Badge variant="outline" className="text-xs border-amber-500/40 text-amber-600">Personnalisé</Badge>
+                                  <Badge variant="outline" className="text-xs border-amber-500/40 text-amber-600">{t("dashboard.suggestions.personalized")}</Badge>
                                 )}
                               </div>
                               <p className="text-sm text-muted-foreground mb-2">{action.description}</p>
                               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                                 <span>{action.duration_min}-{action.duration_max} min</span>
                                 <span>•</span>
-                                <span>{categoryLabels[action.category]}</span>
+                                <span>{t(`categories.${action.category}`)}</span>
                               </div>
                             </div>
                           </div>
@@ -444,7 +438,7 @@ export default function Dashboard() {
           {/* Quick Actions */}
           {!suggestions && (
             <div className="grid md:grid-cols-3 gap-4">
-              {Object.entries(categoryLabels).map(([key, label]) => {
+              {CATEGORY_KEYS.map((key) => {
                 const Icon = categoryIcons[key];
                 return (
                   <Card
@@ -458,11 +452,9 @@ export default function Dashboard() {
                   >
                     <CardContent className="p-6">
                       <Icon className={`w-10 h-10 ${categoryColors[key].split(" ")[0]} mb-4`} />
-                      <h3 className="font-heading text-lg font-medium mb-2">{label}</h3>
+                      <h3 className="font-heading text-lg font-medium mb-2">{t(`categories.${key}`)}</h3>
                       <p className="text-sm text-muted-foreground">
-                        {key === "learning" && "Vocabulaire, lecture, concepts..."}
-                        {key === "productivity" && "Planning, emails, brainstorm..."}
-                        {key === "well_being" && "Respiration, méditation, étirements..."}
+                        {["learning", "productivity", "well_being"].includes(key) && t(`dashboard.quickActions.${key}`)}
                       </p>
                     </CardContent>
                   </Card>

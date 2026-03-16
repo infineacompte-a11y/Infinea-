@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,7 @@ import { API, authFetch } from "@/App";
  *   groupName — string
  */
 export default function InviteGroupDialog({ open, onOpenChange, groupId, groupName }) {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -31,7 +33,7 @@ export default function InviteGroupDialog({ open, onOpenChange, groupId, groupNa
     e.preventDefault();
     const trimmed = email.trim().toLowerCase();
     if (!trimmed || !trimmed.includes("@")) {
-      toast.error("Email invalide");
+      toast.error(t("components.inviteGroup.invalidEmail"));
       return;
     }
 
@@ -43,31 +45,31 @@ export default function InviteGroupDialog({ open, onOpenChange, groupId, groupNa
         body: JSON.stringify({ email: trimmed }),
       });
       if (res.status === 404) {
-        toast.error("Aucun compte InFinea avec cet email");
+        toast.error(t("components.inviteGroup.noAccount"));
         return;
       }
       if (res.status === 409) {
-        toast.error("Cette personne est déjà membre ou invitée");
+        toast.error(t("components.inviteGroup.alreadyMember"));
         return;
       }
       if (res.status === 400) {
         const data = await res.json().catch(() => ({}));
-        toast.error(data.detail || "Invitation impossible");
+        toast.error(data.detail || t("components.inviteGroup.inviteImpossible"));
         return;
       }
       if (!res.ok) throw new Error();
       setSent(true);
-      toast.success(`Invitation envoyée !`);
+      toast.success(t("components.inviteGroup.inviteSent"));
       setTimeout(() => {
         setSent(false);
         setEmail("");
       }, 2000);
     } catch {
-      toast.error("Erreur lors de l'envoi");
+      toast.error(t("components.inviteGroup.sendError"));
     } finally {
       setIsSending(false);
     }
-  }, [email, groupId]);
+  }, [email, groupId, t]);
 
   const handleClose = useCallback((isOpen) => {
     onOpenChange(isOpen);
@@ -83,25 +85,25 @@ export default function InviteGroupDialog({ open, onOpenChange, groupId, groupNa
         <DialogHeader>
           <DialogTitle className="font-heading flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-primary" />
-            Inviter dans {groupName}
+            {t("components.inviteGroup.title", { name: groupName })}
           </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleInvite} className="space-y-4 pt-2">
           <div>
             <label className="text-sm text-muted-foreground mb-1.5 block">
-              Email du membre à inviter
+              {t("components.inviteGroup.emailLabel")}
             </label>
             <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="ami@email.com"
+              placeholder={t("components.inviteGroup.emailPlaceholder")}
               autoFocus
               disabled={isSending}
             />
             <p className="text-muted-foreground text-xs mt-1.5">
-              L'invité doit avoir un compte InFinea. Il recevra une notification.
+              {t("components.inviteGroup.emailHint")}
             </p>
           </div>
 
@@ -112,7 +114,7 @@ export default function InviteGroupDialog({ open, onOpenChange, groupId, groupNa
               onClick={() => handleClose(false)}
               disabled={isSending}
             >
-              Fermer
+              {t("common.close")}
             </Button>
             <Button type="submit" disabled={isSending || !email.trim()} className="gap-2">
               {isSending ? (
@@ -122,7 +124,7 @@ export default function InviteGroupDialog({ open, onOpenChange, groupId, groupNa
               ) : (
                 <Send className="w-4 h-4" />
               )}
-              {sent ? "Envoyé !" : "Inviter"}
+              {sent ? t("components.inviteGroup.sent") : t("components.inviteGroup.invite")}
             </Button>
           </DialogFooter>
         </form>

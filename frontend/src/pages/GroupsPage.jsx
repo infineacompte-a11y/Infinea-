@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Users, Plus, Loader2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
@@ -14,6 +15,7 @@ import CreateGroupDialog from "@/components/CreateGroupDialog";
  * Route: /groups
  */
 export default function GroupsPage() {
+  const { t } = useTranslation();
   const [groups, setGroups] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -25,7 +27,7 @@ export default function GroupsPage() {
       const data = await res.json();
       setGroups(data.groups || []);
     } catch {
-      toast.error("Impossible de charger les groupes");
+      toast.error(t("groups.errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -49,15 +51,15 @@ export default function GroupsPage() {
             <div>
               <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
                 <Users className="w-6 h-6 text-primary" />
-                Mes Groupes
+                {t("groups.title")}
               </h1>
               <p className="text-muted-foreground text-sm mt-1">
-                Progresse avec tes proches, duo ou en équipe.
+                {t("groups.subtitle")}
               </p>
             </div>
             <Button onClick={() => setCreateOpen(true)} className="gap-2">
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Créer un groupe</span>
+              <span className="hidden sm:inline">{t("groups.createGroup")}</span>
             </Button>
           </div>
 
@@ -72,15 +74,14 @@ export default function GroupsPage() {
                 <UsersRound className="w-8 h-8 text-primary" />
               </div>
               <h2 className="text-lg font-heading font-semibold text-foreground mb-2">
-                Aucun groupe pour l'instant
+                {t("groups.empty.title")}
               </h2>
               <p className="text-muted-foreground text-sm max-w-sm mb-6">
-                Crée un duo ou un groupe pour progresser ensemble.
-                Invite tes amis et suivez vos progressions mutuelles.
+                {t("groups.empty.description")}
               </p>
               <Button onClick={() => setCreateOpen(true)} className="gap-2">
                 <Plus className="w-4 h-4" />
-                Créer mon premier groupe
+                {t("groups.empty.createFirst")}
               </Button>
             </div>
           ) : (

@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ import { API, authFetch } from "@/App";
  *   onCreated — callback(group) after successful creation
  */
 export default function CreateGroupDialog({ open, onOpenChange, onCreated }) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,11 +32,11 @@ export default function CreateGroupDialog({ open, onOpenChange, onCreated }) {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) {
-      toast.error("Le nom du groupe est requis");
+      toast.error(t("components.createGroup.nameRequired"));
       return;
     }
     if (trimmed.length > 50) {
-      toast.error("50 caractères maximum pour le nom");
+      toast.error(t("components.createGroup.nameMaxLength"));
       return;
     }
 
@@ -49,22 +51,22 @@ export default function CreateGroupDialog({ open, onOpenChange, onCreated }) {
         }),
       });
       if (res.status === 409) {
-        toast.error("Tu as déjà 5 groupes actifs (maximum)");
+        toast.error(t("components.createGroup.maxGroupsReached"));
         return;
       }
       if (!res.ok) throw new Error("Erreur serveur");
       const group = await res.json();
-      toast.success("Groupe créé !");
+      toast.success(t("components.createGroup.created"));
       onCreated?.(group);
       onOpenChange(false);
       setName("");
       setDescription("");
     } catch {
-      toast.error("Impossible de créer le groupe");
+      toast.error(t("components.createGroup.createError"));
     } finally {
       setIsSubmitting(false);
     }
-  }, [name, description, onCreated, onOpenChange]);
+  }, [name, description, onCreated, onOpenChange, t]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -72,19 +74,19 @@ export default function CreateGroupDialog({ open, onOpenChange, onCreated }) {
         <DialogHeader>
           <DialogTitle className="font-heading flex items-center gap-2">
             <Users className="w-5 h-5 text-primary" />
-            Créer un groupe
+            {t("components.createGroup.title")}
           </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div>
             <label className="text-sm text-muted-foreground mb-1.5 block">
-              Nom du groupe
+              {t("components.createGroup.nameLabel")}
             </label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Duo du matin, Équipe dev..."
+              placeholder={t("components.createGroup.namePlaceholder")}
               maxLength={50}
               autoFocus
             />
@@ -92,12 +94,13 @@ export default function CreateGroupDialog({ open, onOpenChange, onCreated }) {
 
           <div>
             <label className="text-sm text-muted-foreground mb-1.5 block">
-              Description <span className="text-white/30">(optionnel)</span>
+              {t("components.createGroup.descriptionLabel")}{" "}
+              <span className="text-white/30">({t("common.optional")})</span>
             </label>
             <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Objectif du groupe..."
+              placeholder={t("components.createGroup.descriptionPlaceholder")}
               maxLength={200}
             />
           </div>
@@ -109,11 +112,11 @@ export default function CreateGroupDialog({ open, onOpenChange, onCreated }) {
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
             >
-              Annuler
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={isSubmitting || !name.trim()} className="gap-2">
               {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              Créer
+              {t("common.create")}
             </Button>
           </DialogFooter>
         </form>

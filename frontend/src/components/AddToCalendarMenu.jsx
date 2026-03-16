@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -77,8 +78,9 @@ export function frequencyToRRule({ frequency = "daily", frequencyDays = [], unti
  * Download a .ics file via authenticated fetch.
  * @param {string} endpoint - API path (e.g. "routines/abc123/ical")
  * @param {string} [filename="event.ics"] - Download filename
+ * @param {Function} t - i18n translation function
  */
-export async function downloadIcs(endpoint, filename = "event.ics") {
+export async function downloadIcs(endpoint, filename = "event.ics", t) {
   try {
     const res = await authFetch(`${API}/${endpoint}`);
     if (!res.ok) throw new Error("Erreur");
@@ -91,9 +93,9 @@ export async function downloadIcs(endpoint, filename = "event.ics") {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success("Fichier .ics téléchargé");
+    toast.success(t ? t("components.addToCalendar.icsDownloaded") : "Fichier .ics téléchargé");
   } catch {
-    toast.error("Erreur lors du téléchargement");
+    toast.error(t ? t("components.addToCalendar.downloadError") : "Erreur lors du téléchargement");
   }
 }
 
@@ -141,6 +143,8 @@ export default function AddToCalendarMenu({
   type,
   item,
 }) {
+  const { t } = useTranslation();
+
   // Resolve props: either explicit or built from type+item shorthand
   let googleUrl = googleUrlProp;
   let icalEndpoint = icalEndpointProp;
@@ -183,14 +187,14 @@ export default function AddToCalendarMenu({
         <button
           onClick={(e) => e.stopPropagation()}
           className={`p-1.5 rounded-lg hover:bg-muted/50 transition-colors ${className}`}
-          title="Ajouter au calendrier"
+          title={t("components.addToCalendar.title")}
         >
           <CalendarPlus className="w-4 h-4 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52" onClick={(e) => e.stopPropagation()}>
         <DropdownMenuLabel className="text-[11px] text-muted-foreground font-normal">
-          Ajouter au calendrier
+          {t("components.addToCalendar.title")}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
@@ -201,11 +205,11 @@ export default function AddToCalendarMenu({
         </DropdownMenuItem>
         {icalEndpoint && (
           <DropdownMenuItem
-            onClick={() => downloadIcs(icalEndpoint, icalFilename)}
+            onClick={() => downloadIcs(icalEndpoint, icalFilename, t)}
             className="flex items-center gap-2 cursor-pointer"
           >
             <Download className="w-4 h-4" />
-            <span>Apple / Outlook (.ics)</span>
+            <span>{t("components.addToCalendar.appleOutlook")}</span>
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

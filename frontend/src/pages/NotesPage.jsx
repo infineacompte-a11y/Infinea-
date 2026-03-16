@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,20 +39,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const categoryLabels = {
-  learning: "Apprentissage",
-  productivity: "Productivité",
-  well_being: "Bien-être",
-  creativity: "Créativité",
-  fitness: "Fitness",
-  mindfulness: "Mindfulness",
-  leadership: "Leadership",
-  finance: "Finance",
-  relations: "Relations",
-  mental_health: "Santé mentale",
-  entrepreneurship: "Entrepreneuriat",
-};
-
 const categoryColors = {
   learning: "text-blue-500 bg-blue-500/10",
   productivity: "text-amber-500 bg-amber-500/10",
@@ -66,12 +53,8 @@ const categoryColors = {
   entrepreneurship: "text-orange-500 bg-orange-500/10",
 };
 
-const NOTES_TABS = [
-  { key: "notes", label: "Mes Notes", icon: FileText },
-  { key: "analyse", label: "Analyse IA", icon: Brain },
-];
-
 export default function NotesPage() {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("notes");
   const [notes, setNotes] = useState([]);
@@ -84,6 +67,11 @@ export default function NotesPage() {
   const [skip, setSkip] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const NOTES_TABS = [
+    { key: "notes", label: t("notes.tabs.myNotes"), icon: FileText },
+    { key: "analyse", label: t("notes.tabs.aiAnalysis"), icon: Brain },
+  ];
 
   useEffect(() => {
     fetchData();
@@ -114,7 +102,7 @@ export default function NotesPage() {
         }
       }
     } catch (error) {
-      toast.error("Erreur de chargement");
+      toast.error(t("notes.errors.loading"));
     } finally {
       setIsLoading(false);
     }
@@ -128,15 +116,15 @@ export default function NotesPage() {
       const data = await response.json();
       if (data.analysis) {
         setAnalysis(data);
-        toast.success("Analyse générée !");
+        toast.success(t("notes.toast.analysisGenerated"));
       } else if (data.error === "limit_reached") {
         setAnalysisError(data);
-        toast.error("Limite d'analyses atteinte aujourd'hui");
+        toast.error(t("notes.toast.limitReached"));
       } else if (data.message) {
         toast.info(data.message);
       }
     } catch (error) {
-      toast.error("Erreur lors de l'analyse");
+      toast.error(t("notes.errors.analysis"));
     } finally {
       setIsAnalyzing(false);
     }
@@ -154,7 +142,7 @@ export default function NotesPage() {
         setHasMore(data.has_more);
       }
     } catch (error) {
-      toast.error("Erreur de filtrage");
+      toast.error(t("notes.errors.filter"));
     }
   };
 
@@ -170,7 +158,7 @@ export default function NotesPage() {
         setSkip(newSkip);
       }
     } catch (error) {
-      toast.error("Erreur de chargement");
+      toast.error(t("notes.errors.loading"));
     }
   };
 
@@ -181,9 +169,9 @@ export default function NotesPage() {
       if (!res.ok) throw new Error();
       setNotes((prev) => prev.filter((n) => n.session_id !== deleteTarget));
       setStats((prev) => prev ? { ...prev, total_notes: Math.max(0, prev.total_notes - 1) } : prev);
-      toast.success("Note supprimée");
+      toast.success(t("notes.toast.noteDeleted"));
     } catch {
-      toast.error("Erreur lors de la suppression");
+      toast.error(t("notes.errors.delete"));
     } finally {
       setDeleteTarget(null);
     }
@@ -195,10 +183,10 @@ export default function NotesPage() {
     const now = new Date();
     const diff = now - date;
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    if (days === 0) return "Aujourd'hui";
-    if (days === 1) return "Hier";
-    if (days < 7) return `Il y a ${days} jours`;
-    return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    if (days === 0) return t("notes.date.today");
+    if (days === 1) return t("notes.date.yesterday");
+    if (days < 7) return t("notes.date.daysAgo", { count: days });
+    return date.toLocaleDateString(i18n.language, { day: "numeric", month: "short" });
   };
 
   const isPremium = user?.subscription_tier === "premium";
@@ -211,34 +199,34 @@ export default function NotesPage() {
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="mb-6">
-            <h1 className="font-heading text-3xl font-bold mb-1">Mes Notes</h1>
+            <h1 className="font-heading text-3xl font-bold mb-1">{t("notes.title")}</h1>
             <p className="text-sm text-muted-foreground">
-              Retrouve et exploite toutes les notes de tes sessions
+              {t("notes.subtitle")}
             </p>
           </div>
 
-          {/* Stats Cards — always visible */}
+          {/* Stats Cards */}
           {!isLoading && stats && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
               <Card className="p-3 text-center">
                 <FileText className="w-4 h-4 text-primary mx-auto mb-1" />
                 <div className="text-lg font-bold">{stats.total_notes || 0}</div>
-                <div className="text-[10px] text-muted-foreground">Notes totales</div>
+                <div className="text-[10px] text-muted-foreground">{t("notes.stats.totalNotes")}</div>
               </Card>
               <Card className="p-3 text-center">
                 <TrendingUp className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
                 <div className="text-lg font-bold">{stats.notes_this_week || 0}</div>
-                <div className="text-[10px] text-muted-foreground">Cette semaine</div>
+                <div className="text-[10px] text-muted-foreground">{t("notes.stats.thisWeek")}</div>
               </Card>
               <Card className="p-3 text-center">
                 <Sparkles className="w-4 h-4 text-amber-500 mx-auto mb-1" />
                 <div className="text-lg font-bold">{stats.avg_note_length || 0}</div>
-                <div className="text-[10px] text-muted-foreground">Car. moyens</div>
+                <div className="text-[10px] text-muted-foreground">{t("notes.stats.avgLength")}</div>
               </Card>
             </div>
           )}
 
-          {/* ── Tab Switcher ── */}
+          {/* Tab Switcher */}
           <div className="flex gap-1 p-1 mb-6 bg-muted/30 rounded-xl">
             {NOTES_TABS.map((tab) => {
               const Icon = tab.icon;
@@ -272,21 +260,21 @@ export default function NotesPage() {
             </div>
           ) : (
             <>
-              {/* ══════════ MES NOTES TAB ══════════ */}
+              {/* MY NOTES TAB */}
               {activeTab === "notes" && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h2 className="font-heading text-lg font-semibold">Toutes mes notes</h2>
+                    <h2 className="font-heading text-lg font-semibold">{t("notes.allNotes")}</h2>
                     {stats?.categories && Object.keys(stats.categories).length > 1 && (
                       <Select value={categoryFilter} onValueChange={handleCategoryFilter}>
                         <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Catégorie" />
+                          <SelectValue placeholder={t("notes.filter.category")} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="all">Toutes</SelectItem>
+                          <SelectItem value="all">{t("notes.filter.all")}</SelectItem>
                           {Object.keys(stats.categories).map((cat) => (
                             <SelectItem key={cat} value={cat}>
-                              {categoryLabels[cat] || cat} ({stats.categories[cat]})
+                              {t(`categories.${cat}`)} ({stats.categories[cat]})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -310,9 +298,9 @@ export default function NotesPage() {
                                   <span className="opacity-30">•</span>
                                   <span className="font-medium text-foreground">{note.action_title}</span>
                                   <Badge variant="outline" className="text-xs">
-                                    {categoryLabels[note.category] || note.category}
+                                    {t(`categories.${note.category}`)}
                                   </Badge>
-                                  <span>{note.actual_duration} min</span>
+                                  <span>{t("notes.durationMin", { count: note.actual_duration })}</span>
                                 </div>
                               </div>
                               <Button
@@ -332,7 +320,7 @@ export default function NotesPage() {
                         <div className="text-center pt-4">
                           <Button variant="outline" onClick={loadMore}>
                             <ChevronDown className="w-4 h-4 mr-2" />
-                            Charger plus
+                            {t("notes.loadMore")}
                           </Button>
                         </div>
                       )}
@@ -341,14 +329,14 @@ export default function NotesPage() {
                     <Card className="py-12">
                       <div className="text-center">
                         <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-                        <p className="text-muted-foreground mb-2">Aucune note pour le moment</p>
+                        <p className="text-muted-foreground mb-2">{t("notes.empty.noNotes")}</p>
                         <p className="text-xs text-muted-foreground mb-4">
-                          Complète des sessions et ajoute des notes pour les retrouver ici
+                          {t("notes.empty.description")}
                         </p>
                         <Link to="/actions">
                           <Button variant="outline" size="sm">
                             <Sparkles className="w-4 h-4 mr-2" />
-                            Commencer une action
+                            {t("notes.empty.startAction")}
                           </Button>
                         </Link>
                       </div>
@@ -357,12 +345,12 @@ export default function NotesPage() {
                 </div>
               )}
 
-              {/* ══════════ ANALYSE IA TAB ══════════ */}
+              {/* AI ANALYSIS TAB */}
               {activeTab === "analyse" && (
                 <div className="space-y-4">
                   {/* Header with generate button */}
                   <div className="flex items-center justify-between">
-                    <h2 className="font-heading text-lg font-semibold">Analyse de tes notes</h2>
+                    <h2 className="font-heading text-lg font-semibold">{t("notes.analysis.title")}</h2>
                     <Button
                       variant="outline"
                       size="sm"
@@ -374,12 +362,12 @@ export default function NotesPage() {
                       ) : (
                         <RefreshCw className="w-4 h-4 mr-2" />
                       )}
-                      {analysis?.analysis ? "Actualiser" : "Générer l'analyse"}
+                      {analysis?.analysis ? t("notes.analysis.refresh") : t("notes.analysis.generate")}
                     </Button>
                   </div>
 
                   {analysis && (
-                    <p className="text-xs text-muted-foreground">{analysis.note_count} notes analysées</p>
+                    <p className="text-xs text-muted-foreground">{t("notes.analysis.notesAnalyzed", { count: analysis.note_count })}</p>
                   )}
 
                   {analysisError ? (
@@ -389,7 +377,7 @@ export default function NotesPage() {
                       <Link to="/pricing">
                         <Button size="sm">
                           <Crown className="w-4 h-4 mr-2" />
-                          Passer Premium
+                          {t("notes.analysis.goPremium")}
                         </Button>
                       </Link>
                     </Card>
@@ -403,7 +391,7 @@ export default function NotesPage() {
                               <Lightbulb className="w-4 h-4 text-amber-500" />
                             </div>
                             <div>
-                              <span className="text-xs font-semibold text-amber-500 uppercase tracking-wide">Observation clé</span>
+                              <span className="text-xs font-semibold text-amber-500 uppercase tracking-wide">{t("notes.analysis.keyInsight")}</span>
                               <p className="text-sm mt-1 text-foreground/80 leading-relaxed">{analysis.analysis.key_insight}</p>
                             </div>
                           </div>
@@ -416,7 +404,7 @@ export default function NotesPage() {
                           <Card className="p-4">
                             <div className="flex items-center gap-2 mb-3">
                               <TrendingUp className="w-4 h-4 text-blue-500" />
-                              <span className="text-sm font-semibold">Patterns identifiés</span>
+                              <span className="text-sm font-semibold">{t("notes.analysis.patternsIdentified")}</span>
                             </div>
                             <div className="space-y-2">
                               {analysis.analysis.patterns.map((p, i) => (
@@ -433,7 +421,7 @@ export default function NotesPage() {
                           <Card className="p-4 border-emerald-500/10">
                             <div className="flex items-center gap-2 mb-3">
                               <Zap className="w-4 h-4 text-emerald-500" />
-                              <span className="text-sm font-semibold text-emerald-500">Points forts</span>
+                              <span className="text-sm font-semibold text-emerald-500">{t("notes.analysis.strengths")}</span>
                             </div>
                             <div className="space-y-2">
                               {analysis.analysis.strengths.map((s, i) => (
@@ -452,12 +440,12 @@ export default function NotesPage() {
                         <Card className="p-4">
                           <div className="flex items-center gap-2 mb-3">
                             <Target className="w-4 h-4 text-orange-500" />
-                            <span className="text-sm font-semibold text-orange-500">Axes de progression</span>
+                            <span className="text-sm font-semibold text-orange-500">{t("notes.analysis.growthAreas")}</span>
                           </div>
                           <div className="space-y-2">
                             {analysis.analysis.growth_areas.map((g, i) => (
                               <p key={i} className="text-xs text-foreground/70 leading-relaxed flex items-start gap-2">
-                                <span className="text-orange-500 mt-0.5 shrink-0">→</span>
+                                <span className="text-orange-500 mt-0.5 shrink-0">&rarr;</span>
                                 {g}
                               </p>
                             ))}
@@ -473,7 +461,7 @@ export default function NotesPage() {
                               <Target className="w-4 h-4 text-primary" />
                             </div>
                             <div>
-                              <span className="text-xs font-semibold text-primary uppercase tracking-wide">Conseil personnalisé</span>
+                              <span className="text-xs font-semibold text-primary uppercase tracking-wide">{t("notes.analysis.personalizedTip")}</span>
                               <p className="text-sm mt-1 text-foreground/80 leading-relaxed">{analysis.analysis.personalized_recommendation}</p>
                             </div>
                           </div>
@@ -503,7 +491,7 @@ export default function NotesPage() {
                         <Card className="p-3">
                           <div className="flex items-center gap-3">
                             <Target className="w-4 h-4 text-indigo-500" />
-                            <span className="text-sm text-muted-foreground">Focus suggéré :</span>
+                            <span className="text-sm text-muted-foreground">{t("notes.analysis.suggestedFocus")}</span>
                             <Badge variant="secondary">{analysis.analysis.focus_suggestion}</Badge>
                           </div>
                         </Card>
@@ -512,11 +500,11 @@ export default function NotesPage() {
                   ) : (
                     <Card className="p-12 text-center border-dashed">
                       <Brain className="w-12 h-12 text-muted-foreground/20 mx-auto mb-4" />
-                      <h4 className="font-heading font-semibold text-sm mb-2">Analyse non disponible</h4>
+                      <h4 className="font-heading font-semibold text-sm mb-2">{t("notes.analysis.unavailable")}</h4>
                       <p className="text-xs text-muted-foreground mb-4 max-w-sm mx-auto">
                         {stats?.total_notes >= 3
-                          ? "Clique sur \"Générer l'analyse\" pour obtenir des insights personnalisés sur tes notes."
-                          : `Encore ${3 - (stats?.total_notes || 0)} note(s) avant ta première analyse.`}
+                          ? t("notes.analysis.unavailableReady")
+                          : t("notes.analysis.unavailableNeedMore", { count: 3 - (stats?.total_notes || 0) })}
                       </p>
                       <Button variant="outline" size="sm" onClick={handleGenerateAnalysis} disabled={isAnalyzing}>
                         {isAnalyzing ? (
@@ -524,7 +512,7 @@ export default function NotesPage() {
                         ) : (
                           <Brain className="w-4 h-4 mr-2" />
                         )}
-                        Générer l'analyse
+                        {t("notes.analysis.generate")}
                       </Button>
                     </Card>
                   )}
@@ -539,18 +527,18 @@ export default function NotesPage() {
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Supprimer cette note ?</DialogTitle>
+            <DialogTitle>{t("notes.deleteDialog.title")}</DialogTitle>
             <DialogDescription>
-              Cette action est irréversible. La note sera définitivement supprimée.
+              {t("notes.deleteDialog.description")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
-              Annuler
+              {t("common.cancel")}
             </Button>
             <Button variant="destructive" onClick={handleDeleteNote}>
               <Trash2 className="w-4 h-4 mr-2" />
-              Supprimer
+              {t("common.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -35,22 +36,23 @@ function formatMinutes(min) {
   return m > 0 ? `${h}h${m.toString().padStart(2, "0")}` : `${h}h`;
 }
 
-function timeAgo(dateStr) {
+function timeAgo(dateStr, t) {
   if (!dateStr) return "";
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "à l'instant";
-  if (mins < 60) return `il y a ${mins} min`;
+  if (mins < 1) return t("groupDetail.timeAgo.justNow");
+  if (mins < 60) return t("groupDetail.timeAgo.minutes", { count: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `il y a ${hours}h`;
+  if (hours < 24) return t("groupDetail.timeAgo.hours", { count: hours });
   const days = Math.floor(hours / 24);
-  return `il y a ${days}j`;
+  return t("groupDetail.timeAgo.days", { count: days });
 }
 
 export default function GroupDetailPage() {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [group, setGroup] = useState(null);
   const [feed, setFeed] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,7 +66,7 @@ export default function GroupDetailPage() {
         authFetch(`${API}/groups/${groupId}/feed`),
       ]);
       if (groupRes.status === 404) {
-        toast.error("Groupe introuvable");
+        toast.error(t("groupDetail.errors.notFound"));
         navigate("/groups");
         return;
       }
@@ -77,7 +79,7 @@ export default function GroupDetailPage() {
         setFeed(feedData.feed || []);
       }
     } catch {
-      toast.error("Impossible de charger le groupe");
+      toast.error(t("groupDetail.errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -88,35 +90,35 @@ export default function GroupDetailPage() {
   }, [fetchGroup]);
 
   const handleLeave = useCallback(async () => {
-    if (!confirm("Quitter ce groupe ?")) return;
+    if (!confirm(t("groupDetail.confirmLeave"))) return;
     setIsLeaving(true);
     try {
       const res = await authFetch(`${API}/groups/${groupId}/leave`, { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast.error(data.detail || "Impossible de quitter le groupe");
+        toast.error(data.detail || t("groupDetail.errors.leaveFailed"));
         return;
       }
-      toast.success("Tu as quitté le groupe");
+      toast.success(t("groupDetail.leaveSuccess"));
       navigate("/groups");
     } catch {
-      toast.error("Erreur réseau");
+      toast.error(t("groupDetail.errors.network"));
     } finally {
       setIsLeaving(false);
     }
-  }, [groupId, navigate]);
+  }, [groupId, navigate, t]);
 
   const handleDelete = useCallback(async () => {
-    if (!confirm("Archiver ce groupe ? Cette action est irréversible.")) return;
+    if (!confirm(t("groupDetail.confirmArchive"))) return;
     try {
       const res = await authFetch(`${API}/groups/${groupId}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
-      toast.success("Groupe archivé");
+      toast.success(t("groupDetail.archiveSuccess"));
       navigate("/groups");
     } catch {
-      toast.error("Impossible d'archiver le groupe");
+      toast.error(t("groupDetail.errors.archiveFailed"));
     }
-  }, [groupId, navigate]);
+  }, [groupId, navigate, t]);
 
   if (isLoading) {
     return (
@@ -154,7 +156,7 @@ export default function GroupDetailPage() {
               className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground text-sm mb-4 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-              Mes Groupes
+              {t("groups.title")}
             </Link>
 
             <div className="flex items-start justify-between">
@@ -166,10 +168,11 @@ export default function GroupDetailPage() {
                   <p className="text-muted-foreground text-sm mt-1">{group.description}</p>
                 )}
                 <p className="text-muted-foreground text-xs mt-2">
-                  {members.length} membre{members.length > 1 ? "s" : ""} · Créé le{" "}
-                  {new Date(group.created_at).toLocaleDateString("fr-FR", {
-                    day: "numeric",
-                    month: "long",
+                  {t("groupDetail.memberCount", { count: members.length })} · {t("groupDetail.createdOn", {
+                    date: new Date(group.created_at).toLocaleDateString(i18n.language, {
+                      day: "numeric",
+                      month: "long",
+                    })
                   })}
                 </p>
               </div>
@@ -182,7 +185,7 @@ export default function GroupDetailPage() {
                   className="gap-1.5"
                 >
                   <UserPlus className="w-4 h-4" />
-                  <span className="hidden sm:inline">Inviter</span>
+                  <span className="hidden sm:inline">{t("groupDetail.invite")}</span>
                 </Button>
                 {isOwner ? (
                   <Button variant="ghost" size="sm" onClick={handleDelete}>
@@ -206,7 +209,7 @@ export default function GroupDetailPage() {
           <div className="mb-6">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
               <Users className="w-4 h-4" />
-              Classement cette semaine
+              {t("groupDetail.leaderboard.title")}
             </h2>
             <div className="space-y-2">
               {leaderboard.map((member, i) => (
@@ -251,7 +254,7 @@ export default function GroupDetailPage() {
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="text-foreground text-sm font-medium truncate flex items-center gap-1.5">
-                        {member.name || "Membre"}
+                        {member.name || t("groupDetail.defaultMember")}
                         {member.role === "owner" && (
                           <Crown className="w-3 h-3 text-amber-400" />
                         )}
@@ -260,12 +263,12 @@ export default function GroupDetailPage() {
                         {member.stats?.streak_days > 0 && (
                           <span className="flex items-center gap-1">
                             <Flame className="w-3 h-3 text-orange-400" />
-                            {member.stats.streak_days}j
+                            {t("groupDetail.leaderboard.streakDays", { count: member.stats.streak_days })}
                           </span>
                         )}
                         <span className="flex items-center gap-1">
                           <TrendingUp className="w-3 h-3" />
-                          {member.stats?.week_sessions || 0} sessions
+                          {t("groupDetail.leaderboard.sessions", { count: member.stats?.week_sessions || 0 })}
                         </span>
                       </div>
                     </div>
@@ -275,7 +278,7 @@ export default function GroupDetailPage() {
                       <div className="text-foreground text-sm font-bold tabular-nums">
                         {formatMinutes(member.stats?.week_minutes || 0)}
                       </div>
-                      <div className="text-muted-foreground text-[10px]">cette semaine</div>
+                      <div className="text-muted-foreground text-[10px]">{t("groupDetail.leaderboard.thisWeek")}</div>
                     </div>
                   </CardContent>
                 </Card>
@@ -288,7 +291,7 @@ export default function GroupDetailPage() {
             <div>
               <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
                 <Activity className="w-4 h-4" />
-                Activité récente
+                {t("groupDetail.feed.title")}
               </h2>
               <div className="space-y-1.5">
                 {feed.map((entry, i) => (
@@ -308,15 +311,15 @@ export default function GroupDetailPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <span className="text-foreground text-sm">
-                        <span className="font-medium">{entry.user_name || "Membre"}</span>
+                        <span className="font-medium">{entry.user_name || t("groupDetail.defaultMember")}</span>
                         {" — "}
                         <span className="text-muted-foreground">
-                          {entry.action_title || "session complétée"}
+                          {entry.action_title || t("groupDetail.feed.sessionCompleted")}
                         </span>
                       </span>
                     </div>
                     <span className="text-muted-foreground text-xs shrink-0">
-                      {timeAgo(entry.completed_at)}
+                      {timeAgo(entry.completed_at, t)}
                     </span>
                   </div>
                 ))}

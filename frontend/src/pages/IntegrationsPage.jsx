@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -43,76 +44,77 @@ import {
 } from "@/components/ui/dialog";
 
 // Available integrations - easily extendable
+// NOTE: name fields are brand names (not translated), descriptions use t() at render time
 const AVAILABLE_INTEGRATIONS = [
   {
     id: "google_calendar",
     provider: "google_calendar",
     name: "Google Calendar",
-    description: "Détecte automatiquement vos créneaux libres entre les réunions",
+    descriptionKey: "integrations.services.googleCalendar.description",
     icon: Calendar,
     color: "blue",
-    category: "calendrier",
+    categoryKey: "integrations.categories.calendar",
     status: "available",
     type: "url",
-    urlLabel: "URL secrète iCal de Google Calendar",
+    urlLabelKey: "integrations.services.googleCalendar.urlLabel",
     urlPlaceholder: "https://calendar.google.com/calendar/ical/.../basic.ics",
-    urlHelp: "Google Calendar → Paramètres → Votre calendrier → Adresse secrète au format iCal. Copiez l'URL et collez-la ici.",
+    urlHelpKey: "integrations.services.googleCalendar.urlHelp",
   },
   {
     id: "notion",
     provider: "notion",
     name: "Notion",
-    description: "Exportez vos sessions comme pages Notion automatiquement",
+    descriptionKey: "integrations.services.notion.description",
     icon: FileText,
     color: "gray",
-    category: "notes",
+    categoryKey: "integrations.categories.notes",
     status: "available",
     type: "token",
-    tokenLabel: "Token d'intégration Notion",
+    tokenLabelKey: "integrations.services.notion.tokenLabel",
     tokenPlaceholder: "secret_...",
-    tokenHelp: "Créez une intégration sur notion.so/my-integrations, puis copiez le token.",
+    tokenHelpKey: "integrations.services.notion.tokenHelp",
   },
   {
     id: "todoist",
     provider: "todoist",
     name: "Todoist",
-    description: "Loguez vos sessions comme tâches complétées dans Todoist",
+    descriptionKey: "integrations.services.todoist.description",
     icon: ListTodo,
     color: "red",
-    category: "tâches",
+    categoryKey: "integrations.categories.tasks",
     status: "available",
     type: "token",
-    tokenLabel: "Token API Todoist",
-    tokenPlaceholder: "votre token API",
-    tokenHelp: "Allez dans Paramètres → Intégrations → Développeur pour copier votre token API.",
+    tokenLabelKey: "integrations.services.todoist.tokenLabel",
+    tokenPlaceholder: "",
+    tokenHelpKey: "integrations.services.todoist.tokenHelp",
   },
   {
     id: "slack",
     provider: "slack",
     name: "Slack",
-    description: "Recevez vos résumés hebdomadaires directement dans Slack",
+    descriptionKey: "integrations.services.slack.description",
     icon: MessageSquare,
     color: "purple",
-    category: "communication",
+    categoryKey: "integrations.categories.communication",
     status: "available",
     type: "token",
-    tokenLabel: "URL de webhook Slack",
+    tokenLabelKey: "integrations.services.slack.tokenLabel",
     tokenPlaceholder: "https://hooks.slack.com/services/...",
-    tokenHelp: "Créez un webhook entrant sur api.slack.com/messaging/webhooks.",
+    tokenHelpKey: "integrations.services.slack.tokenHelp",
   },
   {
     id: "ical",
     provider: "ical",
     name: "iCal",
-    description: "Importez votre calendrier iCal/ICS pour détecter vos créneaux libres",
+    descriptionKey: "integrations.services.ical.description",
     icon: Link2,
     color: "orange",
-    category: "calendrier",
+    categoryKey: "integrations.categories.calendar",
     status: "available",
     type: "url",
-    urlLabel: "URL du calendrier iCal",
+    urlLabelKey: "integrations.services.ical.urlLabel",
     urlPlaceholder: "https://calendar.example.com/basic.ics",
-    urlHelp: "Collez l'URL .ics de votre application calendrier (Apple, Outlook, etc.).",
+    urlHelpKey: "integrations.services.ical.urlHelp",
   },
 ];
 
@@ -147,52 +149,53 @@ const UNIFIED_SERVICES = [
   {
     id: "google_calendar",
     name: "Google Calendar",
-    description: "Détecte automatiquement vos créneaux libres entre les réunions",
+    descriptionKey: "integrations.services.googleCalendar.description",
     icon: Calendar,
     color: "blue",
-    category: "calendrier",
+    categoryKey: "integrations.categories.calendar",
     connectMode: "oauth",
   },
   {
     id: "ical",
     name: "Apple Calendar",
-    description: "Importez votre calendrier Apple pour détecter vos créneaux libres",
+    descriptionKey: "integrations.services.ical.description",
     icon: Link2,
     color: "orange",
-    category: "calendrier",
+    categoryKey: "integrations.categories.calendar",
     connectMode: "guided", // Opens the step-by-step guide
   },
   {
     id: "notion",
     name: "Notion",
-    description: "Exportez vos sessions comme pages Notion automatiquement",
+    descriptionKey: "integrations.services.notion.description",
     icon: FileText,
     color: "gray",
-    category: "notes",
+    categoryKey: "integrations.categories.notes",
     connectMode: "oauth", // Uses OAuth popup
   },
   {
     id: "todoist",
     name: "Todoist",
-    description: "Loguez vos sessions comme tâches complétées dans Todoist",
+    descriptionKey: "integrations.services.todoist.description",
     icon: ListTodo,
     color: "red",
-    category: "tâches",
+    categoryKey: "integrations.categories.tasks",
     connectMode: "token", // Falls back to existing token dialog
   },
   {
     id: "slack",
     name: "Slack",
-    description: "Recevez vos résumés hebdomadaires directement dans Slack",
+    descriptionKey: "integrations.services.slack.description",
     icon: MessageSquare,
     color: "purple",
-    category: "communication",
+    categoryKey: "integrations.categories.communication",
     connectMode: "token", // Falls back to existing token dialog
   },
 ];
 
 export default function IntegrationsPage() {
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [integrations, setIntegrations] = useState({});
@@ -226,21 +229,21 @@ export default function IntegrationsPage() {
       UNIFIED_SERVICES.find((i) => i.id === service)?.name || service;
 
     if (success) {
-      toast.success(`${serviceName || "Service"} connecté avec succès!`);
+      toast.success(t("integrations.toasts.connectedSuccess", { name: serviceName || t("integrations.defaultService") }));
       navigate("/integrations", { replace: true });
     } else if (error) {
       const errorMessages = {
-        oauth_error: "Erreur lors de l'authentification",
-        missing_params: "Paramètres manquants",
-        invalid_state: "Session expirée, veuillez réessayer",
-        connection_failed: "Échec de la connexion",
-        not_configured: `${serviceName} n'est pas configuré sur ce serveur`,
-        token_failed: "Échec de l'obtention du token",
-        expired: "Lien expiré, veuillez réessayer",
-        unknown_service: "Service inconnu",
-        callback_failed: "Échec du callback OAuth",
+        oauth_error: t("integrations.errors.oauthError"),
+        missing_params: t("integrations.errors.missingParams"),
+        invalid_state: t("integrations.errors.invalidState"),
+        connection_failed: t("integrations.errors.connectionFailed"),
+        not_configured: t("integrations.errors.notConfigured", { name: serviceName }),
+        token_failed: t("integrations.errors.tokenFailed"),
+        expired: t("integrations.errors.expired"),
+        unknown_service: t("integrations.errors.unknownService"),
+        callback_failed: t("integrations.errors.callbackFailed"),
       };
-      toast.error(errorMessages[error] || "Une erreur est survenue");
+      toast.error(errorMessages[error] || t("integrations.errors.generic"));
       navigate("/integrations", { replace: true });
     }
 
@@ -272,7 +275,7 @@ export default function IntegrationsPage() {
         if (statusRes.ok) setUnifiedStatus(await statusRes.json());
       } catch {}
     } catch (error) {
-      toast.error("Erreur de chargement");
+      toast.error(t("integrations.toasts.loadError"));
     } finally {
       setIsLoading(false);
     }
@@ -284,7 +287,7 @@ export default function IntegrationsPage() {
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.detail || "Erreur");
+        throw new Error(err.detail || t("common.error"));
       }
 
       const data = await response.json();
@@ -306,15 +309,15 @@ export default function IntegrationsPage() {
       });
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.detail || "Erreur");
+        throw new Error(err.detail || t("common.error"));
       }
       const data = await response.json();
-      toast.success(`${data.calendar_name || urlDialogService.name} connecté ! ${data.events_found || 0} événements trouvés.`);
+      toast.success(t("integrations.toasts.urlConnected", { name: data.calendar_name || urlDialogService.name, count: data.events_found || 0 }));
       setUrlDialogService(null);
       setUrlValue("");
       fetchData();
     } catch (error) {
-      toast.error(error.message || "Erreur de connexion");
+      toast.error(error.message || t("integrations.toasts.connectionError"));
     } finally {
       setIsConnectingUrl(false);
     }
@@ -331,15 +334,15 @@ export default function IntegrationsPage() {
       });
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.detail || "Erreur");
+        throw new Error(err.detail || t("common.error"));
       }
       const data = await response.json();
-      toast.success(`${data.account_name || tokenDialogService.name} connecté avec succès !`);
+      toast.success(t("integrations.toasts.tokenConnected", { name: data.account_name || tokenDialogService.name }));
       setTokenDialogService(null);
       setTokenValue("");
       fetchData();
     } catch (error) {
-      toast.error(error.message || "Erreur de connexion");
+      toast.error(error.message || t("integrations.toasts.connectionError"));
     } finally {
       setIsConnectingToken(false);
     }
@@ -351,13 +354,13 @@ export default function IntegrationsPage() {
         method: "DELETE",
       });
 
-      if (!response.ok) throw new Error("Erreur");
+      if (!response.ok) throw new Error(t("common.error"));
 
-      toast.success("Intégration déconnectée");
+      toast.success(t("integrations.toasts.disconnected"));
       setSelectedIntegration(null);
       fetchData();
     } catch (error) {
-      toast.error("Erreur lors de la déconnexion");
+      toast.error(t("integrations.toasts.disconnectError"));
     }
   };
 
@@ -369,16 +372,16 @@ export default function IntegrationsPage() {
         method: "POST",
       });
 
-      if (!response.ok) throw new Error("Erreur");
+      if (!response.ok) throw new Error(t("common.error"));
 
       const data = await response.json();
       const msg = data.slots_detected != null
-        ? `${data.slots_detected} créneaux détectés`
-        : `${data.synced_count || 0} éléments synchronisés`;
-      toast.success(`Synchronisation terminée: ${msg}`);
+        ? t("integrations.toasts.slotsDetected", { count: data.slots_detected })
+        : t("integrations.toasts.itemsSynced", { count: data.synced_count || 0 });
+      toast.success(t("integrations.toasts.syncComplete", { details: msg }));
       fetchData();
     } catch (error) {
-      toast.error("Erreur lors de la synchronisation");
+      toast.error(t("integrations.toasts.syncError"));
     } finally {
       setIsSyncing(false);
       setSyncingService(null);
@@ -406,12 +409,12 @@ export default function IntegrationsPage() {
         const response = await authFetch(`${API}/integrations/connect/${service}`);
         if (!response.ok) {
           const err = await response.json();
-          throw new Error(err.detail || "Erreur");
+          throw new Error(err.detail || t("common.error"));
         }
         const data = await response.json();
         window.location.href = data.auth_url;
       } catch (error) {
-        toast.error(error.message || "Erreur de connexion");
+        toast.error(error.message || t("integrations.toasts.connectionError"));
       }
     } else if (method === "token") {
       // Token/webhook — open smart token dialog with backend config
@@ -421,11 +424,11 @@ export default function IntegrationsPage() {
         name: status.name,
         icon: ICON_MAP[service] || Plug,
         color: COLOR_MAP[service] || "blue",
-        tokenLabel: tc.label || `Token ${status.name}`,
+        tokenLabel: tc.label || t("integrations.dialogs.tokenDefault", { name: status.name }),
         tokenPlaceholder: tc.placeholder || "",
         tokenHelp: tc.help_url
-          ? `Obtenez votre token sur ${tc.service_name || status.name}. `
-          : `Entrez votre token ${status.name}.`,
+          ? t("integrations.dialogs.tokenHelpWithUrl", { name: tc.service_name || status.name })
+          : t("integrations.dialogs.tokenHelpGeneric", { name: status.name }),
         type: "token",
       });
     } else if (method === "url") {
@@ -433,7 +436,7 @@ export default function IntegrationsPage() {
       const legacyService = AVAILABLE_INTEGRATIONS.find((i) => i.id === service);
       if (legacyService) setUrlDialogService(legacyService);
     } else {
-      toast.error("Ce service n'est pas disponible actuellement");
+      toast.error(t("integrations.errors.serviceUnavailable"));
     }
   };
 
@@ -445,13 +448,13 @@ export default function IntegrationsPage() {
       });
       const data = await response.json();
       if (data.ok) {
-        toast.success("Connexion vérifiée — tout fonctionne !");
+        toast.success(t("integrations.toasts.testSuccess"));
       } else {
-        toast.error(data.error || "La connexion ne fonctionne plus");
+        toast.error(data.error || t("integrations.toasts.testFailed"));
       }
       fetchData();
     } catch (error) {
-      toast.error("Impossible de tester la connexion");
+      toast.error(t("integrations.toasts.testError"));
     } finally {
       setTestingService(null);
     }
@@ -467,12 +470,12 @@ export default function IntegrationsPage() {
         body: JSON.stringify(newSettings),
       });
 
-      if (!response.ok) throw new Error("Erreur");
+      if (!response.ok) throw new Error(t("common.error"));
 
       setSlotSettings(newSettings);
-      toast.success("Paramètres mis à jour");
+      toast.success(t("integrations.toasts.settingsUpdated"));
     } catch (error) {
-      toast.error("Erreur lors de la mise à jour");
+      toast.error(t("integrations.toasts.settingsError"));
     }
   };
 
@@ -488,8 +491,9 @@ export default function IntegrationsPage() {
 
   // Group integrations by category
   const groupedIntegrations = AVAILABLE_INTEGRATIONS.reduce((acc, int) => {
-    if (!acc[int.category]) acc[int.category] = [];
-    acc[int.category].push(int);
+    const cat = t(int.categoryKey);
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(int);
     return acc;
   }, {});
 
@@ -522,17 +526,17 @@ export default function IntegrationsPage() {
                 </div>
                 <div>
                   <h1 className="font-heading text-3xl font-semibold" data-testid="integrations-title">
-                    Hub d'Intégrations
+                    {t("integrations.title")}
                   </h1>
                   <p className="text-muted-foreground">
-                    Connectez vos outils pour des suggestions plus intelligentes
+                    {t("integrations.subtitle")}
                   </p>
                 </div>
               </div>
               {/* Connection summary */}
               <div className="flex items-center gap-3 mt-4">
                 <Badge variant="secondary" className="text-xs">
-                  {connectedCount}/{totalCount} connectés
+                  {t("integrations.connectedCount", { connected: connectedCount, total: totalCount })}
                 </Badge>
               </div>
             </div>
@@ -550,12 +554,12 @@ export default function IntegrationsPage() {
                       <div className="flex items-center gap-3">
                         <Lock className="w-5 h-5 text-amber-500" />
                         <p className="text-sm">
-                          Plan gratuit : 1 intégration max. Passez à Premium pour connecter tous vos outils.
+                          {t("integrations.freeTierBanner")}
                         </p>
                       </div>
                       <Link to="/pricing">
                         <Button size="sm" variant="outline" className="shrink-0">
-                          Voir Premium
+                          {t("integrations.seePremium")}
                         </Button>
                       </Link>
                     </CardContent>
@@ -605,18 +609,18 @@ export default function IntegrationsPage() {
                     <CardHeader>
                       <CardTitle className="font-heading text-lg flex items-center gap-2">
                         <Clock className="w-5 h-5" />
-                        Détection des créneaux
+                        {t("integrations.slotDetection.title")}
                       </CardTitle>
                       <CardDescription>
-                        Configurez comment InFinea détecte vos moments libres
+                        {t("integrations.slotDetection.description")}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <Label>Activer la détection automatique</Label>
+                          <Label>{t("integrations.slotDetection.enableAutoDetection")}</Label>
                           <p className="text-xs text-muted-foreground">
-                            Analyse votre calendrier pour trouver des créneaux libres
+                            {t("integrations.slotDetection.enableAutoDetectionHelp")}
                           </p>
                         </div>
                         <Switch
@@ -630,7 +634,7 @@ export default function IntegrationsPage() {
                         <>
                           <div>
                             <Label className="mb-3 block">
-                              Durée des créneaux : {slotSettings.min_slot_duration} - {slotSettings.max_slot_duration} min
+                              {t("integrations.slotDetection.slotDuration", { min: slotSettings.min_slot_duration, max: slotSettings.max_slot_duration })}
                             </Label>
                             <div className="flex items-center gap-4">
                               <Input
@@ -644,7 +648,7 @@ export default function IntegrationsPage() {
                                 }
                                 className="w-20" min={2} max={15}
                               />
-                              <span className="text-muted-foreground">à</span>
+                              <span className="text-muted-foreground">{t("integrations.slotDetection.to")}</span>
                               <Input
                                 type="number"
                                 value={slotSettings.max_slot_duration}
@@ -656,12 +660,12 @@ export default function IntegrationsPage() {
                                 }
                                 className="w-20" min={5} max={30}
                               />
-                              <span className="text-muted-foreground">minutes</span>
+                              <span className="text-muted-foreground">{t("common.minutes")}</span>
                             </div>
                           </div>
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <Label>Début de la fenêtre</Label>
+                              <Label>{t("integrations.slotDetection.windowStart")}</Label>
                               <Input
                                 type="time"
                                 value={slotSettings.detection_window_start}
@@ -671,7 +675,7 @@ export default function IntegrationsPage() {
                               />
                             </div>
                             <div>
-                              <Label>Fin de la fenêtre</Label>
+                              <Label>{t("integrations.slotDetection.windowEnd")}</Label>
                               <Input
                                 type="time"
                                 value={slotSettings.detection_window_end}
@@ -682,7 +686,7 @@ export default function IntegrationsPage() {
                             </div>
                           </div>
                           <div>
-                            <Label>Minutes d'avance pour la notification</Label>
+                            <Label>{t("integrations.slotDetection.advanceNotification")}</Label>
                             <Input
                               type="number"
                               value={slotSettings.advance_notification_minutes}
@@ -710,7 +714,7 @@ export default function IntegrationsPage() {
         <Dialog open={!!selectedIntegration} onOpenChange={() => setSelectedIntegration(null)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Paramètres de l'intégration</DialogTitle>
+              <DialogTitle>{t("integrations.dialogs.settingsTitle")}</DialogTitle>
               <DialogDescription>
                 {selectedIntegration && (
                   unifiedStatus[selectedIntegration.service]?.name ||
@@ -723,10 +727,10 @@ export default function IntegrationsPage() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
                     <div>
-                      <p className="text-sm text-muted-foreground">Connecté le</p>
+                      <p className="text-sm text-muted-foreground">{t("integrations.dialogs.connectedOn")}</p>
                       <p className="font-medium">
                         {selectedIntegration.connected_at
-                          ? new Date(selectedIntegration.connected_at).toLocaleString("fr-FR")
+                          ? new Date(selectedIntegration.connected_at).toLocaleString(i18n.language)
                           : "—"}
                       </p>
                     </div>
@@ -737,7 +741,7 @@ export default function IntegrationsPage() {
                       disabled={isSyncing}
                     >
                       {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                      Synchroniser
+                      {t("integrations.actions.sync")}
                     </Button>
                   </div>
                 </div>
@@ -745,14 +749,14 @@ export default function IntegrationsPage() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setSelectedIntegration(null)}>
-                Fermer
+                {t("common.close")}
               </Button>
               <Button
                 variant="destructive"
                 onClick={() => handleDisconnect(selectedIntegration?.service)}
               >
                 <Unplug className="w-4 h-4 mr-2" />
-                Déconnecter
+                {t("integrations.actions.disconnect")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -770,12 +774,12 @@ export default function IntegrationsPage() {
                     <Icon className={`w-4 h-4 ${colors?.text}`} />
                   </div>;
                 })()}
-                Connecter {urlDialogService?.name}
+                {t("integrations.actions.connect")} {urlDialogService?.name}
               </DialogTitle>
-              <DialogDescription>{urlDialogService?.urlHelp}</DialogDescription>
+              <DialogDescription>{urlDialogService && t(urlDialogService.urlHelpKey)}</DialogDescription>
             </DialogHeader>
             <div className="py-4">
-              <Label htmlFor="url-input">{urlDialogService?.urlLabel || "URL du calendrier"}</Label>
+              <Label htmlFor="url-input">{urlDialogService ? t(urlDialogService.urlLabelKey) : t("integrations.dialogs.calendarUrl")}</Label>
               <Input
                 id="url-input" type="url"
                 placeholder={urlDialogService?.urlPlaceholder || "https://..."}
@@ -784,10 +788,10 @@ export default function IntegrationsPage() {
               />
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => { setUrlDialogService(null); setUrlValue(""); }}>Annuler</Button>
+              <Button variant="outline" onClick={() => { setUrlDialogService(null); setUrlValue(""); }}>{t("common.cancel")}</Button>
               <Button onClick={handleConnectUrl} disabled={isConnectingUrl || !urlValue.trim()}>
                 {isConnectingUrl ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Link2 className="w-4 h-4 mr-2" />}
-                Connecter
+                {t("integrations.actions.connect")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -805,7 +809,7 @@ export default function IntegrationsPage() {
                     <Icon className={`w-4 h-4 ${colors?.text}`} />
                   </div>;
                 })()}
-                Connecter {tokenDialogService?.name}
+                {t("integrations.actions.connect")} {tokenDialogService?.name}
               </DialogTitle>
               <DialogDescription>{tokenDialogService?.tokenHelp}</DialogDescription>
             </DialogHeader>
@@ -818,14 +822,14 @@ export default function IntegrationsPage() {
                 className="mt-2 font-mono text-sm" data-testid="token-input"
               />
               <p className="text-xs text-muted-foreground mt-2">
-                Votre token est chiffré et stocké de manière sécurisée.
+                {t("integrations.dialogs.tokenSecure")}
               </p>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => { setTokenDialogService(null); setTokenValue(""); }}>Annuler</Button>
+              <Button variant="outline" onClick={() => { setTokenDialogService(null); setTokenValue(""); }}>{t("common.cancel")}</Button>
               <Button onClick={handleConnectToken} disabled={isConnectingToken || !tokenValue.trim()}>
                 {isConnectingToken ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plug className="w-4 h-4 mr-2" />}
-                Connecter
+                {t("integrations.actions.connect")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -885,10 +889,10 @@ export default function IntegrationsPage() {
               </div>
               <div>
                 <h1 className="font-heading text-3xl font-semibold" data-testid="integrations-title">
-                  Hub d'Intégrations
+                  {t("integrations.title")}
                 </h1>
                 <p className="text-muted-foreground">
-                  Connectez vos outils pour des suggestions plus intelligentes
+                  {t("integrations.subtitle")}
                 </p>
               </div>
             </div>
@@ -911,12 +915,12 @@ export default function IntegrationsPage() {
                       <div className="flex items-center gap-3">
                         <Lock className="w-5 h-5 text-amber-500" />
                         <p className="text-sm">
-                          Plan gratuit : 1 intégration max. Passez à Premium pour connecter tous vos outils.
+                          {t("integrations.freeTierBanner")}
                         </p>
                       </div>
                       <Link to="/pricing">
                         <Button size="sm" variant="outline" className="shrink-0">
-                          Voir Premium
+                          {t("integrations.seePremium")}
                         </Button>
                       </Link>
                     </CardContent>
@@ -935,7 +939,7 @@ export default function IntegrationsPage() {
                   <div>
                     <h2 className="text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                      Connectés ({connectedServices.length})
+                      {t("integrations.connectedSection", { count: connectedServices.length })}
                     </h2>
                     <div className="grid gap-4">
                       {connectedServices.map((config) => {
@@ -956,12 +960,12 @@ export default function IntegrationsPage() {
                                       <h3 className="font-heading font-semibold">{config.name}</h3>
                                       <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/30">
                                         <CheckCircle2 className="w-3 h-3 mr-1" />
-                                        Connecté
+                                        {t("integrations.status.connected")}
                                       </Badge>
                                     </div>
                                     <p className="text-sm text-muted-foreground">
                                       {info.account_name && <span className="mr-2">{info.account_name}</span>}
-                                      Connecté le: {info.connected_at ? new Date(info.connected_at).toLocaleString("fr-FR") : "—"}
+                                      {t("integrations.dialogs.connectedOn")}: {info.connected_at ? new Date(info.connected_at).toLocaleString(i18n.language) : "—"}
                                     </p>
                                   </div>
                                 </div>
@@ -1041,7 +1045,7 @@ export default function IntegrationsPage() {
                                       <h3 className="font-heading font-semibold">{int.name}</h3>
                                       {int.status === "coming_soon" && (
                                         <Badge variant="secondary" className="text-xs">
-                                          Bientôt
+                                          {t("integrations.status.comingSoon")}
                                         </Badge>
                                       )}
                                       {int.status === "premium" && (
@@ -1051,13 +1055,13 @@ export default function IntegrationsPage() {
                                       )}
                                     </div>
                                     <p className="text-sm text-muted-foreground mb-3">
-                                      {int.description}
+                                      {t(int.descriptionKey)}
                                     </p>
                                     {isLimitReached ? (
                                       <Link to="/pricing">
                                         <Button size="sm" variant="outline" className="text-amber-500 border-amber-500/30">
                                           <Lock className="w-4 h-4 mr-2" />
-                                          Premium requis
+                                          {t("integrations.premiumRequired")}
                                         </Button>
                                       </Link>
                                     ) : int.status === "available" ? (
@@ -1071,19 +1075,19 @@ export default function IntegrationsPage() {
                                           }}
                                           data-testid={`connect-${int.id}-btn`}
                                         >
-                                          Connecter
+                                          {t("integrations.actions.connect")}
                                           <ChevronRight className="w-4 h-4 ml-1" />
                                         </Button>
                                       ) : (
                                         <div className="flex items-center gap-2 text-amber-500 text-sm">
                                           <AlertCircle className="w-4 h-4" />
-                                          <span>Non configuré sur ce serveur</span>
+                                          <span>{t("integrations.notConfiguredOnServer")}</span>
                                         </div>
                                       )
                                     ) : (
                                       <Button size="sm" variant="secondary" disabled>
                                         <Lock className="w-4 h-4 mr-2" />
-                                        Bientôt disponible
+                                        {t("integrations.status.comingSoonFull")}
                                       </Button>
                                     )}
                                   </div>
@@ -1104,18 +1108,18 @@ export default function IntegrationsPage() {
                   <CardHeader>
                     <CardTitle className="font-heading text-lg flex items-center gap-2">
                       <Clock className="w-5 h-5" />
-                      Détection des créneaux
+                      {t("integrations.slotDetection.title")}
                     </CardTitle>
                     <CardDescription>
-                      Configurez comment InFinea détecte vos moments libres
+                      {t("integrations.slotDetection.description")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     <div className="flex items-center justify-between">
                       <div>
-                        <Label>Activer la détection automatique</Label>
+                        <Label>{t("integrations.slotDetection.enableAutoDetection")}</Label>
                         <p className="text-xs text-muted-foreground">
-                          Analyse votre calendrier pour trouver des créneaux libres
+                          {t("integrations.slotDetection.enableAutoDetectionHelp")}
                         </p>
                       </div>
                       <Switch
@@ -1131,7 +1135,7 @@ export default function IntegrationsPage() {
                       <>
                         <div>
                           <Label className="mb-3 block">
-                            Durée des créneaux : {slotSettings.min_slot_duration} - {slotSettings.max_slot_duration} min
+                            {t("integrations.slotDetection.slotDuration", { min: slotSettings.min_slot_duration, max: slotSettings.max_slot_duration })}
                           </Label>
                           <div className="flex items-center gap-4">
                             <Input
@@ -1147,7 +1151,7 @@ export default function IntegrationsPage() {
                               min={2}
                               max={15}
                             />
-                            <span className="text-muted-foreground">à</span>
+                            <span className="text-muted-foreground">{t("integrations.slotDetection.to")}</span>
                             <Input
                               type="number"
                               value={slotSettings.max_slot_duration}
@@ -1161,13 +1165,13 @@ export default function IntegrationsPage() {
                               min={5}
                               max={30}
                             />
-                            <span className="text-muted-foreground">minutes</span>
+                            <span className="text-muted-foreground">{t("common.minutes")}</span>
                           </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <Label>Début de la fenêtre</Label>
+                            <Label>{t("integrations.slotDetection.windowStart")}</Label>
                             <Input
                               type="time"
                               value={slotSettings.detection_window_start}
@@ -1180,7 +1184,7 @@ export default function IntegrationsPage() {
                             />
                           </div>
                           <div>
-                            <Label>Fin de la fenêtre</Label>
+                            <Label>{t("integrations.slotDetection.windowEnd")}</Label>
                             <Input
                               type="time"
                               value={slotSettings.detection_window_end}
@@ -1195,7 +1199,7 @@ export default function IntegrationsPage() {
                         </div>
 
                         <div>
-                          <Label>Minutes d'avance pour la notification</Label>
+                          <Label>{t("integrations.slotDetection.advanceNotification")}</Label>
                           <Input
                             type="number"
                             value={slotSettings.advance_notification_minutes}
@@ -1224,7 +1228,7 @@ export default function IntegrationsPage() {
       <Dialog open={!!selectedIntegration} onOpenChange={() => setSelectedIntegration(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Paramètres de l'intégration</DialogTitle>
+            <DialogTitle>{t("integrations.dialogs.settingsTitle")}</DialogTitle>
             <DialogDescription>
               {selectedIntegration && (AVAILABLE_INTEGRATIONS.find((a) => a.id === selectedIntegration.service)?.name || selectedIntegration.service)}
             </DialogDescription>
@@ -1234,10 +1238,10 @@ export default function IntegrationsPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
                   <div>
-                    <p className="text-sm text-muted-foreground">Connecté le</p>
+                    <p className="text-sm text-muted-foreground">{t("integrations.dialogs.connectedOn")}</p>
                     <p className="font-medium">
                       {selectedIntegration.connected_at
-                        ? new Date(selectedIntegration.connected_at).toLocaleString("fr-FR")
+                        ? new Date(selectedIntegration.connected_at).toLocaleString(i18n.language)
                         : "—"}
                     </p>
                   </div>
@@ -1252,7 +1256,7 @@ export default function IntegrationsPage() {
                     ) : (
                       <RefreshCw className="w-4 h-4 mr-2" />
                     )}
-                    Synchroniser
+                    {t("integrations.actions.sync")}
                   </Button>
                 </div>
               </div>
@@ -1260,14 +1264,14 @@ export default function IntegrationsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSelectedIntegration(null)}>
-              Fermer
+              {t("common.close")}
             </Button>
             <Button
               variant="destructive"
               onClick={() => handleDisconnect(selectedIntegration?.service)}
             >
               <Unplug className="w-4 h-4 mr-2" />
-              Déconnecter
+              {t("integrations.actions.disconnect")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1285,14 +1289,14 @@ export default function IntegrationsPage() {
                   <Icon className={`w-4 h-4 ${colors?.text}`} />
                 </div>;
               })()}
-              Connecter {urlDialogService?.name}
+              {t("integrations.actions.connect")} {urlDialogService?.name}
             </DialogTitle>
             <DialogDescription>
-              {urlDialogService?.urlHelp}
+              {urlDialogService && t(urlDialogService.urlHelpKey)}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <Label htmlFor="url-input">{urlDialogService?.urlLabel || "URL du calendrier"}</Label>
+            <Label htmlFor="url-input">{urlDialogService ? t(urlDialogService.urlLabelKey) : t("integrations.dialogs.calendarUrl")}</Label>
             <Input
               id="url-input"
               type="url"
@@ -1303,12 +1307,12 @@ export default function IntegrationsPage() {
               data-testid="url-connect-input"
             />
             <p className="text-xs text-muted-foreground mt-2">
-              Formats supportés : .ics, webcal://, https://
+              {t("integrations.dialogs.supportedFormats")}
             </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setUrlDialogService(null); setUrlValue(""); }}>
-              Annuler
+              {t("common.cancel")}
             </Button>
             <Button
               onClick={handleConnectUrl}
@@ -1319,7 +1323,7 @@ export default function IntegrationsPage() {
               ) : (
                 <Link2 className="w-4 h-4 mr-2" />
               )}
-              Connecter
+              {t("integrations.actions.connect")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1337,7 +1341,7 @@ export default function IntegrationsPage() {
                   <Icon className={`w-4 h-4 ${colors?.text}`} />
                 </div>;
               })()}
-              Connecter {tokenDialogService?.name}
+              {t("integrations.actions.connect")} {tokenDialogService?.name}
             </DialogTitle>
             <DialogDescription>
               {tokenDialogService?.tokenHelp}
@@ -1355,12 +1359,12 @@ export default function IntegrationsPage() {
               data-testid="token-input"
             />
             <p className="text-xs text-muted-foreground mt-2">
-              Votre token est chiffré et stocké de manière sécurisée.
+              {t("integrations.dialogs.tokenSecure")}
             </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setTokenDialogService(null); setTokenValue(""); }}>
-              Annuler
+              {t("common.cancel")}
             </Button>
             <Button
               onClick={handleConnectToken}
@@ -1371,7 +1375,7 @@ export default function IntegrationsPage() {
               ) : (
                 <Plug className="w-4 h-4 mr-2" />
               )}
-              Connecter
+              {t("integrations.actions.connect")}
             </Button>
           </DialogFooter>
         </DialogContent>

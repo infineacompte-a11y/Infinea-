@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -57,26 +58,22 @@ const categoryColors = {
   entrepreneurship: "text-orange-500 bg-orange-500/10",
 };
 
-const categoryLabels = {
-  learning: "Apprentissage",
-  productivity: "Productivité",
-  well_being: "Bien-être",
-};
-
-const premiumCategoryLabels = {
-  creativity: "Créativité",
-  fitness: "Fitness",
-  mindfulness: "Mindfulness",
-  leadership: "Leadership",
-  finance: "Finance",
-  relations: "Relations",
-  mental_health: "Santé mentale",
-  entrepreneurship: "Entrepreneuriat",
-};
+const freeCategories = ["learning", "productivity", "well_being"];
+const premiumCategories = [
+  "creativity",
+  "fitness",
+  "mindfulness",
+  "leadership",
+  "finance",
+  "relations",
+  "mental_health",
+  "entrepreneurship",
+];
 
 export default function ActionsLibrary() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [actions, setActions] = useState([]);
   const [customActions, setCustomActions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -97,7 +94,7 @@ export default function ActionsLibrary() {
       setActions(await actionsRes.json());
       if (customRes?.ok) setCustomActions(await customRes.json());
     } catch (error) {
-      toast.error("Impossible de charger les actions");
+      toast.error(t("actionsLibrary.errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -120,7 +117,7 @@ export default function ActionsLibrary() {
       navigate(`/session/${data.session_id}`, { state: { session: data } });
     } catch (error) {
       if (error.message.includes("Premium")) {
-        toast.error("Action Premium - Passez à Premium pour débloquer");
+        toast.error(t("actionsLibrary.errors.premiumRequired"));
         navigate("/pricing");
       } else {
         toast.error(error.message);
@@ -155,10 +152,10 @@ export default function ActionsLibrary() {
           <div className="mb-8 flex items-start justify-between">
             <div>
               <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="library-title">
-                Bibliothèque d'actions
+                {t("actionsLibrary.title")}
               </h1>
               <p className="text-muted-foreground">
-                Explorez toutes les micro-actions disponibles
+                {t("actionsLibrary.subtitle")}
               </p>
             </div>
             <Button
@@ -167,7 +164,7 @@ export default function ActionsLibrary() {
               data-testid="create-action-btn"
             >
               <Sparkles className="w-4 h-4 mr-2" />
-              Créer une action
+              {t("actionsLibrary.createAction")}
             </Button>
           </div>
 
@@ -175,7 +172,7 @@ export default function ActionsLibrary() {
           <Tabs value={activeCategory} onValueChange={setActiveCategory} className="mb-8">
             <TabsList className="bg-card border border-border p-1 h-auto flex-wrap">
               <TabsTrigger value="all" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg px-4 py-2">
-                Toutes
+                {t("actionsLibrary.tabs.all")}
               </TabsTrigger>
               <TabsTrigger
                 value="my_actions"
@@ -183,22 +180,22 @@ export default function ActionsLibrary() {
                 data-testid="tab-my-actions"
               >
                 <User className="w-3.5 h-3.5" />
-                Mes actions
+                {t("actionsLibrary.tabs.myActions")}
                 {customActions.length > 0 && (
                   <span className="ml-1 text-xs opacity-70">({customActions.length})</span>
                 )}
               </TabsTrigger>
-              {Object.entries(categoryLabels).map(([key, label]) => (
+              {freeCategories.map((key) => (
                 <TabsTrigger
                   key={key}
                   value={key}
                   className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg px-4 py-2"
                   data-testid={`tab-${key}`}
                 >
-                  {label}
+                  {t(`categories.${key}`)}
                 </TabsTrigger>
               ))}
-              {Object.entries(premiumCategoryLabels).map(([key, label]) => {
+              {premiumCategories.map((key) => {
                 const isPremium = user?.subscription_tier !== "premium";
                 return (
                   <TabsTrigger
@@ -212,7 +209,7 @@ export default function ActionsLibrary() {
                     ) : (
                       <Crown className="w-3 h-3 text-amber-500" />
                     )}
-                    {label}
+                    {t(`categories.${key}`)}
                   </TabsTrigger>
                 );
               })}
@@ -231,30 +228,29 @@ export default function ActionsLibrary() {
                 <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                   <Plus className="w-8 h-8 text-primary" />
                 </div>
-                <h3 className="font-heading text-xl mb-2">Aucune action personnalisée</h3>
+                <h3 className="font-heading text-xl mb-2">{t("actionsLibrary.empty.title")}</h3>
                 <p className="text-muted-foreground mb-6">
-                  Créez votre première action avec l'IA, elle apparaîtra ici.
+                  {t("actionsLibrary.empty.description")}
                 </p>
                 <Button
                   onClick={() => setShowCreateModal(true)}
                   className="rounded-xl"
                 >
                   <Sparkles className="w-4 h-4 mr-2" />
-                  Créer une action
+                  {t("actionsLibrary.createAction")}
                 </Button>
               </div>
             ) : (
               <div className="space-y-8 animate-fade-in" data-testid="my-actions-grouped">
                 {Object.entries(groupedCustomActions).map(([cat, catActions]) => {
                   const CatIcon = categoryIcons[cat] || Sparkles;
-                  const catLabel = categoryLabels[cat] || premiumCategoryLabels[cat] || cat;
                   return (
                     <div key={cat}>
                       <div className="flex items-center gap-2 mb-4">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${categoryColors[cat] || "bg-muted"}`}>
                           <CatIcon className="w-4 h-4" />
                         </div>
-                        <h2 className="font-heading font-semibold text-lg">{catLabel}</h2>
+                        <h2 className="font-heading font-semibold text-lg">{t(`categories.${cat}`)}</h2>
                         <Badge variant="secondary" className="text-xs">{catActions.length}</Badge>
                       </div>
                       <div className="grid md:grid-cols-2 gap-4">
@@ -277,12 +273,12 @@ export default function ActionsLibrary() {
                                       <div className="flex items-center gap-2 mb-1">
                                         <h3 className="font-medium">{action.title}</h3>
                                         <Badge className="text-xs bg-primary/20 text-primary border-primary/30">
-                                          Custom
+                                          {t("actionsLibrary.badges.custom")}
                                         </Badge>
                                       </div>
                                       <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{action.description}</p>
                                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                        <span>{action.duration_min}-{action.duration_max} min</span>
+                                        <span>{t("actionsLibrary.duration", { min: action.duration_min, max: action.duration_max })}</span>
                                         <span>•</span>
                                         <span className="capitalize">{action.energy_level}</span>
                                       </div>
@@ -325,7 +321,7 @@ export default function ActionsLibrary() {
                               <h3 className="font-medium">{action.title}</h3>
                               {action.is_custom && (
                                 <Badge className="text-xs bg-primary/20 text-primary border-primary/30">
-                                  Custom
+                                  {t("actionsLibrary.badges.custom")}
                                 </Badge>
                               )}
                               {action.is_premium && (
@@ -337,7 +333,7 @@ export default function ActionsLibrary() {
                             </div>
                             <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{action.description}</p>
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                              <span>{action.duration_min}-{action.duration_max} min</span>
+                              <span>{t("actionsLibrary.duration", { min: action.duration_min, max: action.duration_max })}</span>
                               <span>•</span>
                               <span className="capitalize">{action.energy_level}</span>
                             </div>
@@ -355,8 +351,8 @@ export default function ActionsLibrary() {
           {filteredActions.length === 0 && !isLoading && !isMyActions && (
             <div className="text-center py-20">
               <Sparkles className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="font-heading text-xl mb-2">Aucune action trouvée</h3>
-              <p className="text-muted-foreground">Essayez une autre catégorie</p>
+              <h3 className="font-heading text-xl mb-2">{t("actionsLibrary.noResults.title")}</h3>
+              <p className="text-muted-foreground">{t("actionsLibrary.noResults.description")}</p>
             </div>
           )}
         </div>

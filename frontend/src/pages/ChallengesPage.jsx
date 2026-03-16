@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,7 @@ const communityIconMap = {
 
 export default function ChallengesPage() {
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState("community");
   const [communityData, setCommunityData] = useState(null);
   const [premiumChallenges, setPremiumChallenges] = useState([]);
@@ -75,7 +77,7 @@ export default function ChallengesPage() {
         setPremiumChallenges(data.challenges || []);
       }
     } catch {
-      toast.error("Erreur de chargement");
+      toast.error(t("challenges.errorLoading"));
     } finally {
       setIsPremiumLoading(false);
     }
@@ -85,8 +87,8 @@ export default function ChallengesPage() {
   const communityTotal = (communityData?.challenges || []).length;
 
   const tabs = [
-    { key: "community", label: "Communauté", icon: Users },
-    { key: "premium", label: "Premium", icon: Crown },
+    { key: "community", label: t("challenges.tabs.community"), icon: Users },
+    { key: "premium", label: t("challenges.tabs.premium"), icon: Crown },
   ];
 
   return (
@@ -99,10 +101,10 @@ export default function ChallengesPage() {
             <div>
               <h1 className="font-heading text-2xl font-bold flex items-center gap-2">
                 <Trophy className="w-6 h-6 text-primary" />
-                Défis
+                {t("challenges.title")}
               </h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Relève des défis et progresse avec la communauté
+                {t("challenges.subtitle")}
               </p>
             </div>
             {communityCompleted > 0 && (
@@ -163,7 +165,7 @@ export default function ChallengesPage() {
                               <h3 className="font-medium text-sm">{ch.title}</h3>
                               {ch.completed && (
                                 <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
-                                  Complété
+                                  {t("challenges.completed")}
                                 </Badge>
                               )}
                             </div>
@@ -182,7 +184,7 @@ export default function ChallengesPage() {
                         <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/30">
                           <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                             <Users className="w-3 h-3" />
-                            {ch.participants_completed} participant{ch.participants_completed !== 1 ? "s" : ""} ont réussi
+                            {t("challenges.participantsCompleted", { count: ch.participants_completed })}
                           </div>
                           <span className="text-[10px] text-muted-foreground">{ch.reward}</span>
                         </div>
@@ -193,7 +195,7 @@ export default function ChallengesPage() {
               ) : (
                 <Card className="p-8 text-center">
                   <Trophy className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Aucun défi communautaire ce mois-ci</p>
+                  <p className="text-sm text-muted-foreground">{t("challenges.community.empty")}</p>
                 </Card>
               )}
             </div>
@@ -207,14 +209,14 @@ export default function ChallengesPage() {
                   <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
                     <Lock className="w-8 h-8 text-amber-500" />
                   </div>
-                  <h3 className="font-heading font-semibold text-lg mb-2">Défis Premium</h3>
+                  <h3 className="font-heading font-semibold text-lg mb-2">{t("challenges.premium.lockedTitle")}</h3>
                   <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-                    6 défis mensuels exclusifs avec badges et récompenses. Passe en Premium pour les débloquer.
+                    {t("challenges.premium.lockedDescription")}
                   </p>
                   <Link to="/pricing">
                     <Button className="gap-2">
                       <Crown className="w-4 h-4" />
-                      Découvrir Premium
+                      {t("challenges.premium.discoverPremium")}
                     </Button>
                   </Link>
                 </Card>
@@ -242,7 +244,7 @@ export default function ChallengesPage() {
                             <div className="flex items-center gap-2">
                               <h3 className="font-medium text-sm">{ch.title}</h3>
                               {ch.completed && (
-                                <Badge className="text-[9px] bg-amber-500/20 text-amber-500">Complété</Badge>
+                                <Badge className="text-[9px] bg-amber-500/20 text-amber-500">{t("challenges.completed")}</Badge>
                               )}
                             </div>
                             <p className="text-xs text-muted-foreground mt-0.5">{ch.description}</p>
@@ -257,7 +259,7 @@ export default function ChallengesPage() {
                         </div>
                         {ch.completed && ch.completed_at && (
                           <p className="text-[10px] text-muted-foreground mt-2">
-                            Complété le {new Date(ch.completed_at).toLocaleDateString("fr-FR")}
+                            {t("challenges.completedOn", { date: new Date(ch.completed_at).toLocaleDateString(i18n.language) })}
                           </p>
                         )}
                       </Card>
@@ -267,7 +269,7 @@ export default function ChallengesPage() {
               ) : (
                 <Card className="p-8 text-center">
                   <Trophy className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Aucun défi premium ce mois-ci</p>
+                  <p className="text-sm text-muted-foreground">{t("challenges.premium.empty")}</p>
                 </Card>
               )}
             </div>

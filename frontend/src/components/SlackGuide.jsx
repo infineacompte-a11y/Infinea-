@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,42 +26,43 @@ import {
 import { toast } from "sonner";
 import { API, authFetch } from "@/App";
 
-const STEPS = [
-  {
-    title: "Créer une app Slack",
-    icon: Plus,
-    instruction: "Rendez-vous sur l'API Slack et cliquez sur « Create New App » → « From scratch ». Donnez-lui un nom (ex: « InFinea ») et sélectionnez votre workspace.",
-    tip: "Si vous avez déjà une app Slack avec un webhook, passez directement à l'étape 3.",
-    action: {
-      label: "Ouvrir Slack API",
-      url: "https://api.slack.com/apps",
-    },
-  },
-  {
-    title: "Activer les Webhooks",
-    icon: Hash,
-    instruction: "Dans votre app, allez dans « Incoming Webhooks » dans le menu de gauche. Activez-les en cliquant sur le toggle « On ».",
-    tip: "Les Incoming Webhooks permettent à InFinea d'envoyer des messages dans un channel de votre choix.",
-  },
-  {
-    title: "Copier l'URL du webhook",
-    icon: Copy,
-    instruction: "Cliquez sur « Add New Webhook to Workspace », choisissez le channel où recevoir les notifications, puis copiez l'URL du webhook généré.",
-    tip: "L'URL commence par « https://hooks.slack.com/services/ ».",
-  },
-  {
-    title: "Coller l'URL ici",
-    icon: Link2,
-    instruction: "Collez l'URL du webhook dans le champ ci-dessous. InFinea vérifiera automatiquement la connexion.",
-    isInput: true,
-  },
-];
-
 export default function SlackGuide({ open, onOpenChange, onConnected }) {
+  const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(0);
   const [url, setUrl] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
   const [isValidUrl, setIsValidUrl] = useState(false);
+
+  const STEPS = [
+    {
+      title: t("components.slackGuide.steps.createApp.title"),
+      icon: Plus,
+      instruction: t("components.slackGuide.steps.createApp.instruction"),
+      tip: t("components.slackGuide.steps.createApp.tip"),
+      action: {
+        label: t("components.slackGuide.steps.createApp.actionLabel"),
+        url: "https://api.slack.com/apps",
+      },
+    },
+    {
+      title: t("components.slackGuide.steps.enableWebhooks.title"),
+      icon: Hash,
+      instruction: t("components.slackGuide.steps.enableWebhooks.instruction"),
+      tip: t("components.slackGuide.steps.enableWebhooks.tip"),
+    },
+    {
+      title: t("components.slackGuide.steps.copyWebhook.title"),
+      icon: Copy,
+      instruction: t("components.slackGuide.steps.copyWebhook.instruction"),
+      tip: t("components.slackGuide.steps.copyWebhook.tip"),
+    },
+    {
+      title: t("components.slackGuide.steps.pasteUrl.title"),
+      icon: Link2,
+      instruction: t("components.slackGuide.steps.pasteUrl.instruction"),
+      isInput: true,
+    },
+  ];
 
   const handleUrlChange = (value) => {
     setUrl(value);
@@ -83,14 +85,14 @@ export default function SlackGuide({ open, onOpenChange, onConnected }) {
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.detail || "Erreur de connexion");
+        throw new Error(err.detail || t("components.slackGuide.connectionError"));
       }
 
-      toast.success("Slack connecté avec succès !");
+      toast.success(t("components.slackGuide.connected"));
       onConnected?.();
       handleClose();
     } catch (error) {
-      toast.error(error.message || "Impossible de se connecter. Vérifiez l'URL et réessayez.");
+      toast.error(error.message || t("components.slackGuide.connectFailed"));
     } finally {
       setIsConnecting(false);
     }
@@ -115,10 +117,10 @@ export default function SlackGuide({ open, onOpenChange, onConnected }) {
             <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
               <MessageSquare className="w-4 h-4 text-purple-500" />
             </div>
-            Connecter Slack
+            {t("components.slackGuide.title")}
           </DialogTitle>
           <DialogDescription>
-            Suivez ces étapes pour connecter Slack à InFinea.
+            {t("components.slackGuide.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -145,7 +147,7 @@ export default function SlackGuide({ open, onOpenChange, onConnected }) {
               <StepIcon className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Étape {currentStep + 1}/{STEPS.length}</p>
+              <p className="text-xs text-muted-foreground">{t("common.stepOf", { current: currentStep + 1, total: STEPS.length })}</p>
               <h3 className="font-heading font-semibold">{step.title}</h3>
             </div>
           </div>
@@ -181,13 +183,13 @@ export default function SlackGuide({ open, onOpenChange, onConnected }) {
                   />
                   {url && !isValidUrl && (
                     <p className="text-xs text-red-400">
-                      L'URL doit commencer par « https://hooks.slack.com/services/ »
+                      {t("components.slackGuide.urlValidationError")}
                     </p>
                   )}
                   {isValidUrl && (
                     <p className="text-xs text-emerald-500 flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
-                      Format valide
+                      {t("common.validFormat")}
                     </p>
                   )}
                 </div>
@@ -205,7 +207,7 @@ export default function SlackGuide({ open, onOpenChange, onConnected }) {
                 className="gap-1"
               >
                 <ChevronLeft className="w-4 h-4" />
-                Précédent
+                {t("common.previous")}
               </Button>
             )}
             <div className="flex-1" />
@@ -219,12 +221,12 @@ export default function SlackGuide({ open, onOpenChange, onConnected }) {
                 {isConnecting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Connexion...
+                    {t("common.connecting")}
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    Connecter
+                    {t("common.connect")}
                   </>
                 )}
               </Button>
@@ -233,7 +235,7 @@ export default function SlackGuide({ open, onOpenChange, onConnected }) {
                 onClick={() => setCurrentStep((s) => s + 1)}
                 className="gap-1"
               >
-                Suivant
+                {t("common.next")}
                 <ChevronRight className="w-4 h-4" />
               </Button>
             )}
