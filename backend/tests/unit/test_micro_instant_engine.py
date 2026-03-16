@@ -24,6 +24,7 @@ from services.micro_instant_engine import (
     _collect_behavioral_patterns,
     _enrich_with_confidence,
     _deduplicate_windows,
+    _get_next_curriculum_steps,
     predict_micro_instants,
     record_instant_outcome,
     SOURCE_CONFIDENCE,
@@ -363,6 +364,124 @@ class TestDeduplicateWindows:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# _get_next_curriculum_steps — Objective → Micro-instant bridge (I.2)
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestGetNextCurriculumSteps:
+
+    def _make_objective(self, obj_id, steps, status="active"):
+        return {
+            "objective_id": obj_id,
+            "user_id": "u1",
+            "title": f"Objective {obj_id}",
+            "category": "learning",
+            "daily_minutes": 10,
+            "status": status,
+            "curriculum": steps,
+        }
+
+    def _make_step(self, index, completed=False):
+        return {
+            "step_index": index,
+            "day": index + 1,
+            "title": f"Step {index}",
+            "description": f"Do step {index}",
+            "focus": "practice",
+            "instructions": ["Do it"],
+            "duration_min": 7,
+            "duration_max": 12,
+            "difficulty": min(5, index // 7 + 1),
+            "review": False,
+            "completed": completed,
+        }
+
+    @pytest.mark.asyncio
+    async def test_returns_next_uncompleted_step(self, mock_db):
+        """Returns the first uncompleted step for an active objective."""
+        steps = [self._make_step(0, completed=True),
+                 self._make_step(1, completed=True),
+                 self._make_step(2, completed=False)]
+        await mock_db.objectives.insert_one(self._make_objective("obj1", steps))
+
+        result = await _get_next_curriculum_steps(mock_db, "u1")
+        assert len(result) == 1
+        assert result[0]["objective_id"] == "obj1"
+        assert result[0]["step"]["step_index"] == 2
+
+    @pytest.mark.asyncio
+    async def test_one_step_per_objective(self, mock_db):
+        """Returns at most one step per objective."""
+        steps = [self._make_step(0), self._make_step(1), self._make_step(2)]
+        await mock_db.objectives.insert_one(self._make_objective("obj1", steps))
+
+        result = await _get_next_curriculum_steps(mock_db, "u1")
+        assert len(result) == 1
+        assert result[0]["step"]["step_index"] == 0
+
+    @pytest.mark.asyncio
+    async def test_multiple_objectives(self, mock_db):
+        """Returns one step per active objective."""
+        await mock_db.objectives.insert_one(
+            self._make_objective("obj1", [self._make_step(0)])
+        )
+        await mock_db.objectives.insert_one(
+            self._make_objective("obj2", [self._make_step(0)])
+        )
+
+        result = await _get_next_curriculum_steps(mock_db, "u1")
+        assert len(result) == 2
+        obj_ids = {r["objective_id"] for r in result}
+        assert obj_ids == {"obj1", "obj2"}
+
+    @pytest.mark.asyncio
+    async def test_all_steps_completed_returns_nothing(self, mock_db):
+        """If all steps are completed, no step is returned for that objective."""
+        steps = [self._make_step(0, completed=True), self._make_step(1, completed=True)]
+        await mock_db.objectives.insert_one(self._make_objective("obj1", steps))
+
+        result = await _get_next_curriculum_steps(mock_db, "u1")
+        assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_inactive_objective_excluded(self, mock_db):
+        """Paused/completed objectives are not included."""
+        steps = [self._make_step(0)]
+        await mock_db.objectives.insert_one(
+            self._make_objective("obj1", steps, status="paused")
+        )
+
+        result = await _get_next_curriculum_steps(mock_db, "u1")
+        assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_empty_curriculum_excluded(self, mock_db):
+        """Objectives with no curriculum are excluded."""
+        await mock_db.objectives.insert_one(
+            self._make_objective("obj1", [])
+        )
+
+        result = await _get_next_curriculum_steps(mock_db, "u1")
+        assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_no_objectives_returns_empty(self, mock_db):
+        result = await _get_next_curriculum_steps(mock_db, "u1")
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_step_data_includes_objective_context(self, mock_db):
+        """Returned data includes objective title, category, daily_minutes."""
+        steps = [self._make_step(0)]
+        await mock_db.objectives.insert_one(self._make_objective("obj1", steps))
+
+        result = await _get_next_curriculum_steps(mock_db, "u1")
+        assert result[0]["objective_title"] == "Objective obj1"
+        assert result[0]["category"] == "learning"
+        assert result[0]["daily_minutes"] == 10
+
+
+# ═══════════════════════════════════════════════════════════════════
 # predict_micro_instants — Full pipeline
 # ═══════════════════════════════════════════════════════════════════
 
@@ -441,6 +560,132 @@ class TestPredictMicroInstants:
         )
         for instant in result:
             assert instant["confidence_score"] >= MIN_CONFIDENCE
+
+
+# ═══════════════════════════════════════════════════════════════════
+# _assign_actions — Priority 2: objective steps in windows (I.2)
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestAssignActionsWithCurriculum:
+    """Verify curriculum steps are assigned to micro-instant windows (Priority 2)."""
+
+    @pytest.mark.asyncio
+    async def test_curriculum_step_assigned_to_window(self, mock_db):
+        """Window gets objective_step when curriculum exists and no SR review."""
+        from services.micro_instant_engine import _assign_actions
+
+        # Seed an active objective with uncompleted curriculum step
+        await mock_db.objectives.insert_one({
+            "objective_id": "obj_test_1",
+            "user_id": "u1",
+            "title": "Apprendre le thaï",
+            "category": "learning",
+            "daily_minutes": 10,
+            "status": "active",
+            "curriculum": [{
+                "step_index": 0,
+                "day": 1,
+                "title": "Les salutations",
+                "description": "Apprendre bonjour, merci, au revoir",
+                "focus": "vocabulaire",
+                "instructions": ["Écoute", "Répète"],
+                "duration_min": 7,
+                "duration_max": 12,
+                "difficulty": 1,
+                "review": False,
+                "completed": False,
+            }],
+        })
+
+        windows = [{
+            "window_start": "2030-06-01T10:00:00+00:00",
+            "window_end": "2030-06-01T10:15:00+00:00",
+            "duration_minutes": 15,
+            "source": "routine_window",
+            "base_confidence": 0.7,
+            "confidence_score": 0.7,
+            "context": {"time_bucket": "morning"},
+        }]
+
+        result = await _assign_actions(mock_db, "u1", windows)
+        assert len(result) == 1
+        action = result[0]["recommended_action"]
+        assert action is not None
+        assert action["type"] == "objective_step"
+        assert action["objective_id"] == "obj_test_1"
+        assert action["title"] == "Les salutations"
+        assert action["step_index"] == 0
+
+    @pytest.mark.asyncio
+    async def test_curriculum_step_skipped_if_window_too_small(self, mock_db):
+        """If window duration is less than step's duration_min, step is not assigned."""
+        from services.micro_instant_engine import _assign_actions
+
+        await mock_db.objectives.insert_one({
+            "objective_id": "obj_test_2",
+            "user_id": "u1",
+            "title": "Piano",
+            "category": "learning",
+            "daily_minutes": 10,
+            "status": "active",
+            "curriculum": [{
+                "step_index": 0, "day": 1, "title": "Gammes",
+                "description": "Gammes majeures", "focus": "technique",
+                "instructions": ["Joue"], "duration_min": 7, "duration_max": 12,
+                "difficulty": 1, "review": False, "completed": False,
+            }],
+        })
+
+        windows = [{
+            "window_start": "2030-06-01T10:00:00+00:00",
+            "window_end": "2030-06-01T10:05:00+00:00",
+            "duration_minutes": 5,  # Too small for 7-min step
+            "source": "calendar_gap",
+            "base_confidence": 0.9,
+            "confidence_score": 0.9,
+            "context": {"time_bucket": "morning"},
+        }]
+
+        result = await _assign_actions(mock_db, "u1", windows)
+        action = result[0].get("recommended_action")
+        # Should NOT be objective_step (window too small)
+        assert action is None or action.get("type") != "objective_step"
+
+    @pytest.mark.asyncio
+    async def test_confidence_boosted_for_objective_step(self, mock_db):
+        """Objective steps get a 10% confidence boost."""
+        from services.micro_instant_engine import _assign_actions
+
+        await mock_db.objectives.insert_one({
+            "objective_id": "obj_boost",
+            "user_id": "u1",
+            "title": "Yoga",
+            "category": "wellness",
+            "daily_minutes": 10,
+            "status": "active",
+            "curriculum": [{
+                "step_index": 0, "day": 1, "title": "Salutation au soleil",
+                "description": "Séquence de base", "focus": "flexibilité",
+                "instructions": ["Respire", "Étire"], "duration_min": 7,
+                "duration_max": 12, "difficulty": 1, "review": False,
+                "completed": False,
+            }],
+        })
+
+        windows = [{
+            "window_start": "2030-06-01T10:00:00+00:00",
+            "window_end": "2030-06-01T10:15:00+00:00",
+            "duration_minutes": 15,
+            "source": "routine_window",
+            "base_confidence": 0.7,
+            "confidence_score": 0.7,
+            "context": {"time_bucket": "morning"},
+        }]
+
+        result = await _assign_actions(mock_db, "u1", windows)
+        # 0.7 * 1.10 = 0.77
+        assert result[0]["confidence_score"] == pytest.approx(0.77, abs=0.01)
 
 
 # ═══════════════════════════════════════════════════════════════════

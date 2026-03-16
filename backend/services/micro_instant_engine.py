@@ -395,12 +395,42 @@ async def _enrich_with_confidence(
 # ═══════════════════════════════════════════════════════════════════
 
 
+async def _get_next_curriculum_steps(db, user_id: str) -> List[Dict]:
+    """
+    Fetch the next uncompleted curriculum step for each active objective.
+    Returns one step per objective, ordered by objective creation date.
+    """
+    objectives = await db.objectives.find(
+        {"user_id": user_id, "status": "active", "curriculum": {"$exists": True, "$ne": []}},
+        {"_id": 0, "objective_id": 1, "title": 1, "category": 1,
+         "daily_minutes": 1, "curriculum": 1},
+    ).to_list(10)
+
+    steps = []
+    for obj in objectives:
+        curriculum = obj.get("curriculum", [])
+        # Find next uncompleted step (by step_index order)
+        sorted_steps = sorted(curriculum, key=lambda s: s.get("step_index", 0))
+        for step in sorted_steps:
+            if not step.get("completed", False):
+                steps.append({
+                    "objective_id": obj["objective_id"],
+                    "objective_title": obj.get("title", ""),
+                    "category": obj.get("category", "learning"),
+                    "step": step,
+                    "daily_minutes": obj.get("daily_minutes", 10),
+                })
+                break  # One step per objective
+
+    return steps
+
+
 async def _assign_actions(
     db, user_id: str, windows: List[Dict], user_subscription: str = "free"
 ) -> List[Dict]:
     """
     For each window, find the best action using the scoring engine.
-    Incorporates SR urgency: if a review is due, it takes priority.
+    Priority chain: SR reviews > curriculum steps > scoring engine.
     """
     from services.scoring_engine import get_next_best_action
     from services.spaced_repetition import get_review_queue
@@ -426,6 +456,9 @@ async def _assign_actions(
     # Sort SR by urgency (most overdue first)
     sr_urgent.sort(key=lambda r: r["days_overdue"], reverse=True)
 
+    # Fetch next curriculum steps for active objectives
+    curriculum_steps = await _get_next_curriculum_steps(db, user_id)
+
     assigned_action_ids = set()  # Track to avoid duplicates across windows
 
     for w in windows:
@@ -446,7 +479,34 @@ async def _assign_actions(
             sr_urgent.pop(0)  # Consume this review
             continue
 
-        # Priority 2: Scoring engine picks the best action
+        # Priority 2: Next curriculum step from active objectives
+        if curriculum_steps:
+            cs = curriculum_steps[0]
+            step = cs["step"]
+            step_duration_min = step.get("duration_min", max(2, cs["daily_minutes"] - 3))
+
+            # Only assign if step fits the window
+            if step_duration_min <= w["duration_minutes"]:
+                w["recommended_action"] = {
+                    "type": "objective_step",
+                    "objective_id": cs["objective_id"],
+                    "objective_title": cs["objective_title"],
+                    "category": cs["category"],
+                    "step_index": step.get("step_index", 0),
+                    "title": step.get("title", ""),
+                    "description": step.get("description", ""),
+                    "focus": step.get("focus", ""),
+                    "instructions": step.get("instructions", []),
+                    "duration_min": step_duration_min,
+                    "duration_max": step.get("duration_max", cs["daily_minutes"] + 2),
+                    "difficulty": step.get("difficulty", 1),
+                }
+                # Boost confidence: user explicitly committed to this objective
+                w["confidence_score"] = min(w.get("confidence_score", 0.5) * 1.10, 1.0)
+                curriculum_steps.pop(0)  # Consume this step
+                continue
+
+        # Priority 3: Scoring engine picks the best action
         try:
             best = await get_next_best_action(
                 db, user_id,
@@ -477,7 +537,7 @@ async def _assign_actions(
         except Exception as e:
             logger.warning(f"Scoring failed for window: {e}")
 
-        # Priority 3: No action found — mark window as available
+        # Priority 4: No action found — mark window as available
         w["recommended_action"] = None
 
     return windows
