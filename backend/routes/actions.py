@@ -4,31 +4,40 @@ Browse action library, custom actions, get action details.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 
 from database import db
 from auth import get_current_user
 from models import MicroAction
+from config import limiter
 
 router = APIRouter()
 
 
 @router.get("/actions", response_model=List[MicroAction])
+@limiter.limit("30/minute")
 async def get_actions(
+    request: Request,
     category: Optional[str] = None,
     duration: Optional[int] = None,
-    energy: Optional[str] = None
+    energy: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 50
 ):
+    # Cap limit to prevent abuse (max 200 per request)
+    limit = min(max(limit, 1), 200)
+    skip = max(skip, 0)
+
     query = {}
     if category:
         query["category"] = category
     if energy:
         query["energy_level"] = energy
-
-    actions = await db.micro_actions.find(query, {"_id": 0}).to_list(5000)
-
     if duration:
-        actions = [a for a in actions if a["duration_min"] <= duration <= a["duration_max"]]
+        query["duration_min"] = {"$lte": duration}
+        query["duration_max"] = {"$gte": duration}
+
+    actions = await db.micro_actions.find(query, {"_id": 0}).skip(skip).limit(limit).to_list(limit)
 
     return actions
 
@@ -42,7 +51,8 @@ async def get_custom_actions(user: dict = Depends(get_current_user)):
     return actions
 
 @router.get("/actions/{action_id}")
-async def get_action(action_id: str):
+@limiter.limit("60/minute")
+async def get_action(request: Request, action_id: str):
     action = await db.micro_actions.find_one({"action_id": action_id}, {"_id": 0})
     if not action:
         raise HTTPException(status_code=404, detail="Action not found")

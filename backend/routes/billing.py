@@ -244,23 +244,6 @@ async def create_customer_portal(
         logger.error(f"Portal creation error: {e}")
         raise HTTPException(status_code=500, detail="Failed to create portal session")
 
-# ============== FREE PREMIUM ACTIVATION (temporary — remove when Stripe is ready) ==============
-
-@router.post("/premium/activate-free")
-async def activate_premium_free(user: dict = Depends(get_current_user)):
-    """Temporary route: activate premium for any logged-in user without payment"""
-    if user.get("subscription_tier") == "premium":
-        return {"status": "already_premium", "message": "Vous êtes déjà Premium"}
-    await db.users.update_one(
-        {"user_id": user["user_id"]},
-        {"$set": {
-            "subscription_tier": "premium",
-            "subscription_started_at": datetime.now(timezone.utc).isoformat(),
-        }}
-    )
-    logger.info(f"Free premium activated for user {user['user_id']} ({user.get('email')})")
-    return {"status": "success", "message": "Premium activé avec succès"}
-
 # ============== PROMO CODE ROUTES ==============
 
 @router.post("/promo/redeem")

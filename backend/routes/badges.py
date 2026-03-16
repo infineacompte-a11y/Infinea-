@@ -253,7 +253,8 @@ async def check_and_award_badges(user_id: str) -> List[dict]:
     return new_badges
 
 @router.get("/badges")
-async def get_all_badges():
+@limiter.limit("30/minute")
+async def get_all_badges(request: Request):
     """Get all available badges"""
     return BADGES
 
