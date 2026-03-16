@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Loader2, ArrowRight, Zap } from "lucide-react";
 import ShareCard from "@/components/ShareCard";
+import { useTranslation } from "react-i18next";
 
 /**
  * PublicSharePage — Public page displaying a shared progression card.
@@ -17,6 +18,7 @@ import ShareCard from "@/components/ShareCard";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
 
 export default function PublicSharePage() {
+  const { t } = useTranslation();
   const { shareId } = useParams();
   const [share, setShare] = useState(null);
   const [error, setError] = useState(null);
@@ -61,17 +63,17 @@ export default function PublicSharePage() {
           <Zap className="w-7 h-7 text-[hsl(239,84%,67%)]" />
         </div>
         <h1 className="text-white text-xl font-bold mb-2">
-          {error === "expired" ? "Ce partage a expiré" : "Partage introuvable"}
+          {error === "expired" ? t("publicShare.expired") : t("publicShare.notFound")}
         </h1>
         <p className="text-white/50 text-sm mb-6 max-w-xs">
           {error === "expired"
-            ? "Les liens de partage expirent après 90 jours."
-            : "Ce lien n'existe pas ou a été supprimé."}
+            ? t("publicShare.expiredDescription")
+            : t("publicShare.notFoundDescription")}
         </p>
         <Link to="/">
           <Button className="gap-2">
             <Zap className="w-4 h-4" />
-            Découvrir InFinea
+            {t("publicShare.discoverInfinea")}
           </Button>
         </Link>
       </div>
@@ -79,7 +81,7 @@ export default function PublicSharePage() {
   }
 
   const snapshot = share?.snapshot || share;
-  const authorName = share?.author?.name || "Un utilisateur InFinea";
+  const authorName = share?.author?.name || t("publicShare.defaultAuthor");
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex flex-col items-center justify-center px-4 py-12">
@@ -91,16 +93,16 @@ export default function PublicSharePage() {
       {/* CTA */}
       <div className="text-center max-w-sm">
         <p className="text-white/40 text-sm mb-4">
-          {authorName} investit ses micro-instants avec InFinea.
+          {t("publicShare.authorInvests", { name: authorName })}
         </p>
         <Link to="/register">
           <Button size="lg" className="gap-2 px-8">
-            Essaie InFinea gratuitement
+            {t("publicShare.tryFree")}
             <ArrowRight className="w-4 h-4" />
           </Button>
         </Link>
         <p className="text-white/20 text-[10px] mt-4">
-          Transforme tes instants perdus en micro-victoires
+          {t("publicShare.tagline")}
         </p>
       </div>
     </div>

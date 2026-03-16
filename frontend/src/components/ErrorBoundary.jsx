@@ -1,4 +1,5 @@
 import React from "react";
+import { withTranslation } from "react-i18next";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -41,6 +42,8 @@ class ErrorBoundary extends React.Component {
         return this.props.fallback;
       }
 
+      const { t } = this.props;
+
       return (
         <div className="flex items-center justify-center py-16 px-4">
           <Card className="max-w-md w-full border-destructive/20">
@@ -49,14 +52,14 @@ class ErrorBoundary extends React.Component {
                 <AlertTriangle className="w-7 h-7 text-destructive" />
               </div>
               <h3 className="text-lg font-semibold text-foreground mb-2">
-                Une erreur est survenue
+                {t("components.errorBoundary.title")}
               </h3>
               <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-                Cette section a rencontré un problème. Tes données sont intactes.
+                {t("components.errorBoundary.description")}
               </p>
               <Button onClick={this.handleReset} variant="outline" className="gap-2">
                 <RefreshCw className="w-4 h-4" />
-                Réessayer
+                {t("components.errorBoundary.retry")}
               </Button>
             </CardContent>
           </Card>
@@ -68,4 +71,4 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-export default ErrorBoundary;
+export default withTranslation()(ErrorBoundary);

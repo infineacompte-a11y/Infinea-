@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,9 +33,9 @@ import { toast } from "sonner";
 
 // ─── Time of day helpers ──────────────────────────────────
 const TIME_SECTIONS = [
-  { key: "morning", label: "Matin", icon: Sunrise, color: "text-amber-500", bgColor: "bg-amber-500/10" },
-  { key: "afternoon", label: "Après-midi", icon: Sun, color: "text-orange-500", bgColor: "bg-orange-500/10" },
-  { key: "evening", label: "Soir", icon: Moon, color: "text-indigo-500", bgColor: "bg-indigo-500/10" },
+  { key: "morning", icon: Sunrise, color: "text-amber-500", bgColor: "bg-amber-500/10" },
+  { key: "afternoon", icon: Sun, color: "text-orange-500", bgColor: "bg-orange-500/10" },
+  { key: "evening", icon: Moon, color: "text-indigo-500", bgColor: "bg-indigo-500/10" },
 ];
 
 function getCurrentTimeOfDay() {
@@ -44,16 +45,17 @@ function getCurrentTimeOfDay() {
   return "evening";
 }
 
-function getGreeting(name) {
+function getGreeting(t, name) {
   const h = new Date().getHours();
-  const first = name?.split(" ")[0] || "";
-  if (h < 12) return `Bonjour${first ? ` ${first}` : ""} !`;
-  if (h < 18) return `Bon après-midi${first ? ` ${first}` : ""} !`;
-  return `Bonsoir${first ? ` ${first}` : ""} !`;
+  const first = name?.split(" ")[0];
+  const key = h < 12 ? "morning" : h < 18 ? "afternoon" : "evening";
+  return first
+    ? t(`myDay.greeting.${key}Name`, { name: first })
+    : t(`myDay.greeting.${key}`);
 }
 
-function formatDate() {
-  return new Date().toLocaleDateString("fr-FR", {
+function formatDate(lng) {
+  return new Date().toLocaleDateString(lng || "fr", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -65,7 +67,7 @@ function todayISO() {
 }
 
 // ─── Smart CTAs — contextual actions based on day state ───
-function SmartCTAs({ routines, objectives, routinesCompletedToday, todaySessions, navigate }) {
+function SmartCTAs({ routines, objectives, routinesCompletedToday, todaySessions, navigate, t }) {
   const allRoutinesDone = routines.length > 0 && routinesCompletedToday.length >= routines.length;
   const hasRoutines = routines.length > 0;
   const hasObjectives = objectives.length > 0;
@@ -90,7 +92,7 @@ function SmartCTAs({ routines, objectives, routinesCompletedToday, todaySessions
   if (allRoutinesDone && todaySessions.length > 0) {
     // Everything done — celebrate
     actions.push({
-      label: "Voir ma progression",
+      label: t("myDay.smartCta.viewProgress"),
       icon: Trophy,
       variant: "default",
       className: "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0",
@@ -98,7 +100,7 @@ function SmartCTAs({ routines, objectives, routinesCompletedToday, todaySessions
     });
     if (priorityObjective?.nextStep) {
       actions.push({
-        label: `Bonus : ${priorityObjective.nextStep.title}`,
+        label: t("myDay.smartCta.bonus", { title: priorityObjective.nextStep.title }),
         sublabel: priorityObjective.title,
         icon: Sparkles,
         variant: "outline",
@@ -109,13 +111,13 @@ function SmartCTAs({ routines, objectives, routinesCompletedToday, todaySessions
   } else if (!hasRoutines && !hasObjectives) {
     // Nothing set up
     actions.push({
-      label: "Créer mon premier objectif",
+      label: t("myDay.smartCta.createFirstObjective"),
       icon: Target,
       variant: "default",
       onClick: () => navigate("/objectives"),
     });
     actions.push({
-      label: "Créer une routine",
+      label: t("myDay.smartCta.createRoutine"),
       icon: CalendarClock,
       variant: "outline",
       onClick: () => navigate("/routines"),
@@ -124,15 +126,15 @@ function SmartCTAs({ routines, objectives, routinesCompletedToday, todaySessions
     // Normal day — smart next action
     if (nextRoutine) {
       actions.push({
-        label: `Lancer : ${nextRoutine.name}`,
-        sublabel: `${nextRoutine.total_minutes || 0} min · ${(nextRoutine.items || []).length} actions`,
+        label: t("myDay.smartCta.launch", { name: nextRoutine.name }),
+        sublabel: t("myDay.smartCta.launchSublabel", { minutes: nextRoutine.total_minutes || 0, count: (nextRoutine.items || []).length }),
         icon: Play,
         variant: "default",
         onClick: () => navigate("/routines"),
       });
     } else if (!hasRoutines) {
       actions.push({
-        label: "Planifier des routines",
+        label: t("myDay.smartCta.planRoutines"),
         icon: CalendarClock,
         variant: "outline",
         className: "border-primary/30",
@@ -142,8 +144,8 @@ function SmartCTAs({ routines, objectives, routinesCompletedToday, todaySessions
 
     if (priorityObjective?.nextStep) {
       actions.push({
-        label: `Continuer : ${priorityObjective.title}`,
-        sublabel: `Prochaine session — ${priorityObjective.nextStep.title}`,
+        label: t("myDay.smartCta.continue", { title: priorityObjective.title }),
+        sublabel: t("myDay.smartCta.nextSessionSub", { title: priorityObjective.nextStep.title }),
         icon: Target,
         variant: nextRoutine ? "outline" : "default",
         className: nextRoutine ? "border-primary/30" : "",
@@ -151,7 +153,7 @@ function SmartCTAs({ routines, objectives, routinesCompletedToday, todaySessions
       });
     } else if (!hasObjectives) {
       actions.push({
-        label: "Définir un objectif",
+        label: t("myDay.smartCta.defineObjective"),
         icon: Target,
         variant: "outline",
         className: "border-primary/30",
@@ -166,8 +168,8 @@ function SmartCTAs({ routines, objectives, routinesCompletedToday, todaySessions
     <div className="mt-8 pt-5 border-t border-border/30">
       <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium mb-3 text-center">
         {allRoutinesDone && todaySessions.length > 0
-          ? "Journée accomplie"
-          : "Prochaine action recommandée"}
+          ? t("myDay.smartCta.dayComplete")
+          : t("myDay.smartCta.nextRecommended")}
       </p>
       <div className="space-y-2">
         {actions.map((action, i) => {
@@ -199,14 +201,14 @@ function SmartCTAs({ routines, objectives, routinesCompletedToday, todaySessions
 
 // ─── Micro-Instants Section ───────────────────────────────
 const MI_SOURCE_CONFIG = {
-  calendar_gap: { icon: Calendar, label: "Calendrier", color: "text-blue-400", bgColor: "bg-blue-500/10" },
-  routine_window: { icon: Repeat, label: "Routine", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
-  behavioral_pattern: { icon: TrendingUp, label: "Pattern", color: "text-purple-400", bgColor: "bg-purple-500/10" },
+  calendar_gap: { icon: Calendar, key: "calendar", color: "text-blue-400", bgColor: "bg-blue-500/10" },
+  routine_window: { icon: Repeat, key: "routine", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+  behavioral_pattern: { icon: TrendingUp, key: "pattern", color: "text-purple-400", bgColor: "bg-purple-500/10" },
 };
 
-function formatInstantTime(isoString) {
+function formatInstantTime(isoString, lng) {
   if (!isoString) return "";
-  return new Date(isoString).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  return new Date(isoString).toLocaleTimeString(lng || "fr", { hour: "2-digit", minute: "2-digit" });
 }
 
 function isInstantActive(instant) {
@@ -218,7 +220,7 @@ function isInstantPast(instant) {
   return new Date() > new Date(instant.window_end);
 }
 
-function MicroInstantsSection({ instants, onExploit, onSkip, loadingId, navigate }) {
+function MicroInstantsSection({ instants, onExploit, onSkip, loadingId, navigate, t, lng }) {
   // Only show active (now) or future instants that haven't been acted on
   const visible = instants.filter(
     (i) => !i._exploited && !i._skipped && !isInstantPast(i)
@@ -232,10 +234,10 @@ function MicroInstantsSection({ instants, onExploit, onSkip, loadingId, navigate
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Timer className="w-5 h-5 text-primary" />
-          <h2 className="text-sm font-semibold">Micro-instants</h2>
+          <h2 className="text-sm font-semibold">{t("myDay.microInstants.title")}</h2>
           {visible.length > 0 && (
             <Badge className="text-[9px] bg-primary/10 text-primary border-primary/20 h-4 px-1.5">
-              {visible.length} dispo
+              {t("myDay.microInstants.available", { count: visible.length })}
             </Badge>
           )}
         </div>
@@ -245,7 +247,7 @@ function MicroInstantsSection({ instants, onExploit, onSkip, loadingId, navigate
           className="text-xs text-muted-foreground h-7 gap-1"
           onClick={() => navigate("/micro-instants")}
         >
-          Tout voir
+          {t("myDay.microInstants.viewAll")}
           <ChevronRight className="w-3 h-3" />
         </Button>
       </div>
@@ -274,7 +276,7 @@ function MicroInstantsSection({ instants, onExploit, onSkip, loadingId, navigate
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <p className="text-sm font-medium truncate">
-                        {action.title || "Action recommandée"}
+                        {action.title || t("myDay.microInstants.recommendedAction")}
                       </p>
                       {isNow && (
                         <Badge className="bg-primary/20 text-primary text-[8px] px-1 py-0 shrink-0 animate-pulse">
@@ -285,7 +287,7 @@ function MicroInstantsSection({ instants, onExploit, onSkip, loadingId, navigate
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {formatInstantTime(instant.window_start)} – {formatInstantTime(instant.window_end)}
+                        {formatInstantTime(instant.window_start, lng)} – {formatInstantTime(instant.window_end, lng)}
                       </span>
                       {instant.duration_minutes && (
                         <span>{instant.duration_minutes} min</span>
@@ -328,7 +330,7 @@ function MicroInstantsSection({ instants, onExploit, onSkip, loadingId, navigate
         {acted.length > 0 && (
           <p className="text-[11px] text-emerald-500 flex items-center gap-1 pl-1 pt-1">
             <CheckCircle2 className="w-3 h-3" />
-            {acted.length} micro-instant{acted.length > 1 ? "s" : ""} exploité{acted.length > 1 ? "s" : ""} aujourd'hui
+            {t("myDay.microInstants.exploited", { count: acted.length })}
           </p>
         )}
       </div>
@@ -338,6 +340,7 @@ function MicroInstantsSection({ instants, onExploit, onSkip, loadingId, navigate
 
 // ─── Main Page ────────────────────────────────────────────
 export default function MyDayPage() {
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [routines, setRoutines] = useState([]);
@@ -373,11 +376,11 @@ export default function MyDayPage() {
         setMicroInstants(data.instants || []);
       }
     } catch {
-      toast.error("Erreur de chargement");
+      toast.error(t("myDay.errors.loading"));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -395,10 +398,10 @@ export default function MyDayPage() {
               : r
           )
         );
-        toast.success("Routine complétée !");
+        toast.success(t("myDay.routine.completedToast"));
       }
     } catch {
-      toast.error("Erreur");
+      toast.error(t("myDay.errors.generic"));
     }
   };
 
@@ -415,10 +418,10 @@ export default function MyDayPage() {
         setMicroInstants((prev) =>
           prev.map((i) => i.instant_id === instantId ? { ...i, _exploited: true } : i)
         );
-        toast.success("Micro-instant exploité !");
+        toast.success(t("myDay.microInstants.exploitedToast"));
       }
     } catch {
-      toast.error("Erreur réseau");
+      toast.error(t("myDay.errors.network"));
     } finally {
       setMiActionLoading(null);
     }
@@ -483,10 +486,10 @@ export default function MyDayPage() {
           {/* Header */}
           <div className="mb-6">
             <h1 className="font-heading text-2xl font-bold">
-              {getGreeting(user?.name)}
+              {getGreeting(t, user?.name)}
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5 capitalize">
-              {formatDate()}
+              {formatDate(i18n.language)}
             </p>
           </div>
 
@@ -499,19 +502,19 @@ export default function MyDayPage() {
                 <Zap className="w-10 h-10 text-primary" />
               </div>
               <h3 className="font-heading font-semibold text-lg mb-2">
-                Ta journée est vide
+                {t("myDay.empty.title")}
               </h3>
               <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto leading-relaxed">
-                Crée un objectif ou une routine pour structurer ta journée et suivre tes micro-avancements.
+                {t("myDay.empty.description")}
               </p>
               <div className="flex items-center justify-center gap-3">
                 <Button onClick={() => navigate("/objectives")} variant="outline" className="gap-2">
                   <Target className="w-4 h-4" />
-                  Objectifs
+                  {t("myDay.empty.objectives")}
                 </Button>
                 <Button onClick={() => navigate("/routines")} className="gap-2">
                   <CalendarClock className="w-4 h-4" />
-                  Routines
+                  {t("myDay.empty.routines")}
                 </Button>
               </div>
             </Card>
@@ -524,21 +527,21 @@ export default function MyDayPage() {
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   </div>
                   <p className="text-xl font-bold tabular-nums">{todaySessions.length}</p>
-                  <p className="text-[10px] text-muted-foreground">Sessions</p>
+                  <p className="text-[10px] text-muted-foreground">{t("myDay.stats.sessions")}</p>
                 </Card>
                 <Card className="p-3 text-center">
                   <div className="flex items-center justify-center gap-1.5 mb-1">
                     <Clock className="w-4 h-4 text-blue-500" />
                   </div>
                   <p className="text-xl font-bold tabular-nums">{todayMinutes}</p>
-                  <p className="text-[10px] text-muted-foreground">Minutes</p>
+                  <p className="text-[10px] text-muted-foreground">{t("myDay.stats.minutes")}</p>
                 </Card>
                 <Card className="p-3 text-center">
                   <div className="flex items-center justify-center gap-1.5 mb-1">
                     <Flame className="w-4 h-4 text-orange-500" />
                   </div>
                   <p className="text-xl font-bold tabular-nums">{stats?.streak_days || 0}</p>
-                  <p className="text-[10px] text-muted-foreground">Streak</p>
+                  <p className="text-[10px] text-muted-foreground">{t("myDay.stats.streak")}</p>
                 </Card>
               </div>
 
@@ -549,15 +552,17 @@ export default function MyDayPage() {
                 onSkip={handleMiSkip}
                 loadingId={miActionLoading}
                 navigate={navigate}
+                t={t}
+                lng={i18n.language}
               />
 
               {/* ── Progression du jour ───────────── */}
               {totalPlannedMin > 0 && (
                 <Card className="p-4 mb-6">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">Progression du jour</span>
+                    <span className="text-sm font-medium">{t("myDay.progress.title")}</span>
                     <span className="text-xs text-muted-foreground">
-                      {routinesCompletedToday.length}/{routines.length} routines
+                      {routinesCompletedToday.length}/{routines.length} {t("myDay.progress.routines")}
                     </span>
                   </div>
                   <Progress
@@ -565,8 +570,8 @@ export default function MyDayPage() {
                     className="h-2.5"
                   />
                   <div className="flex items-center justify-between mt-1.5 text-[11px] text-muted-foreground">
-                    <span>{todayMinutes} min investies</span>
-                    <span>{totalPlannedMin} min planifiées</span>
+                    <span>{t("myDay.progress.minutesInvested", { count: todayMinutes })}</span>
+                    <span>{t("myDay.progress.minutesPlanned", { count: totalPlannedMin })}</span>
                   </div>
                 </Card>
               )}
@@ -586,10 +591,10 @@ export default function MyDayPage() {
                         <div className={`w-7 h-7 rounded-lg ${section.bgColor} flex items-center justify-center`}>
                           <SectionIcon className={`w-4 h-4 ${section.color}`} />
                         </div>
-                        <h2 className="text-sm font-semibold">{section.label}</h2>
+                        <h2 className="text-sm font-semibold">{t(`myDay.timeOfDay.${section.key}`)}</h2>
                         {isCurrent && (
                           <Badge className="text-[9px] bg-primary/10 text-primary border-primary/20 h-4 px-1.5">
-                            Maintenant
+                            {t("myDay.now")}
                           </Badge>
                         )}
                       </div>
@@ -617,7 +622,7 @@ export default function MyDayPage() {
                                     </span>
                                     <span className="flex items-center gap-1">
                                       <Play className="w-3 h-3" />
-                                      {(routine.items || []).length} actions
+                                      {(routine.items || []).length} {t("myDay.routine.actions")}
                                     </span>
                                   </div>
                                 </div>
@@ -629,11 +634,11 @@ export default function MyDayPage() {
                                     onClick={() => handleCompleteRoutine(routine)}
                                   >
                                     <CheckCircle2 className="w-3.5 h-3.5" />
-                                    Fait
+                                    {t("myDay.routine.done")}
                                   </Button>
                                 ) : (
                                   <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/20 shrink-0">
-                                    Complétée
+                                    {t("myDay.routine.completed")}
                                   </Badge>
                                 )}
                               </div>
@@ -652,7 +657,7 @@ export default function MyDayPage() {
                                   ))}
                                   {(routine.items || []).length > 3 && (
                                     <p className="text-[10px] text-muted-foreground/60 pl-6">
-                                      +{(routine.items || []).length - 3} autres
+                                      {t("myDay.routine.moreItems", { count: (routine.items || []).length - 3 })}
                                     </p>
                                   )}
                                 </div>
@@ -671,7 +676,7 @@ export default function MyDayPage() {
                 <div>
                   <div className="flex items-center gap-2 mb-3">
                     <Target className="w-5 h-5 text-primary" />
-                    <h2 className="text-sm font-semibold">Mes objectifs en cours</h2>
+                    <h2 className="text-sm font-semibold">{t("myDay.objectives.title")}</h2>
                   </div>
 
                   <div className="space-y-2.5">
@@ -687,7 +692,7 @@ export default function MyDayPage() {
                               {obj.title}
                             </h3>
                             <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                              <span>Jour {obj.current_day || 0}/{obj.target_duration_days}</span>
+                              <span>{t("myDay.objectives.day", { current: obj.current_day || 0, total: obj.target_duration_days })}</span>
                               <span className="flex items-center gap-1">
                                 <Flame className="w-3 h-3 text-orange-500" />
                                 {obj.streak_days || 0}j
@@ -700,7 +705,7 @@ export default function MyDayPage() {
                         {/* Progress */}
                         <div className="mb-2">
                           <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
-                            <span>{obj.completedSteps}/{obj.totalSteps} sessions</span>
+                            <span>{obj.completedSteps}/{obj.totalSteps} {t("myDay.objectives.sessions")}</span>
                             <span className="font-medium">{obj.percent}%</span>
                           </div>
                           <Progress value={obj.percent} className="h-1.5" />
@@ -711,7 +716,7 @@ export default function MyDayPage() {
                           <div className="flex items-center gap-2 p-2 rounded-lg bg-primary/5 border border-primary/10">
                             <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <p className="text-[11px] text-muted-foreground">Prochaine session</p>
+                              <p className="text-[11px] text-muted-foreground">{t("myDay.objectives.nextSession")}</p>
                               <p className="text-xs font-medium truncate">{obj.nextStep.title}</p>
                             </div>
                             <Button
@@ -723,7 +728,7 @@ export default function MyDayPage() {
                                 navigate(`/objectives/${obj.objective_id}`);
                               }}
                             >
-                              Lancer
+                              {t("myDay.objectives.start")}
                             </Button>
                           </div>
                         )}
@@ -740,6 +745,7 @@ export default function MyDayPage() {
                 routinesCompletedToday={routinesCompletedToday}
                 todaySessions={todaySessions}
                 navigate={navigate}
+                t={t}
               />
             </>
           )}

@@ -1,8 +1,15 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Mic, MicOff } from "lucide-react";
 import { toast } from "sonner";
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+/** Map i18n short code → BCP 47 speech recognition locale */
+const SPEECH_LANG_MAP = { fr: "fr-FR", en: "en-US" };
+function getSpeechLang(i18nLang) {
+  return SPEECH_LANG_MAP[i18nLang] || `${i18nLang}-${i18nLang.toUpperCase()}`;
+}
 
 /**
  * Clean up speech transcript: remove stutters, fix spacing, capitalize.
@@ -56,6 +63,7 @@ export default function VoiceInput({
   variant = "icon",
   className = "",
 }) {
+  const { t, i18n } = useTranslation();
   const [isListening, setIsListening] = useState(false);
   const [interimText, setInterimText] = useState("");
   const recognitionRef = useRef(null);
@@ -80,12 +88,12 @@ export default function VoiceInput({
 
   const startListening = useCallback(() => {
     if (!isSupported) {
-      toast.error("Votre navigateur ne supporte pas la reconnaissance vocale.");
+      toast.error(t("components.voiceInput.unsupported"));
       return;
     }
 
     const recognition = new SpeechRecognition();
-    recognition.lang = "fr-FR";
+    recognition.lang = getSpeechLang(i18n.language);
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
@@ -135,9 +143,9 @@ export default function VoiceInput({
 
     recognition.onerror = (event) => {
       if (event.error === "not-allowed") {
-        toast.error("Accès au micro refusé. Autorisez le micro dans les paramètres.");
+        toast.error(t("components.voiceInput.micDenied"));
       } else if (event.error !== "no-speech" && event.error !== "aborted") {
-        toast.error("Erreur de reconnaissance vocale.");
+        toast.error(t("components.voiceInput.errorRecognition"));
       }
       setIsListening(false);
       setInterimText("");
@@ -163,10 +171,10 @@ export default function VoiceInput({
     try {
       recognition.start();
     } catch {
-      toast.error("Impossible de démarrer le micro.");
+      toast.error(t("components.voiceInput.errorStart"));
       setIsListening(false);
     }
-  }, [isSupported, isManaged, textValue, onTextChange, onResult, onInterim]);
+  }, [isSupported, isManaged, textValue, onTextChange, onResult, onInterim, t]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
@@ -188,7 +196,7 @@ export default function VoiceInput({
         type="button"
         onClick={toggle}
         disabled={disabled}
-        title={isListening ? "Arrêter la dictée" : "Dicter"}
+        title={isListening ? t("components.voiceInput.stopDictation") : t("components.voiceInput.dictate")}
         className={`relative shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 ${
           isListening
             ? "bg-red-500 text-white shadow-lg shadow-red-500/30 scale-110"
@@ -235,10 +243,10 @@ export default function VoiceInput({
             <span className="w-1 h-2 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
             <span className="w-1 h-3.5 bg-white/85 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
           </span>
-          Écoute...
+          {t("components.voiceInput.listening")}
         </span>
       ) : (
-        "Dicter"
+        t("components.voiceInput.dictate")
       )}
     </button>
   );
@@ -261,6 +269,7 @@ export function VoiceTextArea({
   voiceDisabled = false,
   textareaClassName = "",
 }) {
+  const { t } = useTranslation();
   const [listening, setListening] = useState(false);
 
   return (
@@ -274,7 +283,7 @@ export function VoiceTextArea({
             <span className="w-0.5 h-1.5 bg-red-500/50 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
             <span className="w-0.5 h-2.5 bg-red-500/70 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
           </div>
-          <span className="text-[11px] text-red-500/80 font-medium">Écoute en cours — parle naturellement...</span>
+          <span className="text-[11px] text-red-500/80 font-medium">{t("components.voiceInput.listeningIndicator")}</span>
         </div>
       )}
 
@@ -308,7 +317,7 @@ export function VoiceTextArea({
         </div>
         <div className="flex items-center gap-1.5">
           {listening && (
-            <span className="text-[10px] text-red-500/60 font-medium mr-1">Dicte ton texte...</span>
+            <span className="text-[10px] text-red-500/60 font-medium mr-1">{t("components.voiceInput.dictatePrompt")}</span>
           )}
           <VoiceInput
             variant="icon"

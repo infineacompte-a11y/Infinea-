@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,42 +25,43 @@ import {
 import { toast } from "sonner";
 import { API, authFetch } from "@/App";
 
-const STEPS = [
-  {
-    title: "Ouvrir Google Calendar",
-    icon: Calendar,
-    instruction: "Rendez-vous sur Google Calendar depuis votre navigateur et connectez-vous avec votre compte Google.",
-    tip: "Utilisez un ordinateur pour cette étape, c'est plus simple.",
-    action: {
-      label: "Ouvrir Google Calendar",
-      url: "https://calendar.google.com/calendar/r/settings",
-    },
-  },
-  {
-    title: "Accéder aux paramètres du calendrier",
-    icon: Settings,
-    instruction: "Dans la barre latérale gauche, cliquez sur les trois points (⋮) à droite du calendrier que vous souhaitez connecter, puis sélectionnez « Paramètres et partage ».",
-    tip: "Choisissez votre calendrier principal (souvent votre adresse e-mail).",
-  },
-  {
-    title: "Copier l'adresse secrète",
-    icon: Share2,
-    instruction: "Faites défiler jusqu'à la section « Intégrer le calendrier ». Trouvez « Adresse secrète au format iCal » et cliquez sur l'icône de copie à côté du lien.",
-    tip: "Attention : utilisez bien l'adresse « secrète » (pas l'adresse publique). Elle contient vos événements privés.",
-  },
-  {
-    title: "Coller l'URL ici",
-    icon: Link2,
-    instruction: "Collez le lien copié dans le champ ci-dessous. InFinea vérifiera automatiquement que tout fonctionne.",
-    isInput: true,
-  },
-];
-
 export default function GoogleCalendarGuide({ open, onOpenChange, onConnected }) {
+  const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(0);
   const [url, setUrl] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
   const [isValidUrl, setIsValidUrl] = useState(false);
+
+  const STEPS = [
+    {
+      title: t("components.googleCalendarGuide.steps.openGCal.title"),
+      icon: Calendar,
+      instruction: t("components.googleCalendarGuide.steps.openGCal.instruction"),
+      tip: t("components.googleCalendarGuide.steps.openGCal.tip"),
+      action: {
+        label: t("components.googleCalendarGuide.steps.openGCal.actionLabel"),
+        url: "https://calendar.google.com/calendar/r/settings",
+      },
+    },
+    {
+      title: t("components.googleCalendarGuide.steps.accessSettings.title"),
+      icon: Settings,
+      instruction: t("components.googleCalendarGuide.steps.accessSettings.instruction"),
+      tip: t("components.googleCalendarGuide.steps.accessSettings.tip"),
+    },
+    {
+      title: t("components.googleCalendarGuide.steps.copySecret.title"),
+      icon: Share2,
+      instruction: t("components.googleCalendarGuide.steps.copySecret.instruction"),
+      tip: t("components.googleCalendarGuide.steps.copySecret.tip"),
+    },
+    {
+      title: t("components.googleCalendarGuide.steps.pasteUrl.title"),
+      icon: Link2,
+      instruction: t("components.googleCalendarGuide.steps.pasteUrl.instruction"),
+      isInput: true,
+    },
+  ];
 
   const handleUrlChange = (value) => {
     setUrl(value);
@@ -83,15 +85,15 @@ export default function GoogleCalendarGuide({ open, onOpenChange, onConnected })
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.detail || "Erreur de connexion");
+        throw new Error(err.detail || t("components.googleCalendarGuide.connectionError"));
       }
 
       const data = await response.json();
-      toast.success(`${data.calendar_name || "Google Calendar"} connecté ! ${data.events_found || 0} événements trouvés.`);
+      toast.success(t("components.googleCalendarGuide.connected", { name: data.calendar_name || "Google Calendar", count: data.events_found || 0 }));
       onConnected?.();
       handleClose();
     } catch (error) {
-      toast.error(error.message || "Impossible de se connecter. Vérifiez l'URL et réessayez.");
+      toast.error(error.message || t("components.googleCalendarGuide.connectFailed"));
     } finally {
       setIsConnecting(false);
     }
@@ -116,10 +118,10 @@ export default function GoogleCalendarGuide({ open, onOpenChange, onConnected })
             <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
               <Calendar className="w-4 h-4 text-blue-500" />
             </div>
-            Connecter Google Calendar
+            {t("components.googleCalendarGuide.title")}
           </DialogTitle>
           <DialogDescription>
-            Suivez ces étapes pour connecter votre calendrier Google à InFinea.
+            {t("components.googleCalendarGuide.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -146,7 +148,7 @@ export default function GoogleCalendarGuide({ open, onOpenChange, onConnected })
               <StepIcon className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Étape {currentStep + 1}/{STEPS.length}</p>
+              <p className="text-xs text-muted-foreground">{t("common.stepOf", { current: currentStep + 1, total: STEPS.length })}</p>
               <h3 className="font-heading font-semibold">{step.title}</h3>
             </div>
           </div>
@@ -182,13 +184,13 @@ export default function GoogleCalendarGuide({ open, onOpenChange, onConnected })
                   />
                   {url && !isValidUrl && (
                     <p className="text-xs text-red-400">
-                      L'URL doit provenir de calendar.google.com ou googleapis.com
+                      {t("components.googleCalendarGuide.urlValidationError")}
                     </p>
                   )}
                   {isValidUrl && (
                     <p className="text-xs text-emerald-500 flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
-                      Format valide
+                      {t("common.validFormat")}
                     </p>
                   )}
                 </div>
@@ -206,7 +208,7 @@ export default function GoogleCalendarGuide({ open, onOpenChange, onConnected })
                 className="gap-1"
               >
                 <ChevronLeft className="w-4 h-4" />
-                Précédent
+                {t("common.previous")}
               </Button>
             )}
             <div className="flex-1" />
@@ -220,12 +222,12 @@ export default function GoogleCalendarGuide({ open, onOpenChange, onConnected })
                 {isConnecting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Connexion...
+                    {t("common.connecting")}
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    Connecter
+                    {t("common.connect")}
                   </>
                 )}
               </Button>
@@ -234,7 +236,7 @@ export default function GoogleCalendarGuide({ open, onOpenChange, onConnected })
                 onClick={() => setCurrentStep((s) => s + 1)}
                 className="gap-1"
               >
-                Suivant
+                {t("common.next")}
                 <ChevronRight className="w-4 h-4" />
               </Button>
             )}

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { VoiceTextArea } from "@/components/VoiceInput";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +17,7 @@ import { toast } from "sonner";
 import { API, authFetch } from "@/App";
 
 export default function CreateActionModal({ open, onOpenChange, onActionCreated }) {
+  const { t } = useTranslation();
   const [description, setDescription] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedAction, setGeneratedAction] = useState(null);
@@ -23,7 +25,7 @@ export default function CreateActionModal({ open, onOpenChange, onActionCreated 
 
   const handleGenerate = async () => {
     if (!description.trim()) {
-      toast.error("Décrivez l'action que vous souhaitez créer");
+      toast.error(t("components.createAction.errorEmpty"));
       return;
     }
 
@@ -39,7 +41,7 @@ export default function CreateActionModal({ open, onOpenChange, onActionCreated 
       const data = await response.json();
       setGeneratedAction(data.action || data);
     } catch (error) {
-      toast.error("Erreur lors de la génération de l'action");
+      toast.error(t("components.createAction.errorGenerate"));
     } finally {
       setIsGenerating(false);
     }
@@ -47,7 +49,7 @@ export default function CreateActionModal({ open, onOpenChange, onActionCreated 
 
   const handleSave = () => {
     // The action is already saved by the backend on creation
-    toast.success("Action ajoutée à votre bibliothèque !");
+    toast.success(t("components.createAction.successAdded"));
     onActionCreated?.();
     handleClose();
   };
@@ -58,22 +60,16 @@ export default function CreateActionModal({ open, onOpenChange, onActionCreated 
     onOpenChange(false);
   };
 
-  const categoryLabels = {
-    learning: "Apprentissage",
-    productivity: "Productivité",
-    well_being: "Bien-être",
-  };
-
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
-            Créer une action personnalisée
+            {t("components.createAction.title")}
           </DialogTitle>
           <DialogDescription>
-            Décrivez ce que vous voulez faire, l'IA créera une micro-action sur mesure.
+            {t("components.createAction.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -82,7 +78,7 @@ export default function CreateActionModal({ open, onOpenChange, onActionCreated 
             <VoiceTextArea
               value={description}
               onChange={setDescription}
-              placeholder="Ex: Je veux apprendre 5 mots de vocabulaire anglais en 3 minutes..."
+              placeholder={t("components.createAction.placeholder")}
               rows={3}
             />
             <Button
@@ -93,12 +89,12 @@ export default function CreateActionModal({ open, onOpenChange, onActionCreated 
               {isGenerating ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Génération en cours...
+                  {t("components.createAction.generating")}
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 mr-2" />
-                  Générer avec l'IA
+                  {t("components.createAction.generateButton")}
                 </>
               )}
             </Button>
@@ -110,7 +106,7 @@ export default function CreateActionModal({ open, onOpenChange, onActionCreated 
                 <div className="flex items-center justify-between">
                   <h3 className="font-heading font-semibold">{generatedAction.title}</h3>
                   <Badge variant="secondary" className="text-xs">
-                    {categoryLabels[generatedAction.category] || generatedAction.category}
+                    {t(`categories.${generatedAction.category}`, generatedAction.category)}
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">{generatedAction.description}</p>
@@ -121,7 +117,7 @@ export default function CreateActionModal({ open, onOpenChange, onActionCreated 
                 </div>
                 {generatedAction.instructions?.length > 0 && (
                   <div className="pt-2 border-t border-border">
-                    <p className="text-xs text-muted-foreground mb-2">Instructions :</p>
+                    <p className="text-xs text-muted-foreground mb-2">{t("components.createAction.instructions")}</p>
                     <ol className="space-y-1">
                       {generatedAction.instructions.map((step, i) => (
                         <li key={i} className="text-sm flex items-start gap-2">
@@ -141,16 +137,16 @@ export default function CreateActionModal({ open, onOpenChange, onActionCreated 
           {generatedAction ? (
             <div className="flex gap-2 w-full">
               <Button variant="outline" onClick={() => setGeneratedAction(null)} className="flex-1">
-                Modifier
+                {t("components.createAction.modify")}
               </Button>
               <Button onClick={handleSave} disabled={isSaving} className="flex-1">
                 <Check className="w-4 h-4 mr-2" />
-                Ajouter
+                {t("components.createAction.add")}
               </Button>
             </div>
           ) : (
             <Button variant="outline" onClick={handleClose}>
-              Annuler
+              {t("common.cancel")}
             </Button>
           )}
         </DialogFooter>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -50,6 +51,7 @@ const badgeIcons = {
 
 export default function BadgesPage() {
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [allBadges, setAllBadges] = useState([]);
   const [userBadges, setUserBadges] = useState({ earned: [], new_badges: [] });
   const [isLoading, setIsLoading] = useState(true);
@@ -74,12 +76,12 @@ export default function BadgesPage() {
         // Show toast for new badges
         if (userData.new_badges?.length > 0) {
           userData.new_badges.forEach((badge) => {
-            toast.success(`Nouveau badge obtenu : ${badge.name}!`);
+            toast.success(t("badges.newBadgeEarned", { name: badge.name }));
           });
         }
       }
     } catch (error) {
-      toast.error("Erreur de chargement des badges");
+      toast.error(t("badges.errors.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -98,10 +100,10 @@ export default function BadgesPage() {
           {/* Header */}
           <div className="mb-8">
             <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="badges-title">
-              Vos Badges
+              {t("badges.title")}
             </h1>
             <p className="text-muted-foreground">
-              Collectionnez des badges en atteignant vos objectifs
+              {t("badges.subtitle")}
             </p>
           </div>
 
@@ -117,7 +119,7 @@ export default function BadgesPage() {
                     <p className="font-heading text-2xl font-bold">
                       {userBadges.earned?.length || 0} / {allBadges.length}
                     </p>
-                    <p className="text-sm text-muted-foreground">badges obtenus</p>
+                    <p className="text-sm text-muted-foreground">{t("badges.badgesEarned")}</p>
                   </div>
                 </div>
                 <Badge variant="outline" className="text-lg px-4 py-2">
@@ -164,7 +166,7 @@ export default function BadgesPage() {
                     <p className="text-xs text-muted-foreground mb-2">{badge.description}</p>
                     {isEarned && earnedData?.earned_at && (
                       <Badge variant="secondary" className="text-xs">
-                        {new Date(earnedData.earned_at).toLocaleDateString("fr-FR")}
+                        {new Date(earnedData.earned_at).toLocaleDateString(i18n.language)}
                       </Badge>
                     )}
                   </CardContent>
@@ -185,9 +187,9 @@ export default function BadgesPage() {
                         <Crown className="w-5 h-5 text-amber-500" />
                       </div>
                       <div>
-                        <h2 className="font-heading text-xl font-semibold">Badges Premium</h2>
+                        <h2 className="font-heading text-xl font-semibold">{t("badges.premiumTitle")}</h2>
                         <p className="text-sm text-muted-foreground">
-                          Badges exclusifs pour les membres Premium
+                          {t("badges.premiumSubtitle")}
                         </p>
                       </div>
                     </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -30,12 +31,21 @@ const HIGHLIGHT_COLORS = {
   focus: "text-primary bg-primary/10",
 };
 
-const DAY_LABELS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
-
 export default function RecapCard() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [recap, setRecap] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const DAY_LABELS = [
+    t("components.recapCard.days.mon"),
+    t("components.recapCard.days.tue"),
+    t("components.recapCard.days.wed"),
+    t("components.recapCard.days.thu"),
+    t("components.recapCard.days.fri"),
+    t("components.recapCard.days.sat"),
+    t("components.recapCard.days.sun"),
+  ];
 
   useEffect(() => {
     (async () => {
@@ -87,11 +97,11 @@ export default function RecapCard() {
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-heading font-semibold text-base flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-primary" />
-          Mon récap
+          {t("components.recapCard.title")}
         </h2>
         <Badge variant="outline" className="text-[10px]">
           <Flame className="w-2.5 h-2.5 mr-0.5 text-orange-500" />
-          {streak}j streak
+          {t("components.recapCard.streakDays", { count: streak })}
         </Badge>
       </div>
 
@@ -100,25 +110,27 @@ export default function RecapCard() {
         <div className="text-center p-2.5 rounded-lg bg-muted/30">
           <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
           <div className="text-lg font-bold tabular-nums">{today.sessions}</div>
-          <div className="text-[10px] text-muted-foreground">Sessions</div>
+          <div className="text-[10px] text-muted-foreground">{t("common.sessions")}</div>
         </div>
         <div className="text-center p-2.5 rounded-lg bg-muted/30">
           <Clock className="w-4 h-4 text-blue-500 mx-auto mb-1" />
           <div className="text-lg font-bold tabular-nums">{today.minutes}</div>
-          <div className="text-[10px] text-muted-foreground">Minutes</div>
+          <div className="text-[10px] text-muted-foreground">{t("common.minutes")}</div>
         </div>
         <div className="text-center p-2.5 rounded-lg bg-muted/30">
           <CalendarClock className="w-4 h-4 text-primary mx-auto mb-1" />
           <div className="text-lg font-bold tabular-nums">{today.routines_done}/{today.routines_total}</div>
-          <div className="text-[10px] text-muted-foreground">Routines</div>
+          <div className="text-[10px] text-muted-foreground">{t("components.recapCard.routines")}</div>
         </div>
       </div>
 
       {/* Week mini bar chart */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-muted-foreground">Cette semaine</span>
-          <span className="text-xs text-muted-foreground">{week.minutes} min · {week.sessions} sessions</span>
+          <span className="text-xs font-medium text-muted-foreground">{t("components.recapCard.thisWeek")}</span>
+          <span className="text-xs text-muted-foreground">
+            {t("components.recapCard.weekSummary", { minutes: week.minutes, sessions: week.sessions })}
+          </span>
         </div>
         <div className="flex items-end gap-1 h-12">
           {weekDays.map((day, i) => (

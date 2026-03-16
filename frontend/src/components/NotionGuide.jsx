@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,42 +26,43 @@ import {
 import { toast } from "sonner";
 import { API, authFetch } from "@/App";
 
-const STEPS = [
-  {
-    title: "Ouvrir Notion Integrations",
-    icon: Plus,
-    instruction: "Rendez-vous sur la page des intégrations Notion et connectez-vous avec votre compte.",
-    tip: "Vous allez créer une intégration interne — c'est rapide et gratuit.",
-    action: {
-      label: "Ouvrir Notion Integrations",
-      url: "https://www.notion.so/my-integrations",
-    },
-  },
-  {
-    title: "Créer une intégration",
-    icon: Settings,
-    instruction: "Cliquez sur « + Nouvelle intégration ». Donnez-lui un nom (ex: « InFinea »), sélectionnez votre espace de travail, puis cliquez sur « Envoyer ».",
-    tip: "Les capacités par défaut (lecture) suffisent. Pas besoin de modifier les permissions.",
-  },
-  {
-    title: "Copier le token secret",
-    icon: Copy,
-    instruction: "Sur la page de votre intégration, dans la section « Secrets d'intégration interne », cliquez sur « Afficher » puis « Copier » pour copier le token.",
-    tip: "Le token commence par « secret_ » — gardez-le confidentiel.",
-  },
-  {
-    title: "Coller le token ici",
-    icon: Link2,
-    instruction: "Collez le token copié dans le champ ci-dessous. InFinea vérifiera automatiquement la connexion.",
-    isInput: true,
-  },
-];
-
 export default function NotionGuide({ open, onOpenChange, onConnected }) {
+  const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(0);
   const [token, setToken] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
   const [isValidToken, setIsValidToken] = useState(false);
+
+  const STEPS = [
+    {
+      title: t("components.notionGuide.steps.openIntegrations.title"),
+      icon: Plus,
+      instruction: t("components.notionGuide.steps.openIntegrations.instruction"),
+      tip: t("components.notionGuide.steps.openIntegrations.tip"),
+      action: {
+        label: t("components.notionGuide.steps.openIntegrations.actionLabel"),
+        url: "https://www.notion.so/my-integrations",
+      },
+    },
+    {
+      title: t("components.notionGuide.steps.createIntegration.title"),
+      icon: Settings,
+      instruction: t("components.notionGuide.steps.createIntegration.instruction"),
+      tip: t("components.notionGuide.steps.createIntegration.tip"),
+    },
+    {
+      title: t("components.notionGuide.steps.copyToken.title"),
+      icon: Copy,
+      instruction: t("components.notionGuide.steps.copyToken.instruction"),
+      tip: t("components.notionGuide.steps.copyToken.tip"),
+    },
+    {
+      title: t("components.notionGuide.steps.pasteToken.title"),
+      icon: Link2,
+      instruction: t("components.notionGuide.steps.pasteToken.instruction"),
+      isInput: true,
+    },
+  ];
 
   const handleTokenChange = (value) => {
     setToken(value);
@@ -83,14 +85,14 @@ export default function NotionGuide({ open, onOpenChange, onConnected }) {
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.detail || "Erreur de connexion");
+        throw new Error(err.detail || t("components.notionGuide.connectionError"));
       }
 
-      toast.success("Notion connecté avec succès !");
+      toast.success(t("components.notionGuide.connected"));
       onConnected?.();
       handleClose();
     } catch (error) {
-      toast.error(error.message || "Impossible de se connecter. Vérifiez le token et réessayez.");
+      toast.error(error.message || t("components.notionGuide.connectFailed"));
     } finally {
       setIsConnecting(false);
     }
@@ -115,10 +117,10 @@ export default function NotionGuide({ open, onOpenChange, onConnected }) {
             <div className="w-8 h-8 rounded-lg bg-zinc-500/10 flex items-center justify-center">
               <FileText className="w-4 h-4 text-zinc-400" />
             </div>
-            Connecter Notion
+            {t("components.notionGuide.title")}
           </DialogTitle>
           <DialogDescription>
-            Suivez ces étapes pour connecter votre espace Notion à InFinea.
+            {t("components.notionGuide.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -145,7 +147,7 @@ export default function NotionGuide({ open, onOpenChange, onConnected }) {
               <StepIcon className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Étape {currentStep + 1}/{STEPS.length}</p>
+              <p className="text-xs text-muted-foreground">{t("common.stepOf", { current: currentStep + 1, total: STEPS.length })}</p>
               <h3 className="font-heading font-semibold">{step.title}</h3>
             </div>
           </div>
@@ -181,13 +183,13 @@ export default function NotionGuide({ open, onOpenChange, onConnected }) {
                   />
                   {token && !isValidToken && (
                     <p className="text-xs text-red-400">
-                      Le token doit commencer par « secret_ » ou « ntn_ »
+                      {t("components.notionGuide.tokenValidationError")}
                     </p>
                   )}
                   {isValidToken && (
                     <p className="text-xs text-emerald-500 flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
-                      Format valide
+                      {t("common.validFormat")}
                     </p>
                   )}
                 </div>
@@ -205,7 +207,7 @@ export default function NotionGuide({ open, onOpenChange, onConnected }) {
                 className="gap-1"
               >
                 <ChevronLeft className="w-4 h-4" />
-                Précédent
+                {t("common.previous")}
               </Button>
             )}
             <div className="flex-1" />
@@ -219,12 +221,12 @@ export default function NotionGuide({ open, onOpenChange, onConnected }) {
                 {isConnecting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Connexion...
+                    {t("common.connecting")}
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    Connecter
+                    {t("common.connect")}
                   </>
                 )}
               </Button>
@@ -233,7 +235,7 @@ export default function NotionGuide({ open, onOpenChange, onConnected }) {
                 onClick={() => setCurrentStep((s) => s + 1)}
                 className="gap-1"
               >
-                Suivant
+                {t("common.next")}
                 <ChevronRight className="w-4 h-4" />
               </Button>
             )}

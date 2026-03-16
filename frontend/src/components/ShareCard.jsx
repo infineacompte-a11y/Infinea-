@@ -1,4 +1,5 @@
 import React, { forwardRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Flame, Clock, Target, TrendingUp, Award, Zap } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
@@ -17,22 +18,6 @@ import { Progress } from "@/components/ui/progress";
  *   compact — boolean, if true renders a smaller card (for inline preview)
  */
 
-const categoryLabels = {
-  learning: "Apprentissage",
-  productivity: "Productivité",
-  well_being: "Bien-être",
-  creativity: "Créativité",
-  fitness: "Fitness",
-  mindfulness: "Mindfulness",
-  leadership: "Leadership",
-  finance: "Finance",
-  relations: "Relations",
-  mental_health: "Santé mentale",
-  entrepreneurship: "Entrepreneuriat",
-};
-
-const DAY_LABELS = ["L", "M", "M", "J", "V", "S", "D"];
-
 function formatMinutes(min) {
   if (min < 60) return `${min} min`;
   const h = Math.floor(min / 60);
@@ -41,7 +26,19 @@ function formatMinutes(min) {
 }
 
 const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_recap", compact = false }, ref) {
+  const { t } = useTranslation();
+
   if (!snapshot) return null;
+
+  const DAY_LABELS = [
+    t("components.shareCard.days.mon"),
+    t("components.shareCard.days.tue"),
+    t("components.shareCard.days.wed"),
+    t("components.shareCard.days.thu"),
+    t("components.shareCard.days.fri"),
+    t("components.shareCard.days.sat"),
+    t("components.shareCard.days.sun"),
+  ];
 
   const { streak_days, total_time_invested, total_sessions, week, objectives, badges_count, recent_badges } = snapshot;
   const author = snapshot.author || snapshot._author || {};
@@ -86,13 +83,15 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
             </div>
             <div>
               <div className="text-white/90 text-sm font-semibold tracking-tight">InFinea</div>
-              <div className="text-white/40 text-[10px]">Micro-instants, macro-progrès</div>
+              <div className="text-white/40 text-[10px]">{t("components.shareCard.tagline")}</div>
             </div>
           </div>
           {streak_days > 0 && (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/15">
               <Flame className="w-3.5 h-3.5 text-orange-400" />
-              <span className="text-orange-300 text-xs font-bold tabular-nums">{streak_days}j</span>
+              <span className="text-orange-300 text-xs font-bold tabular-nums">
+                {t("components.shareCard.streakDays", { count: streak_days })}
+              </span>
             </div>
           )}
         </div>
@@ -100,7 +99,7 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
         {/* ── Author name ── */}
         {author.name && (
           <div className="mb-5">
-            <div className="text-white/50 text-[10px] uppercase tracking-widest mb-1">Progression de</div>
+            <div className="text-white/50 text-[10px] uppercase tracking-widest mb-1">{t("components.shareCard.progressionOf")}</div>
             <div className="text-white text-lg font-bold tracking-tight">{author.name}</div>
           </div>
         )}
@@ -112,21 +111,21 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
             <div className="text-white text-xl font-bold tabular-nums leading-none">
               {formatMinutes(total_time_invested || 0)}
             </div>
-            <div className="text-white/40 text-[10px] mt-1">investies</div>
+            <div className="text-white/40 text-[10px] mt-1">{t("components.shareCard.invested")}</div>
           </div>
           <div className="text-center p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
             <TrendingUp className="w-4 h-4 text-emerald-400 mx-auto mb-1.5" />
             <div className="text-white text-xl font-bold tabular-nums leading-none">
               {total_sessions || 0}
             </div>
-            <div className="text-white/40 text-[10px] mt-1">sessions</div>
+            <div className="text-white/40 text-[10px] mt-1">{t("common.sessions")}</div>
           </div>
           <div className="text-center p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
             <Award className="w-4 h-4 text-amber-400 mx-auto mb-1.5" />
             <div className="text-white text-xl font-bold tabular-nums leading-none">
               {badges_count || 0}
             </div>
-            <div className="text-white/40 text-[10px] mt-1">badges</div>
+            <div className="text-white/40 text-[10px] mt-1">{t("components.shareCard.badges")}</div>
           </div>
         </div>
 
@@ -134,9 +133,9 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
         {week && (
           <div className="mb-5 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
             <div className="flex items-center justify-between mb-2.5">
-              <span className="text-white/50 text-[10px] uppercase tracking-widest">Cette semaine</span>
+              <span className="text-white/50 text-[10px] uppercase tracking-widest">{t("components.shareCard.thisWeek")}</span>
               <span className="text-white/60 text-[11px] tabular-nums">
-                {week.minutes || 0} min · {week.sessions || 0} sessions
+                {t("components.shareCard.weekSummary", { minutes: week.minutes || 0, sessions: week.sessions || 0 })}
               </span>
             </div>
             <div className="flex items-end gap-1.5 h-10">
@@ -170,7 +169,7 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
           <div className="mb-5 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
             <div className="flex items-center gap-2 mb-2">
               <Target className="w-3.5 h-3.5 text-[hsl(239,84%,67%)]" />
-              <span className="text-white/50 text-[10px] uppercase tracking-widest">Objectif en cours</span>
+              <span className="text-white/50 text-[10px] uppercase tracking-widest">{t("components.shareCard.currentObjective")}</span>
             </div>
             <div className="text-white text-sm font-semibold mb-2 truncate">{featuredObj.title}</div>
             <div className="flex items-center gap-3">
@@ -192,7 +191,7 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
             {featuredObj.category && (
               <div className="mt-2">
                 <span className="text-[10px] text-white/30 px-2 py-0.5 rounded-full bg-white/[0.05]">
-                  {categoryLabels[featuredObj.category] || featuredObj.category}
+                  {t(`categories.${featuredObj.category}`, { defaultValue: featuredObj.category })}
                 </span>
               </div>
             )}
@@ -218,7 +217,7 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
         {/* ── Footer: CTA ── */}
         <div className="flex items-center justify-between pt-4 border-t border-white/[0.06]">
           <span className="text-white/25 text-[10px]">infinea.app</span>
-          <span className="text-[10px] text-white/30">Investis tes instants perdus</span>
+          <span className="text-[10px] text-white/30">{t("components.shareCard.footerTagline")}</span>
         </div>
       </div>
     </div>

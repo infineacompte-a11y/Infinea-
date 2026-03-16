@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,42 +25,43 @@ import {
 import { toast } from "sonner";
 import { API, authFetch } from "@/App";
 
-const STEPS = [
-  {
-    title: "Ouvrir iCloud",
-    icon: Globe,
-    instruction: "Rendez-vous sur icloud.com/calendar depuis votre navigateur et connectez-vous avec votre identifiant Apple.",
-    tip: "Utilisez un ordinateur pour cette étape, c'est plus simple.",
-    action: {
-      label: "Ouvrir iCloud Calendar",
-      url: "https://www.icloud.com/calendar/",
-    },
-  },
-  {
-    title: "Partager le calendrier",
-    icon: Share2,
-    instruction: "Cliquez sur l'icône de partage (👤➕) à droite du nom de votre calendrier dans la barre latérale gauche.",
-    tip: "Choisissez le calendrier que vous utilisez le plus (souvent « Domicile » ou « Travail »).",
-  },
-  {
-    title: "Activer le calendrier public",
-    icon: Copy,
-    instruction: "Cochez « Calendrier public » en bas de la fenêtre de partage. Un lien apparaîtra — cliquez dessus pour le copier.",
-    tip: "Le lien commence par webcal:// — c'est normal, InFinea le gère automatiquement.",
-  },
-  {
-    title: "Coller l'URL ici",
-    icon: Link2,
-    instruction: "Collez le lien copié dans le champ ci-dessous. InFinea vérifiera automatiquement que tout fonctionne.",
-    isInput: true,
-  },
-];
-
 export default function AppleCalendarGuide({ open, onOpenChange, onConnected }) {
+  const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(0);
   const [url, setUrl] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
   const [isValidUrl, setIsValidUrl] = useState(false);
+
+  const STEPS = [
+    {
+      title: t("components.appleCalendarGuide.steps.openICloud.title"),
+      icon: Globe,
+      instruction: t("components.appleCalendarGuide.steps.openICloud.instruction"),
+      tip: t("components.appleCalendarGuide.steps.openICloud.tip"),
+      action: {
+        label: t("components.appleCalendarGuide.steps.openICloud.actionLabel"),
+        url: "https://www.icloud.com/calendar/",
+      },
+    },
+    {
+      title: t("components.appleCalendarGuide.steps.shareCalendar.title"),
+      icon: Share2,
+      instruction: t("components.appleCalendarGuide.steps.shareCalendar.instruction"),
+      tip: t("components.appleCalendarGuide.steps.shareCalendar.tip"),
+    },
+    {
+      title: t("components.appleCalendarGuide.steps.enablePublic.title"),
+      icon: Copy,
+      instruction: t("components.appleCalendarGuide.steps.enablePublic.instruction"),
+      tip: t("components.appleCalendarGuide.steps.enablePublic.tip"),
+    },
+    {
+      title: t("components.appleCalendarGuide.steps.pasteUrl.title"),
+      icon: Link2,
+      instruction: t("components.appleCalendarGuide.steps.pasteUrl.instruction"),
+      isInput: true,
+    },
+  ];
 
   const handleUrlChange = (value) => {
     setUrl(value);
@@ -85,15 +87,15 @@ export default function AppleCalendarGuide({ open, onOpenChange, onConnected }) 
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.detail || "Erreur de connexion");
+        throw new Error(err.detail || t("components.appleCalendarGuide.connectionError"));
       }
 
       const data = await response.json();
-      toast.success(`${data.calendar_name || "Apple Calendar"} connecté ! ${data.events_found || 0} événements trouvés.`);
+      toast.success(t("components.appleCalendarGuide.connected", { name: data.calendar_name || "Apple Calendar", count: data.events_found || 0 }));
       onConnected?.();
       handleClose();
     } catch (error) {
-      toast.error(error.message || "Impossible de se connecter. Vérifiez l'URL et réessayez.");
+      toast.error(error.message || t("components.appleCalendarGuide.connectFailed"));
     } finally {
       setIsConnecting(false);
     }
@@ -118,10 +120,10 @@ export default function AppleCalendarGuide({ open, onOpenChange, onConnected }) 
             <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
               <Link2 className="w-4 h-4 text-orange-500" />
             </div>
-            Connecter Apple Calendar
+            {t("components.appleCalendarGuide.title")}
           </DialogTitle>
           <DialogDescription>
-            Suivez ces étapes pour connecter votre calendrier Apple à InFinea.
+            {t("components.appleCalendarGuide.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -148,7 +150,7 @@ export default function AppleCalendarGuide({ open, onOpenChange, onConnected }) 
               <StepIcon className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Étape {currentStep + 1}/{STEPS.length}</p>
+              <p className="text-xs text-muted-foreground">{t("common.stepOf", { current: currentStep + 1, total: STEPS.length })}</p>
               <h3 className="font-heading font-semibold">{step.title}</h3>
             </div>
           </div>
@@ -158,7 +160,7 @@ export default function AppleCalendarGuide({ open, onOpenChange, onConnected }) 
               <p className="text-sm leading-relaxed">{step.instruction}</p>
               {step.tip && (
                 <p className="text-xs text-muted-foreground italic">
-                  💡 {step.tip}
+                  {step.tip}
                 </p>
               )}
               {step.action && (
@@ -184,13 +186,13 @@ export default function AppleCalendarGuide({ open, onOpenChange, onConnected }) 
                   />
                   {url && !isValidUrl && (
                     <p className="text-xs text-red-400">
-                      L'URL doit commencer par webcal://, https:// ou http://
+                      {t("components.appleCalendarGuide.urlValidationError")}
                     </p>
                   )}
                   {isValidUrl && (
                     <p className="text-xs text-emerald-500 flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
-                      Format valide
+                      {t("common.validFormat")}
                     </p>
                   )}
                 </div>
@@ -208,7 +210,7 @@ export default function AppleCalendarGuide({ open, onOpenChange, onConnected }) 
                 className="gap-1"
               >
                 <ChevronLeft className="w-4 h-4" />
-                Précédent
+                {t("common.previous")}
               </Button>
             )}
             <div className="flex-1" />
@@ -222,12 +224,12 @@ export default function AppleCalendarGuide({ open, onOpenChange, onConnected }) 
                 {isConnecting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Connexion...
+                    {t("common.connecting")}
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    Connecter
+                    {t("common.connect")}
                   </>
                 )}
               </Button>
@@ -236,7 +238,7 @@ export default function AppleCalendarGuide({ open, onOpenChange, onConnected }) 
                 onClick={() => setCurrentStep((s) => s + 1)}
                 className="gap-1"
               >
-                Suivant
+                {t("common.next")}
                 <ChevronRight className="w-4 h-4" />
               </Button>
             )}

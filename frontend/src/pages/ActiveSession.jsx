@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { API, authFetch } from "@/App";
 import SessionDebrief from "@/components/SessionDebrief";
 import VoiceNoteButton from "@/components/VoiceNoteButton";
+import { useTranslation } from "react-i18next";
 
 const categoryIcons = {
   learning: BookOpen,
@@ -35,10 +36,11 @@ const categoryColors = {
 };
 
 export default function ActiveSession() {
+  const { t } = useTranslation();
   const { sessionId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  
+
   const [session, setSession] = useState(location.state?.session || null);
   const [isRunning, setIsRunning] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -92,12 +94,12 @@ export default function ActiveSession() {
       setCompletionData(data);
       setShowCompletion(true);
       setIsRunning(false);
-      
+
       if (completed) {
-        toast.success("Bravo ! Session terminée avec succès !");
+        toast.success(t("activeSession.completionToast"));
       }
     } catch (error) {
-      toast.error("Erreur lors de la sauvegarde");
+      toast.error(t("activeSession.saveError"));
     } finally {
       setIsCompleting(false);
     }
@@ -112,9 +114,9 @@ export default function ActiveSession() {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Timer className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">Session non trouvée</p>
+          <p className="text-muted-foreground">{t("activeSession.sessionNotFound")}</p>
           <Button onClick={() => navigate("/dashboard")} className="mt-4">
-            Retour au dashboard
+            {t("activeSession.backToDashboard")}
           </Button>
         </div>
       </div>
@@ -135,10 +137,10 @@ export default function ActiveSession() {
             <Trophy className="w-12 h-12 text-emerald-500" />
           </div>
           <h1 className="font-heading text-3xl font-bold mb-2" data-testid="completion-title">
-            Félicitations ! 🎉
+            {t("activeSession.congratulations")}
           </h1>
           <p className="text-muted-foreground mb-8">
-            Vous avez transformé {Math.ceil(elapsedTime / 60)} minutes en progrès !
+            {t("activeSession.progressMessage", { minutes: Math.ceil(elapsedTime / 60) })}
           </p>
 
           <div className="grid grid-cols-2 gap-4 mb-8">
@@ -147,7 +149,7 @@ export default function ActiveSession() {
                 <p className="text-2xl font-heading font-bold text-primary">
                   +{completionData?.time_added || Math.ceil(elapsedTime / 60)}
                 </p>
-                <p className="text-xs text-muted-foreground">minutes ajoutées</p>
+                <p className="text-xs text-muted-foreground">{t("activeSession.minutesAdded")}</p>
               </CardContent>
             </Card>
             <Card className="stat-card">
@@ -155,7 +157,7 @@ export default function ActiveSession() {
                 <p className="text-2xl font-heading font-bold text-amber-500">
                   {completionData?.new_streak || 1}
                 </p>
-                <p className="text-xs text-muted-foreground">jours de streak</p>
+                <p className="text-xs text-muted-foreground">{t("activeSession.streakDays")}</p>
               </CardContent>
             </Card>
           </div>
@@ -166,14 +168,14 @@ export default function ActiveSession() {
               className="w-full rounded-xl h-12"
               data-testid="back-dashboard-btn"
             >
-              Continuer ma progression
+              {t("activeSession.continueProgress")}
             </Button>
             <Button
               variant="outline"
               onClick={() => navigate("/actions")}
               className="w-full rounded-xl h-12"
             >
-              Nouvelle action
+              {t("activeSession.newAction")}
             </Button>
           </div>
 
@@ -218,7 +220,7 @@ export default function ActiveSession() {
             data-testid="abandon-btn"
           >
             <X className="w-5 h-5" />
-            <span>Abandonner</span>
+            <span>{t("activeSession.abandon")}</span>
           </button>
           <Badge variant="outline" className="font-mono text-lg">
             {formatTime(elapsedTime)}
@@ -281,7 +283,7 @@ export default function ActiveSession() {
           {/* Instructions */}
           <Card className="mb-6">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">Instructions</CardTitle>
+              <CardTitle className="text-sm text-muted-foreground">{t("activeSession.instructions")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {action.instructions.map((instruction, i) => (
@@ -312,11 +314,11 @@ export default function ActiveSession() {
           {/* Notes */}
           <Card className="mb-6">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-muted-foreground">Notes (optionnel)</CardTitle>
+              <CardTitle className="text-sm text-muted-foreground">{t("activeSession.notesLabel")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <Textarea
-                placeholder="Notez vos réflexions..."
+                placeholder={t("activeSession.notesPlaceholder")}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="min-h-20 resize-none"
@@ -342,12 +344,12 @@ export default function ActiveSession() {
               {isRunning ? (
                 <>
                   <Pause className="w-5 h-5 mr-2" />
-                  Pause
+                  {t("activeSession.pause")}
                 </>
               ) : (
                 <>
                   <Play className="w-5 h-5 mr-2" />
-                  Reprendre
+                  {t("activeSession.resume")}
                 </>
               )}
             </Button>
@@ -358,7 +360,7 @@ export default function ActiveSession() {
               data-testid="complete-btn"
             >
               <Check className="w-5 h-5 mr-2" />
-              Terminer
+              {t("activeSession.finish")}
             </Button>
           </div>
         </div>

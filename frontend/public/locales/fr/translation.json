@@ -13,7 +13,18 @@
     "minutes": "minutes",
     "hours": "heures",
     "days": "jours",
-    "sessions": "sessions"
+    "sessions": "sessions",
+    "connecting": "Connexion en cours...",
+    "create": "Créer",
+    "optional": "optionnel",
+    "connect": "Connecter",
+    "previous": "Précédent",
+    "validFormat": "Format valide",
+    "stepOf": "Étape {{current}}/{{total}}",
+    "privacy": "Confidentialité",
+    "terms": "CGU",
+    "contact": "Contact",
+    "copied": "Copié !"
   },
   "landing": {
     "nav": {
@@ -83,10 +94,26 @@
     },
     "howItWorks": {
       "title": "Comment ça marche",
-      "step1": { "num": "01", "title": "Ouvrez l'app", "desc": "En moins de 60 secondes" },
-      "step2": { "num": "02", "title": "Indiquez votre temps", "desc": "De 2 à 15 minutes" },
-      "step3": { "num": "03", "title": "Choisissez l'énergie", "desc": "Basse, moyenne ou haute" },
-      "step4": { "num": "04", "title": "Agissez !", "desc": "L'IA vous guide" }
+      "step1": {
+        "num": "01",
+        "title": "Ouvrez l'app",
+        "desc": "En moins de 60 secondes"
+      },
+      "step2": {
+        "num": "02",
+        "title": "Indiquez votre temps",
+        "desc": "De 2 à 15 minutes"
+      },
+      "step3": {
+        "num": "03",
+        "title": "Choisissez l'énergie",
+        "desc": "Basse, moyenne ou haute"
+      },
+      "step4": {
+        "num": "04",
+        "title": "Agissez !",
+        "desc": "L'IA vous guide"
+      }
     },
     "pricing": {
       "title": "Tarifs simples et transparents",
@@ -181,5 +208,1648 @@
     "business": "Entreprise",
     "profile": "Profil",
     "logout": "Déconnexion"
+  },
+  "categories": {
+    "learning": "Apprentissage",
+    "productivity": "Productivité",
+    "well_being": "Bien-être",
+    "creativity": "Créativité",
+    "fitness": "Fitness",
+    "mindfulness": "Pleine conscience",
+    "leadership": "Leadership",
+    "finance": "Finance",
+    "relations": "Relations",
+    "mental_health": "Santé mentale",
+    "entrepreneurship": "Entrepreneuriat"
+  },
+  "dashboard": {
+    "greeting": "Bonjour, {{name}}",
+    "defaultUser": "Utilisateur",
+    "subtitle": "Que pouvez-vous accomplir maintenant ?",
+    "slotDetected": "Prochain créneau libre détecté",
+    "stats": {
+      "minutesInvested": "min investies",
+      "streakDays": "jours streak",
+      "streakShield": "Streak Shield actif",
+      "subscription": "abonnement"
+    },
+    "config": {
+      "title": "Configurez votre micro-action",
+      "availableTime": "Temps disponible",
+      "energyLevel": "Niveau d'énergie",
+      "categoryOptional": "Catégorie (optionnel)",
+      "getSuggestions": "Obtenir des suggestions IA"
+    },
+    "energy": {
+      "low": "Basse",
+      "medium": "Moyenne",
+      "high": "Haute"
+    },
+    "suggestions": {
+      "title": "Suggestions pour vous",
+      "energy": "Énergie",
+      "recommended": "Recommandé",
+      "personalized": "Personnalisé",
+      "premiumUpsell": "Passez Premium",
+      "premiumDesc": "IA avancée qui apprend de vos habitudes",
+      "errorLoad": "Impossible de charger les suggestions",
+      "errorGeneric": "Erreur de suggestion"
+    },
+    "quickActions": {
+      "learning": "Vocabulaire, lecture, concepts...",
+      "productivity": "Planning, emails, brainstorm...",
+      "well_being": "Respiration, méditation, étirements..."
+    },
+    "errorSession": "Erreur"
+  },
+  "myDay": {
+    "greeting": {
+      "morning": "Bonjour !",
+      "morningName": "Bonjour {{name}} !",
+      "afternoon": "Bon après-midi !",
+      "afternoonName": "Bon après-midi {{name}} !",
+      "evening": "Bonsoir !",
+      "eveningName": "Bonsoir {{name}} !"
+    },
+    "timeOfDay": {
+      "morning": "Matin",
+      "afternoon": "Après-midi",
+      "evening": "Soir"
+    },
+    "empty": {
+      "title": "Ta journée est vide",
+      "description": "Crée un objectif ou une routine pour structurer ta journée et suivre tes micro-avancements.",
+      "objectives": "Objectifs",
+      "routines": "Routines"
+    },
+    "stats": {
+      "sessions": "Sessions",
+      "minutes": "Minutes",
+      "streak": "Streak"
+    },
+    "microInstants": {
+      "title": "Micro-instants",
+      "available": "{{count}} dispo",
+      "viewAll": "Tout voir",
+      "recommendedAction": "Action recommandée",
+      "exploited_one": "{{count}} micro-instant exploité aujourd'hui",
+      "exploited_other": "{{count}} micro-instants exploités aujourd'hui",
+      "exploitedToast": "Micro-instant exploité !",
+      "source": {
+        "calendar": "Calendrier",
+        "routine": "Routine",
+        "pattern": "Pattern"
+      }
+    },
+    "progress": {
+      "title": "Progression du jour",
+      "routines": "routines",
+      "minutesInvested": "{{count}} min investies",
+      "minutesPlanned": "{{count}} min planifiées"
+    },
+    "routine": {
+      "done": "Fait",
+      "completed": "Complétée",
+      "completedToast": "Routine complétée !",
+      "moreItems": "+{{count}} autres",
+      "actions": "actions"
+    },
+    "objectives": {
+      "title": "Mes objectifs en cours",
+      "day": "Jour {{current}}/{{total}}",
+      "sessions": "sessions",
+      "nextSession": "Prochaine session",
+      "start": "Lancer"
+    },
+    "now": "Maintenant",
+    "smartCta": {
+      "dayComplete": "Journée accomplie",
+      "nextRecommended": "Prochaine action recommandée",
+      "viewProgress": "Voir ma progression",
+      "bonus": "Bonus : {{title}}",
+      "createFirstObjective": "Créer mon premier objectif",
+      "createRoutine": "Créer une routine",
+      "launch": "Lancer : {{name}}",
+      "launchSublabel": "{{minutes}} min · {{count}} actions",
+      "continue": "Continuer : {{title}}",
+      "nextSessionSub": "Prochaine session — {{title}}",
+      "planRoutines": "Planifier des routines",
+      "defineObjective": "Définir un objectif"
+    },
+    "errors": {
+      "loading": "Erreur de chargement",
+      "network": "Erreur réseau",
+      "generic": "Erreur"
+    }
+  },
+  "components": {
+    "slotCard": {
+      "now": "Maintenant !",
+      "countdownHours": "dans {{hours}}h {{minutes}}min",
+      "countdownMinutes": "dans {{minutes}}min {{seconds}}s",
+      "countdownSeconds": "dans {{seconds}}s",
+      "errorStart": "Erreur lors du démarrage",
+      "dismissed": "Créneau ignoré",
+      "freeSlotDetected": "Créneau libre détecté • Catégorie suggérée : {{category}}",
+      "start": "Commencer"
+    },
+    "smartPrediction": {
+      "title": "Prédictions intelligentes",
+      "analyzing": "Analyse de votre agenda...",
+      "connectDescription": "Connectez votre calendrier pour que l'IA prédise vos prochains moments disponibles.",
+      "connectCalendar": "Connecter un calendrier",
+      "noSlotsDetected": "Aucun créneau détecté pour les prochaines 24h. Synchronisez votre calendrier pour mettre à jour.",
+      "slotsAvailable": "{{count}} créneau{{count, plural, one {} other {x}}} • {{minutes}} min disponibles",
+      "nextMoment": "Prochain moment : {{countdown}}",
+      "now": "Maintenant",
+      "countdownHoursMin": "dans {{hours}}h {{minutes}}min",
+      "countdownHours": "dans {{hours}}h",
+      "countdownMinutes": "dans {{minutes}} min",
+      "action": "Action",
+      "score": "Score : {{score}}%",
+      "freeSlotDetected": "Créneau libre détecté",
+      "errorStart": "Erreur lors du démarrage",
+      "rhythm": "Votre rythme actuel : sessions de ~{{duration}} min",
+      "solidConsistency": "Régularité solide"
+    },
+    "recapCard": {
+      "title": "Mon récap",
+      "streakDays": "{{count}}j streak",
+      "routines": "Routines",
+      "thisWeek": "Cette semaine",
+      "weekSummary": "{{minutes}} min · {{sessions}} sessions",
+      "days": {
+        "mon": "Lun",
+        "tue": "Mar",
+        "wed": "Mer",
+        "thu": "Jeu",
+        "fri": "Ven",
+        "sat": "Sam",
+        "sun": "Dim"
+      }
+    },
+    "shareDialog": {
+      "title": "Partager ma progression",
+      "generating": "Génération de la carte...",
+      "errorCreate": "Impossible de créer le partage",
+      "shareTitle": "Ma progression InFinea",
+      "shareText": "Investis tes instants perdus",
+      "imageSaved": "Image sauvegardée !",
+      "errorExport": "Erreur lors de l'export de l'image",
+      "linkCopied": "Lien copié !",
+      "errorCopy": "Impossible de copier le lien",
+      "exporting": "Export en cours...",
+      "saveImage": "Sauvegarder l'image",
+      "copied": "Copié !",
+      "copyLink": "Copier le lien",
+      "share": "Partager"
+    },
+    "shareCard": {
+      "tagline": "Micro-instants, macro-progrès",
+      "streakDays": "{{count}}j",
+      "progressionOf": "Progression de",
+      "invested": "investies",
+      "badges": "badges",
+      "thisWeek": "Cette semaine",
+      "weekSummary": "{{minutes}} min · {{sessions}} sessions",
+      "currentObjective": "Objectif en cours",
+      "footerTagline": "Investis tes instants perdus",
+      "days": {
+        "mon": "L",
+        "tue": "M",
+        "wed": "M",
+        "thu": "J",
+        "fri": "V",
+        "sat": "S",
+        "sun": "D"
+      }
+    },
+    "premiumAnalytics": {
+      "title": "Analytics Avancées",
+      "lockedDescription": "Découvrez vos habitudes, votre meilleur moment de la journée, et des insights personnalisés avec Premium.",
+      "discoverPremium": "Découvrir Premium",
+      "premiumTitle": "Analytics Premium",
+      "subtitle": "Insights avancés sur vos habitudes",
+      "bestTime": "Meilleur moment",
+      "mostProductiveDay": "Jour le + productif",
+      "nextMilestone": "Prochain palier",
+      "daysRemaining": "~{{count}}j restants",
+      "activityTitle": "Activité des 30 derniers jours",
+      "streakHistoryTitle": "Historique des streaks",
+      "streakDays": "{{count}} jours",
+      "best": "Meilleur",
+      "timeOfDay": {
+        "morning": "Matin",
+        "afternoon": "Après-midi",
+        "evening": "Soir"
+      },
+      "days": {
+        "monday": "Lundi",
+        "tuesday": "Mardi",
+        "wednesday": "Mercredi",
+        "thursday": "Jeudi",
+        "friday": "Vendredi",
+        "saturday": "Samedi",
+        "sunday": "Dimanche"
+      }
+    },
+    "aiCoach": {
+      "title": "Coach IA",
+      "modes": {
+        "postCompletion": {
+          "badge": "Bravo !",
+          "subtitle": "Après ta session"
+        },
+        "postAbandon": {
+          "badge": "On continue",
+          "subtitle": "Pas de pression"
+        },
+        "streakMilestone": {
+          "badge": "Milestone !",
+          "subtitle": "Exploit débloqué"
+        },
+        "comeback": {
+          "badge": "Bon retour",
+          "subtitle": "Content de te revoir"
+        },
+        "firstVisit": {
+          "badge": "Bienvenue",
+          "subtitle": "Ta première micro-action"
+        },
+        "default": {
+          "badge": "Personnalisé",
+          "subtitle": "Adapté à ton profil"
+        }
+      },
+      "suggestionLabel": {
+        "postCompletion": "Enchaîne avec",
+        "postAbandon": "Essaie plutôt",
+        "firstVisit": "Pour commencer",
+        "default": "Suggestion pour toi"
+      },
+      "cta": {
+        "postCompletion": "Continuer sur ma lancée",
+        "firstVisit": "Faire ma première action",
+        "default": "Commencer cette action"
+      }
+    },
+    "coachFab": {
+      "title": "Coach IA",
+      "online": "En ligne",
+      "clearHistory": "Effacer l'historique",
+      "emptyTitle": "Ton coach personnel",
+      "emptyDescription": "Pose-moi une question, demande un conseil, ou dis-moi comment tu te sens.",
+      "errorMessage": "Oups, petit souci technique. Réessaie dans un instant !",
+      "listening": "Écoute en cours...",
+      "inputPlaceholder": "Écris au coach...",
+      "quickReplies": {
+        "whatNow": "Que faire maintenant ?",
+        "whatNowMessage": "Que me conseilles-tu de faire maintenant ?",
+        "myReport": "Mon bilan",
+        "myReportMessage": "Fais-moi un bilan de ma progression récente.",
+        "motivation": "Motivation",
+        "motivationMessage": "J'ai besoin d'un boost de motivation !"
+      }
+    },
+    "createAction": {
+      "title": "Créer une action personnalisée",
+      "description": "Décrivez ce que vous voulez faire, l'IA créera une micro-action sur mesure.",
+      "placeholder": "Ex: Je veux apprendre 5 mots de vocabulaire anglais en 3 minutes...",
+      "generating": "Génération en cours...",
+      "generateButton": "Générer avec l'IA",
+      "instructions": "Instructions :",
+      "modify": "Modifier",
+      "add": "Ajouter",
+      "errorEmpty": "Décrivez l'action que vous souhaitez créer",
+      "errorGenerate": "Erreur lors de la génération de l'action",
+      "successAdded": "Action ajoutée à votre bibliothèque !"
+    },
+    "errorBoundary": {
+      "title": "Une erreur est survenue",
+      "description": "Cette section a rencontré un problème. Tes données sont intactes.",
+      "retry": "Réessayer"
+    },
+    "microInstantBanner": {
+      "available": "Micro-instant disponible",
+      "incoming": "Micro-instant dans",
+      "start": "Commencer",
+      "view": "Voir"
+    },
+    "sessionDebrief": {
+      "title": "Debrief IA",
+      "analysisBadge": "Analyse",
+      "nextAction": "Prochaine action",
+      "startAction": "Commencer cette action"
+    },
+    "voiceInput": {
+      "unsupported": "Votre navigateur ne supporte pas la reconnaissance vocale.",
+      "micDenied": "Accès au micro refusé. Autorisez le micro dans les paramètres.",
+      "errorRecognition": "Erreur de reconnaissance vocale.",
+      "errorStart": "Impossible de démarrer le micro.",
+      "stopDictation": "Arrêter la dictée",
+      "dictate": "Dicter",
+      "listening": "Écoute...",
+      "listeningIndicator": "Écoute en cours — parle naturellement...",
+      "dictatePrompt": "Dicte ton texte..."
+    },
+    "voiceNoteButton": {
+      "unsupported": "Votre navigateur ne supporte pas la reconnaissance vocale. Utilisez Chrome ou Edge.",
+      "micDenied": "Accès au micro refusé. Autorisez le micro dans les paramètres de votre navigateur.",
+      "errorRecognition": "Erreur de reconnaissance vocale.",
+      "errorStart": "Impossible de démarrer le micro.",
+      "stop": "Arrêter",
+      "dictate": "Dicter",
+      "speakPrompt": "Parlez, je vous écoute..."
+    },
+    "createGroup": {
+      "title": "Créer un groupe",
+      "nameLabel": "Nom du groupe",
+      "namePlaceholder": "Ex: Duo du matin, Équipe dev...",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Objectif du groupe...",
+      "nameRequired": "Le nom du groupe est requis",
+      "nameMaxLength": "50 caractères maximum pour le nom",
+      "maxGroupsReached": "Tu as déjà 5 groupes actifs (maximum)",
+      "created": "Groupe créé !",
+      "createError": "Impossible de créer le groupe"
+    },
+    "groupCard": {
+      "memberCount": "{{count}} membre",
+      "memberCount_other": "{{count}} membres",
+      "thisWeek": "cette semaine",
+      "sessions": "sessions"
+    },
+    "inviteGroup": {
+      "title": "Inviter dans {{name}}",
+      "emailLabel": "Email du membre à inviter",
+      "emailPlaceholder": "ami@email.com",
+      "emailHint": "L'invité doit avoir un compte InFinea. Il recevra une notification.",
+      "invalidEmail": "Email invalide",
+      "noAccount": "Aucun compte InFinea avec cet email",
+      "alreadyMember": "Cette personne est déjà membre ou invitée",
+      "inviteImpossible": "Invitation impossible",
+      "inviteSent": "Invitation envoyée !",
+      "sendError": "Erreur lors de l'envoi",
+      "sent": "Envoyé !",
+      "invite": "Inviter"
+    },
+    "addToCalendar": {
+      "title": "Ajouter au calendrier",
+      "appleOutlook": "Apple / Outlook (.ics)",
+      "icsDownloaded": "Fichier .ics téléchargé",
+      "downloadError": "Erreur lors du téléchargement"
+    },
+    "appleCalendarGuide": {
+      "title": "Connecter Apple Calendar",
+      "description": "Suivez ces étapes pour connecter votre calendrier Apple à InFinea.",
+      "connectionError": "Erreur de connexion",
+      "connected": "{{name}} connecté ! {{count}} événements trouvés.",
+      "connectFailed": "Impossible de se connecter. Vérifiez l'URL et réessayez.",
+      "urlValidationError": "L'URL doit commencer par webcal://, https:// ou http://",
+      "steps": {
+        "openICloud": {
+          "title": "Ouvrir iCloud",
+          "instruction": "Rendez-vous sur icloud.com/calendar depuis votre navigateur et connectez-vous avec votre identifiant Apple.",
+          "tip": "💡 Utilisez un ordinateur pour cette étape, c'est plus simple.",
+          "actionLabel": "Ouvrir iCloud Calendar"
+        },
+        "shareCalendar": {
+          "title": "Partager le calendrier",
+          "instruction": "Cliquez sur l'icône de partage (👤➕) à droite du nom de votre calendrier dans la barre latérale gauche.",
+          "tip": "💡 Choisissez le calendrier que vous utilisez le plus (souvent « Domicile » ou « Travail »)."
+        },
+        "enablePublic": {
+          "title": "Activer le calendrier public",
+          "instruction": "\"Cochez « Calendrier public » en bas de la fenêtre de partage. Un lien apparaîtra — cliquez dessus pour le copier.\"",
+          "tip": "💡 Le lien commence par webcal:// — c'est normal, InFinea le gère automatiquement."
+        },
+        "pasteUrl": {
+          "title": "Coller l'URL ici",
+          "instruction": "Collez le lien copié dans le champ ci-dessous. InFinea vérifiera automatiquement que tout fonctionne."
+        }
+      }
+    },
+    "googleCalendarGuide": {
+      "title": "Connecter Google Calendar",
+      "description": "Suivez ces étapes pour connecter votre calendrier Google à InFinea.",
+      "connectionError": "Erreur de connexion",
+      "connected": "{{name}} connecté ! {{count}} événements trouvés.",
+      "connectFailed": "Impossible de se connecter. Vérifiez l'URL et réessayez.",
+      "urlValidationError": "L'URL doit provenir de calendar.google.com ou googleapis.com"
+    },
+    "notionGuide": {
+      "title": "Connecter Notion",
+      "description": "Suivez ces étapes pour connecter votre espace Notion à InFinea.",
+      "connectionError": "Erreur de connexion",
+      "connected": "Notion connecté avec succès !",
+      "connectFailed": "Impossible de se connecter. Vérifiez le token et réessayez.",
+      "tokenValidationError": "Le token doit commencer par « secret_ » ou « ntn_ »"
+    },
+    "slackGuide": {
+      "title": "Connecter Slack",
+      "description": "Suivez ces étapes pour connecter Slack à InFinea.",
+      "connectionError": "Erreur de connexion",
+      "connected": "Slack connecté avec succès !",
+      "connectFailed": "Impossible de se connecter. Vérifiez l'URL et réessayez.",
+      "urlValidationError": "\"L'URL doit commencer par « https://hooks.slack.com/services/ »\""
+    },
+    "todoistGuide": {
+      "title": "Connecter Todoist",
+      "description": "Suivez ces étapes pour connecter Todoist à InFinea.",
+      "connectionError": "Erreur de connexion",
+      "connected": "Todoist connecté avec succès !",
+      "connectFailed": "Impossible de se connecter. Vérifiez le token et réessayez.",
+      "tokenPlaceholder": "votre token API Todoist",
+      "tokenTooShort": "Le token semble trop court"
+    },
+    "integrationCard": {
+      "status": {
+        "connected": "Connecté",
+        "error": "Erreur",
+        "disconnected": "Non connecté",
+        "syncing": "Sync..."
+      },
+      "premium": "Premium",
+      "connectedOn": "Connecté le",
+      "sync": "Sync",
+      "test": "Tester",
+      "settings": "Param."
+    }
+  },
+  "onboarding": {
+    "steps": {
+      "goalsTitle": "Vos objectifs",
+      "goalsSubtitle": "Qu'aimeriez-vous améliorer ?",
+      "availabilityTitle": "Disponibilités",
+      "availabilitySubtitle": "Quand êtes-vous le plus disponible ?",
+      "energyTitle": "Votre énergie",
+      "energySubtitle": "Comment décririez-vous votre énergie typique ?",
+      "interestsTitle": "Vos intérêts",
+      "interestsSubtitle": "Quels domaines vous intéressent ?"
+    },
+    "goals": {
+      "learnNewSkills": "Apprendre de nouvelles compétences",
+      "boostProductivity": "Booster ma productivité",
+      "reduceStress": "Réduire mon stress",
+      "buildHabits": "Construire de bonnes habitudes"
+    },
+    "timeSlots": {
+      "morning": "Matin",
+      "morningSub": "6h - 12h",
+      "afternoon": "Après-midi",
+      "afternoonSub": "12h - 18h",
+      "evening": "Soir",
+      "eveningSub": "18h - 23h"
+    },
+    "energy": {
+      "low": "Plutôt basse",
+      "lowDesc": "Je préfère des activités calmes",
+      "medium": "Moyenne",
+      "mediumDesc": "Un bon équilibre effort/repos",
+      "high": "Élevée",
+      "highDesc": "Je suis prêt pour des défis"
+    },
+    "skip": "Passer",
+    "finish": "Terminer",
+    "welcomeTitle": "Bienvenue, {{name}} !",
+    "defaultUser": "Utilisateur",
+    "defaultWelcome": "Bienvenue sur InFinea ! Prêt(e) à transformer vos moments perdus en micro-victoires ?",
+    "startActions": "Commencer mes micro-actions",
+    "errorSave": "Erreur lors de la sauvegarde du profil"
+  },
+  "profile": {
+    "title": "Mon profil",
+    "subtitle": "Gérez vos informations et votre abonnement",
+    "defaultUser": "Utilisateur",
+    "subscription": {
+      "title": "Abonnement",
+      "premiumPlan": "Plan Premium",
+      "freePlan": "Plan Gratuit",
+      "premiumDesc": "Accès illimité à toutes les fonctionnalités",
+      "freeDesc": "Fonctionnalités de base",
+      "active": "Actif",
+      "free": "Gratuit",
+      "manage": "Gérer mon abonnement",
+      "upgrade": "Passer à Premium"
+    },
+    "summary": {
+      "title": "Résumé",
+      "minutesInvested": "minutes investies",
+      "streakDays": "jours de streak"
+    },
+    "actions": {
+      "title": "Actions",
+      "viewStats": "Voir mes statistiques",
+      "logout": "Se déconnecter"
+    },
+    "errors": {
+      "portalError": "Erreur lors de l'ouverture du portail",
+      "connectionError": "Erreur de connexion"
+    }
+  },
+  "notFound": {
+    "message": "Cette page n'existe pas ou a été déplacée.",
+    "backHome": "Retour à l'accueil"
+  },
+  "progressStats": {
+    "title": "Votre Capital-Temps",
+    "subtitle": "Suivez votre progression et vos accomplissements",
+    "share": "Partager",
+    "noData": "Pas encore de données",
+    "errorLoad": "Impossible de charger les statistiques",
+    "stats": {
+      "totalMinutes": "minutes totales",
+      "streakDays": "jours streak",
+      "hoursInvested": "heures investies"
+    },
+    "charts": {
+      "timeByCategory": "Temps par catégorie",
+      "sessionDistribution": "Répartition des sessions"
+    },
+    "recentSessions": {
+      "title": "Sessions récentes",
+      "empty": "Aucune session complétée",
+      "startSession": "Commencer une session"
+    }
+  },
+  "journal": {
+    "title": "Mon Journal",
+    "subtitle": "Suivi de tes réflexions et analyse intelligente",
+    "newReflection": "Nouvelle réflexion",
+    "myReflections": "Mes réflexions",
+    "entriesCount": "{{count}} entrées",
+    "tabs": {
+      "reflections": "Réflexions",
+      "aiAnalysis": "Analyse IA"
+    },
+    "mood": {
+      "positive": "Positif",
+      "neutral": "Neutre",
+      "negative": "Difficile"
+    },
+    "date": {
+      "today": "Aujourd'hui",
+      "yesterday": "Hier",
+      "daysAgo": "Il y a {{count}} jours"
+    },
+    "empty": {
+      "noReflections": "Aucune réflexion pour le moment",
+      "addFirst": "Ajouter ma première réflexion"
+    },
+    "dialog": {
+      "description": "Notez vos pensées, idées ou observations du moment",
+      "placeholder": "Qu'avez-vous en tête ? Comment vous sentez-vous après cette session ?",
+      "moodLabel": "Comment vous sentez-vous ?",
+      "categoryLabel": "Catégorie associée (optionnel)",
+      "categoryPlaceholder": "Choisir une catégorie",
+      "categoryNone": "Aucune"
+    },
+    "analysis": {
+      "generate": "Générer l'analyse",
+      "refresh": "Actualiser",
+      "lastAnalysis": "Dernière analyse : {{date}}",
+      "keyInsight": "Observation clé",
+      "patternsIdentified": "Patterns identifiés",
+      "strengths": "Points forts",
+      "personalizedTip": "Conseil personnalisé",
+      "moodTrend": "Tendance d'humeur :",
+      "unavailable": "Analyse non disponible",
+      "unavailableDescription": "Ajoute quelques réflexions dans l'onglet \"Réflexions\" puis clique sur \"Générer l'analyse\" pour obtenir des insights personnalisés."
+    },
+    "toast": {
+      "reflectionSaved": "Réflexion enregistrée !",
+      "reflectionDeleted": "Réflexion supprimée",
+      "analysisGenerated": "Analyse générée !"
+    },
+    "errors": {
+      "loading": "Erreur de chargement",
+      "emptyContent": "Écrivez quelque chose d'abord !",
+      "save": "Erreur lors de l'enregistrement",
+      "delete": "Erreur lors de la suppression",
+      "generate": "Erreur lors de la génération"
+    }
+  },
+  "notes": {
+    "title": "Mes Notes",
+    "subtitle": "Retrouve et exploite toutes les notes de tes sessions",
+    "allNotes": "Toutes mes notes",
+    "loadMore": "Charger plus",
+    "durationMin": "{{count}} min",
+    "tabs": {
+      "myNotes": "Mes Notes",
+      "aiAnalysis": "Analyse IA"
+    },
+    "date": {
+      "today": "Aujourd'hui",
+      "yesterday": "Hier",
+      "daysAgo": "Il y a {{count}} jours"
+    },
+    "stats": {
+      "totalNotes": "Notes totales",
+      "thisWeek": "Cette semaine",
+      "avgLength": "Car. moyens"
+    },
+    "filter": {
+      "category": "Catégorie",
+      "all": "Toutes"
+    },
+    "empty": {
+      "noNotes": "Aucune note pour le moment",
+      "description": "Complète des sessions et ajoute des notes pour les retrouver ici",
+      "startAction": "Commencer une action"
+    },
+    "analysis": {
+      "title": "Analyse de tes notes",
+      "generate": "Générer l'analyse",
+      "refresh": "Actualiser",
+      "notesAnalyzed": "{{count}} notes analysées",
+      "keyInsight": "Observation clé",
+      "patternsIdentified": "Patterns identifiés",
+      "strengths": "Points forts",
+      "growthAreas": "Axes de progression",
+      "personalizedTip": "Conseil personnalisé",
+      "suggestedFocus": "Focus suggéré :",
+      "goPremium": "Passer Premium",
+      "unavailable": "Analyse non disponible",
+      "unavailableReady": "Clique sur \"Générer l'analyse\" pour obtenir des insights personnalisés sur tes notes.",
+      "unavailableNeedMore": "Encore {{count}} note(s) avant ta première analyse."
+    },
+    "deleteDialog": {
+      "title": "Supprimer cette note ?",
+      "description": "Cette action est irréversible. La note sera définitivement supprimée."
+    },
+    "toast": {
+      "analysisGenerated": "Analyse générée !",
+      "limitReached": "Limite d'analyses atteinte aujourd'hui",
+      "noteDeleted": "Note supprimée"
+    },
+    "errors": {
+      "loading": "Erreur de chargement",
+      "analysis": "Erreur lors de l'analyse",
+      "filter": "Erreur de filtrage",
+      "delete": "Erreur lors de la suppression"
+    }
+  },
+  "objectives": {
+    "title": "Mes Objectifs",
+    "subtitle": "Tes parcours de progression personnalisés",
+    "newObjective": "Nouvel objectif",
+    "sessionsCount": "{{completed}}/{{total}} sessions",
+    "streakDays": "{{count}}j streak",
+    "totalMinutes": "{{count}} min",
+    "dayProgress": "Jour {{current}}/{{total}}",
+    "activeSection": "En cours ({{count}})",
+    "archivedSection": "Archivés ({{count}})",
+    "limitReached": "Tu as atteint la limite de 2 objectifs actifs",
+    "upgradePremium": "Passer en Premium",
+    "createSuccess": "Objectif créé ! Le curriculum se génère...",
+    "status": {
+      "active": "En cours",
+      "paused": "En pause",
+      "completed": "Terminé",
+      "abandoned": "Abandonné"
+    },
+    "duration": {
+      "2weeks": "2 sem.",
+      "nDays": "{{count}} jours",
+      "nMonths": "{{count}} mois"
+    },
+    "empty": {
+      "title": "Définis ton premier objectif",
+      "description": "Apprendre une langue, jouer d'un instrument, méditer chaque jour... L'IA crée un parcours progressif adapté à toi.",
+      "cta": "Créer mon premier parcours"
+    },
+    "form": {
+      "titleLabel": "Quel est ton objectif ?",
+      "titlePlaceholder": "Ex: Apprendre le thaï, Jouer du piano...",
+      "descriptionLabel": "Contexte & détails",
+      "descriptionHint": "Plus tu donnes de détails, meilleur sera ton parcours.",
+      "descriptionPlaceholder": "Niveau actuel, objectif précis, contraintes, ressources disponibles, ce que tu veux atteindre à la fin du parcours...",
+      "categoryLabel": "Catégorie",
+      "minutesPerDay": "Minutes / jour",
+      "minutesValue": "{{count}} min",
+      "durationLabel": "Durée du parcours",
+      "generateCta": "Générer mon parcours"
+    },
+    "errors": {
+      "loadFailed": "Erreur de chargement",
+      "titleRequired": "Donne un titre à ton objectif"
+    }
+  },
+  "objectiveDetail": {
+    "backToObjectives": "Mes Objectifs",
+    "progression": "Progression",
+    "dayLabel": "JOUR {{day}}",
+    "dayShort": "J{{day}}",
+    "review": "Révision",
+    "focus": "Focus",
+    "durationResult": "Durée : {{minutes}} min",
+    "noteLabel": "Note",
+    "startSession": "Commencer cette session",
+    "statusPaused": "Objectif mis en pause",
+    "statusResumed": "Objectif repris !",
+    "deleteSuccess": "Objectif supprimé",
+    "sessionsCount": "{{completed}}/{{total}} sessions",
+    "minutesShort": "{{count}} min",
+    "difficulty": {
+      "1": "Fondamental",
+      "2": "Débutant",
+      "3": "Intermédiaire",
+      "4": "Avancé",
+      "5": "Expert"
+    },
+    "stats": {
+      "streak": "Streak",
+      "minutes": "Minutes",
+      "sessions": "Sessions",
+      "daysShort": "j"
+    },
+    "tabs": {
+      "curriculum": "Parcours",
+      "skills": "Skills",
+      "insights": "Insights"
+    },
+    "curriculum": {
+      "title": "Mon parcours",
+      "generating": "Génération en cours...",
+      "generatingMessage": "L'IA génère ton parcours personnalisé...",
+      "generatingHint": "Reviens dans quelques secondes !",
+      "refresh": "Rafraîchir",
+      "completedTitle": "Parcours terminé !",
+      "completedDescription": "Tu as complété {{sessions}} sessions et investi {{minutes}} minutes.",
+      "viewObjectives": "Voir mes objectifs"
+    },
+    "skills": {
+      "emptyTitle": "Pas encore de compétences",
+      "emptyDescription": "Complète quelques sessions pour voir ta carte de compétences.",
+      "overallMastery": "Maîtrise globale",
+      "toReview": "{{count}} à réviser",
+      "levels": {
+        "notStarted": "Non démarré",
+        "beginner": "Débutant",
+        "progressing": "En progression",
+        "intermediate": "Intermédiaire",
+        "advanced": "Avancé",
+        "mastered": "Maîtrisé"
+      }
+    },
+    "insights": {
+      "emptyTitle": "Pas encore d'insights",
+      "emptyDescription": "Complète quelques sessions pour débloquer l'analyse de ta progression.",
+      "tabs": {
+        "analysis": "Analyse",
+        "activity": "Activité",
+        "journal": "Journal"
+      },
+      "completion": "Complétion",
+      "avgPerSession": "Moy. / session",
+      "activeDays": "Jours actifs",
+      "aiAnalysis": "Analyse IA",
+      "strengths": "Points forts",
+      "improvements": "À améliorer",
+      "advice": "Conseil",
+      "aiLocked": "L'analyse IA se débloque après 3 sessions complétées.",
+      "weeklyActivity": "Activité hebdomadaire",
+      "sessionsShort": "{{count}} sess.",
+      "difficultyProgression": "Progression de difficulté",
+      "sessionHistory": "Historique des sessions",
+      "sessionsTotal": "{{count}} sessions"
+    },
+    "journal": {
+      "dayEntry": "Jour {{day}}",
+      "emptyTitle": "Aucune note pour l'instant",
+      "emptyDescription": "Ajoute des notes lors de tes sessions pour les retrouver ici."
+    },
+    "session": {
+      "lastSession": "Dernière session",
+      "target": "Objectif",
+      "notesPlaceholder": "Notes sur cette session...",
+      "abandon": "Abandonner",
+      "complete": "Terminer la session",
+      "courseComplete": "Parcours terminé ! Bravo !",
+      "sessionComplete": "Session terminée ! {{percent}}% du parcours"
+    },
+    "share": {
+      "button": "Partager",
+      "line1": "Jour {{day}} sur « {{title}} »",
+      "line2": "{{percent}}% complété · {{streak}}j de streak · {{minutes}} min investies",
+      "line3": "Mon parcours sur InFinea !"
+    },
+    "deleteConfirm": {
+      "title": "Supprimer cet objectif ?",
+      "description": "Cette action est irréversible. Toute la progression sera perdue.",
+      "confirm": "Supprimer"
+    },
+    "errors": {
+      "notFound": "Objectif non trouvé",
+      "loadFailed": "Erreur de chargement",
+      "saveFailed": "Erreur lors de la sauvegarde"
+    }
+  },
+  "microInstantsPage": {
+    "greeting": {
+      "morning": "Bonjour !",
+      "morningName": "Bonjour {{name}} !",
+      "afternoon": "Bon après-midi !",
+      "afternoonName": "Bon après-midi {{name}} !",
+      "evening": "Bonsoir !",
+      "eveningName": "Bonsoir {{name}} !"
+    },
+    "subtitle": "Tes micro-instants du jour",
+    "exploitedRate": "{{rate}}% exploités",
+    "allInstants": "Tous les instants",
+    "now": "MAINTENANT",
+    "confidencePct": "{{pct}}% confiance",
+    "source": {
+      "calendar": "Calendrier",
+      "routine": "Routine",
+      "pattern": "Pattern détecté"
+    },
+    "skipReasons": {
+      "busy": "Occupé en ce moment",
+      "wrongTime": "Mauvais moment",
+      "notInterested": "Pas intéressé",
+      "other": "Autre raison"
+    },
+    "skipDialog": {
+      "title": "Passer ce micro-instant ?",
+      "description": "Ton feedback améliore les prochaines prédictions.",
+      "confirm": "Passer"
+    },
+    "card": {
+      "startNow": "Commencer",
+      "launch": "Lancer",
+      "exploited": "Exploité",
+      "skipped": "Passé",
+      "undoCountdown": "Annuler ({{seconds}}s)"
+    },
+    "hero": {
+      "available": "Micro-instant disponible",
+      "nextAt": "Prochain à {{time}}",
+      "recommendedAction": "Action recommandée",
+      "startNow": "Commencer maintenant",
+      "launchAction": "Lancer cette action"
+    },
+    "stats": {
+      "detected": "Détectés",
+      "exploited": "Exploités",
+      "available": "Disponibles"
+    },
+    "empty": {
+      "title": "Pas de micro-instants détectés",
+      "description": "Le moteur apprend tes patterns d'usage. Continue d'utiliser InFinea et les micro-instants apparaîtront automatiquement.",
+      "accelerateTitle": "Pour accélérer la détection :",
+      "tip1": "Connecte ton calendrier Google",
+      "tip2": "Crée des routines quotidiennes",
+      "tip3": "Complète quelques sessions"
+    },
+    "analytics": {
+      "title": "Analytics (30 jours)",
+      "summary": "{{total}} instants · {{rate}}% exploités",
+      "vsLastWeek": "{{pct}}% vs semaine dernière",
+      "last7Days": "7 derniers jours",
+      "days": {
+        "sun": "Dim",
+        "mon": "Lun",
+        "tue": "Mar",
+        "wed": "Mer",
+        "thu": "Jeu",
+        "fri": "Ven",
+        "sat": "Sam"
+      },
+      "legendExploited": "Exploités",
+      "legendSkipped": "Passés",
+      "exploitationHours": "Heures d'exploitation",
+      "timeBlocks": {
+        "morning": "Matin",
+        "afternoon": "Après-midi",
+        "evening": "Soir"
+      },
+      "bestSlots": "Meilleurs créneaux",
+      "exploitedCount": "{{exploited}}/{{total}} exploités",
+      "detectionSources": "Sources de détection",
+      "exploitedPct": "{{rate}}% exploités",
+      "consecutiveDays": "Jours consécutifs",
+      "avgPerActiveDay": "Moy. / jour actif",
+      "activeDays30": "Jours actifs (30j)",
+      "timeInvested": "Temps investi"
+    },
+    "toasts": {
+      "actionLaunched": "Action lancée",
+      "exploitedSuccess": "Micro-instant exploité — bravo !",
+      "restored": "Micro-instant restauré",
+      "restoredDescription": "Tu peux encore l'exploiter."
+    },
+    "errors": {
+      "loadFailed": "Impossible de charger les micro-instants",
+      "exploitFailed": "Erreur lors de l'exploitation",
+      "network": "Erreur réseau"
+    }
+  },
+  "b2b": {
+    "createCompany": {
+      "title": "Créer votre espace entreprise",
+      "description": "Suivez la progression de votre équipe et mesurez l'impact QVT",
+      "nameLabel": "Nom de l'entreprise",
+      "namePlaceholder": "Ma Super Entreprise",
+      "domainLabel": "Domaine email",
+      "domainPlaceholder": "entreprise.com",
+      "domainHint": "Les collaborateurs devront avoir un email @{{domain}}",
+      "submit": "Créer l'espace entreprise"
+    },
+    "header": {
+      "defaultTitle": "Dashboard Entreprise",
+      "managerBadge": "Manager",
+      "subtitle": "Analytics d'équipe & ROI bien-être",
+      "export": "Export",
+      "invite": "Inviter"
+    },
+    "invite": {
+      "title": "Inviter un collaborateur",
+      "description": "L'email doit être @{{domain}}",
+      "placeholder": "collaborateur@{{domain}}",
+      "submit": "Envoyer l'invitation"
+    },
+    "kpis": {
+      "activeEmployees": "collaborateurs actifs",
+      "engagementRate": "taux d'engagement",
+      "totalTimeInvested": "temps total investi",
+      "qvtScore": "score QVT"
+    },
+    "roi": {
+      "title": "ROI Bien-être",
+      "subtitle": "Impact mesurable sur la productivité",
+      "wellbeingThisMonth": "en bien-être ce mois",
+      "estimatedProductivity": "productivité estimée",
+      "completedSessions": "sessions complétées"
+    },
+    "tabs": {
+      "overview": "Vue d'ensemble",
+      "team": "Équipe",
+      "categories": "Catégories"
+    },
+    "overview": {
+      "activityTitle": "Activité (28 derniers jours)",
+      "noActivityData": "Pas encore de données d'activité",
+      "categoryDistribution": "Répartition par catégorie",
+      "sessionsCount": "{{count}} sessions",
+      "noData": "Pas encore de données"
+    },
+    "team": {
+      "leaderboardTitle": "Classement de l'équipe",
+      "gamifiedLeaderboard": "Classement gamifié",
+      "sessionsCount": "{{count}} sessions",
+      "streakDays": "jours streak",
+      "employeeSummary": "{{sessions}} sessions • {{time}} min",
+      "noEmployees": "Aucun collaborateur pour le moment",
+      "inviteEmployees": "Inviter des collaborateurs"
+    },
+    "categories": {
+      "sessions": "Sessions",
+      "timeInvested": "Temps investi"
+    },
+    "toasts": {
+      "companyCreated": "Entreprise créée avec succès !",
+      "companyCreateError": "Erreur lors de la création",
+      "inviteSent": "Invitation envoyée !",
+      "exportSoon": "Export PDF bientôt disponible"
+    }
+  },
+  "pricing": {
+    "nav": {
+      "login": "Connexion",
+      "getStarted": "Commencer"
+    },
+    "header": {
+      "badge": "Investissez dans votre temps",
+      "title": "Choisissez votre plan",
+      "subtitle": "Commencez gratuitement et passez à Premium pour une IA qui apprend de vous et une bibliothèque de micro-actions en perpétuelle évolution."
+    },
+    "popular": "Populaire",
+    "plans": {
+      "free": {
+        "name": "Gratuit",
+        "price": "0€",
+        "description": "Pour découvrir InFinea",
+        "feature1": "300+ micro-actions (3 catégories)",
+        "feature2": "Coach IA personnalisé",
+        "feature3": "Suivi de progression & streaks",
+        "feature4": "12 badges à débloquer",
+        "feature5": "Journal de réflexion",
+        "ctaCurrent": "Plan actuel",
+        "ctaStart": "Commencer"
+      },
+      "premium": {
+        "name": "Premium",
+        "price": "6,99€",
+        "period": "/mois",
+        "description": "L'expérience complète",
+        "feature1": "Tout le plan Gratuit +",
+        "feature2": "8 catégories exclusives (400+ actions)",
+        "feature3": "IA avancée avec suggestions personnalisées",
+        "feature4": "Suggestion proactive au bon moment",
+        "feature5": "Bouclier de Streak (1x/semaine)",
+        "feature6": "Défis mensuels & récompenses",
+        "feature7": "Analytics avancées & insights",
+        "feature8": "20 badges Premium",
+        "ctaAlready": "Déjà Premium",
+        "ctaUpgrade": "Passer à Premium"
+      }
+    },
+    "manageSubscription": "Gérer mon abonnement",
+    "promo": {
+      "haveCode": "Vous avez un code promo ?",
+      "placeholder": "Entrez votre code",
+      "activate": "Activer"
+    },
+    "premiumCategories": {
+      "title": "8 catégories exclusives Premium",
+      "actionsCount": "50 actions"
+    },
+    "whyPremium": {
+      "title": "Pourquoi passer à Premium ?",
+      "aiTitle": "IA qui vous connait",
+      "aiDescription": "Suggestions personnalisées selon vos habitudes, votre énergie et le moment de la journée",
+      "libraryTitle": "Bibliothèque infinie",
+      "libraryDescription": "700+ micro-actions dans 11 catégories, enrichie en continu pour ne jamais manquer d'inspiration",
+      "shieldTitle": "Bouclier de Streak",
+      "shieldDescription": "Protégez votre streak une fois par semaine si vous manquez un jour"
+    },
+    "comparisonTable": {
+      "feature": "Fonctionnalité",
+      "free": "Gratuit",
+      "premium": "Premium"
+    },
+    "comparison": {
+      "microActions": {
+        "name": "Micro-actions",
+        "free": "300+ (3 catégories)",
+        "premium": "700+ (11 catégories)"
+      },
+      "categories": {
+        "name": "Catégories",
+        "free": "Learning, Productivité, Bien-être",
+        "premium": "+ Créativité, Fitness, Mindfulness, Leadership, Finance, Relations, Santé mentale, Entrepreneuriat"
+      },
+      "aiCoach": {
+        "name": "Coach IA",
+        "free": "Claude Haiku",
+        "premium": "Claude Sonnet (avancé)"
+      },
+      "aiSuggestions": {
+        "name": "Suggestions IA"
+      },
+      "personalizedSuggestions": {
+        "name": "Suggestions personnalisées",
+        "free": "Basiques",
+        "premium": "IA comportementale avancée"
+      },
+      "proactiveSuggestion": {
+        "name": "Suggestion proactive",
+        "premium": "Au bon moment, sans rien demander"
+      },
+      "postSessionDebrief": {
+        "name": "Débrief post-session"
+      },
+      "weeklyAnalysis": {
+        "name": "Analyse hebdomadaire"
+      },
+      "customActions": {
+        "name": "Création d'actions custom"
+      },
+      "badges": {
+        "name": "Badges",
+        "free": "12 badges",
+        "premium": "20 badges (dont 8 exclusifs)"
+      },
+      "streakShield": {
+        "name": "Bouclier de Streak"
+      },
+      "monthlyChallenges": {
+        "name": "Défis mensuels"
+      },
+      "advancedAnalytics": {
+        "name": "Analytics avancées"
+      },
+      "integrations": {
+        "name": "Intégrations",
+        "free": "1 (Google Calendar)",
+        "premium": "Toutes (Calendar, Notion, Todoist, Slack)"
+      }
+    },
+    "payment": {
+      "verifying": "Vérification du paiement...",
+      "pleaseWait": "Merci de patienter quelques instants"
+    },
+    "toasts": {
+      "paymentSuccess": "Paiement réussi ! Bienvenue dans Premium !",
+      "sessionExpired": "Session expirée. Veuillez réessayer.",
+      "premiumActivated": "Premium activé ! Bienvenue dans Premium !",
+      "activationError": "Impossible d'activer Premium",
+      "portalError": "Impossible d'accéder à la gestion de l'abonnement",
+      "invalidPromo": "Code promo invalide"
+    },
+    "footer": {
+      "trustSignals": "Paiement sécurisé par Stripe • Annulez à tout moment • Sans engagement",
+      "contactPrefix": "Des questions ? Contactez-nous à"
+    }
+  },
+  "actionsLibrary": {
+    "title": "Bibliothèque d'actions",
+    "subtitle": "Explorez toutes les micro-actions disponibles",
+    "createAction": "Créer une action",
+    "duration": "{{min}}-{{max}} min",
+    "tabs": {
+      "all": "Toutes",
+      "myActions": "Mes actions"
+    },
+    "badges": {
+      "custom": "Custom"
+    },
+    "empty": {
+      "title": "Aucune action personnalisée",
+      "description": "Créez votre première action avec l'IA, elle apparaîtra ici."
+    },
+    "noResults": {
+      "title": "Aucune action trouvée",
+      "description": "Essayez une autre catégorie"
+    },
+    "errors": {
+      "loadFailed": "Impossible de charger les actions",
+      "premiumRequired": "Action Premium — Passez à Premium pour débloquer"
+    }
+  },
+  "badges": {
+    "title": "Vos Badges",
+    "subtitle": "Collectionnez des badges en atteignant vos objectifs",
+    "badgesEarned": "badges obtenus",
+    "newBadgeEarned": "Nouveau badge obtenu : {{name}} !",
+    "premiumTitle": "Badges Premium",
+    "premiumSubtitle": "Badges exclusifs pour les membres Premium",
+    "errors": {
+      "loadFailed": "Erreur de chargement des badges"
+    }
+  },
+  "groups": {
+    "title": "Mes Groupes",
+    "subtitle": "Progresse avec tes proches, duo ou en équipe.",
+    "createGroup": "Créer un groupe",
+    "empty": {
+      "title": "Aucun groupe pour l'instant",
+      "description": "Crée un duo ou un groupe pour progresser ensemble. Invite tes amis et suivez vos progressions mutuelles.",
+      "createFirst": "Créer mon premier groupe"
+    },
+    "errors": {
+      "loadFailed": "Impossible de charger les groupes"
+    }
+  },
+  "groupDetail": {
+    "memberCount_one": "{{count}} membre",
+    "memberCount_other": "{{count}} membres",
+    "createdOn": "Créé le {{date}}",
+    "invite": "Inviter",
+    "confirmLeave": "Quitter ce groupe ?",
+    "leaveSuccess": "Tu as quitté le groupe",
+    "confirmArchive": "Archiver ce groupe ? Cette action est irréversible.",
+    "archiveSuccess": "Groupe archivé",
+    "defaultMember": "Membre",
+    "leaderboard": {
+      "title": "Classement cette semaine",
+      "thisWeek": "cette semaine",
+      "streakDays": "{{count}}j",
+      "sessions": "{{count}} sessions"
+    },
+    "feed": {
+      "title": "Activité récente",
+      "sessionCompleted": "session complétée"
+    },
+    "timeAgo": {
+      "justNow": "à l'instant",
+      "minutes": "il y a {{count}} min",
+      "hours": "il y a {{count}}h",
+      "days": "il y a {{count}}j"
+    },
+    "errors": {
+      "notFound": "Groupe introuvable",
+      "loadFailed": "Impossible de charger le groupe",
+      "leaveFailed": "Impossible de quitter le groupe",
+      "archiveFailed": "Impossible d'archiver le groupe",
+      "network": "Erreur réseau"
+    }
+  },
+  "integrations": {
+    "title": "Hub d'Intégrations",
+    "subtitle": "Connectez vos outils pour des suggestions plus intelligentes",
+    "defaultService": "Service",
+    "connectedCount": "{{connected}}/{{total}} connectés",
+    "connectedSection": "Connectés ({{count}})",
+    "freeTierBanner": "Plan gratuit : 1 intégration max. Passez à Premium pour connecter tous vos outils.",
+    "seePremium": "Voir Premium",
+    "premiumRequired": "Premium requis",
+    "notConfiguredOnServer": "Non configuré sur ce serveur",
+    "categories": {
+      "calendar": "calendrier",
+      "notes": "notes",
+      "tasks": "tâches",
+      "communication": "communication"
+    },
+    "status": {
+      "connected": "Connecté",
+      "comingSoon": "Bientôt",
+      "comingSoonFull": "Bientôt disponible"
+    },
+    "actions": {
+      "connect": "Connecter",
+      "disconnect": "Déconnecter",
+      "sync": "Synchroniser"
+    },
+    "services": {
+      "googleCalendar": {
+        "description": "Détecte automatiquement vos créneaux libres entre les réunions",
+        "urlLabel": "URL secrète iCal de Google Calendar",
+        "urlHelp": "Google Calendar → Paramètres → Votre calendrier → Adresse secrète au format iCal. Copiez l'URL et collez-la ici."
+      },
+      "notion": {
+        "description": "Exportez vos sessions comme pages Notion automatiquement",
+        "tokenLabel": "Token d'intégration Notion",
+        "tokenHelp": "Créez une intégration sur notion.so/my-integrations, puis copiez le token."
+      },
+      "todoist": {
+        "description": "Loguez vos sessions comme tâches complétées dans Todoist",
+        "tokenLabel": "Token API Todoist",
+        "tokenHelp": "Allez dans Paramètres → Intégrations → Développeur pour copier votre token API."
+      },
+      "slack": {
+        "description": "Recevez vos résumés hebdomadaires directement dans Slack",
+        "tokenLabel": "URL de webhook Slack",
+        "tokenHelp": "Créez un webhook entrant sur api.slack.com/messaging/webhooks."
+      },
+      "ical": {
+        "description": "Importez votre calendrier iCal/ICS pour détecter vos créneaux libres",
+        "urlLabel": "URL du calendrier iCal",
+        "urlHelp": "Collez l'URL .ics de votre application calendrier (Apple, Outlook, etc.)."
+      }
+    },
+    "slotDetection": {
+      "title": "Détection des créneaux",
+      "description": "Configurez comment InFinea détecte vos moments libres",
+      "enableAutoDetection": "Activer la détection automatique",
+      "enableAutoDetectionHelp": "Analyse votre calendrier pour trouver des créneaux libres",
+      "slotDuration": "Durée des créneaux : {{min}} - {{max}} min",
+      "to": "à",
+      "windowStart": "Début de la fenêtre",
+      "windowEnd": "Fin de la fenêtre",
+      "advanceNotification": "Minutes d'avance pour la notification"
+    },
+    "dialogs": {
+      "settingsTitle": "Paramètres de l'intégration",
+      "connectedOn": "Connecté le",
+      "calendarUrl": "URL du calendrier",
+      "supportedFormats": "Formats supportés : .ics, webcal://, https://",
+      "tokenSecure": "Votre token est chiffré et stocké de manière sécurisée.",
+      "tokenDefault": "Token {{name}}",
+      "tokenHelpWithUrl": "Obtenez votre token sur {{name}}.",
+      "tokenHelpGeneric": "Entrez votre token {{name}}."
+    },
+    "errors": {
+      "oauthError": "Erreur lors de l'authentification",
+      "missingParams": "Paramètres manquants",
+      "invalidState": "Session expirée, veuillez réessayer",
+      "connectionFailed": "Échec de la connexion",
+      "notConfigured": "{{name}} n'est pas configuré sur ce serveur",
+      "tokenFailed": "Échec de l'obtention du token",
+      "expired": "Lien expiré, veuillez réessayer",
+      "unknownService": "Service inconnu",
+      "callbackFailed": "Échec du callback OAuth",
+      "generic": "Une erreur est survenue",
+      "serviceUnavailable": "Ce service n'est pas disponible actuellement"
+    },
+    "toasts": {
+      "connectedSuccess": "{{name}} connecté avec succès !",
+      "loadError": "Erreur de chargement",
+      "connectionError": "Erreur de connexion",
+      "urlConnected": "{{name}} connecté ! {{count}} événements trouvés.",
+      "tokenConnected": "{{name}} connecté avec succès !",
+      "disconnected": "Intégration déconnectée",
+      "disconnectError": "Erreur lors de la déconnexion",
+      "slotsDetected": "{{count}} créneaux détectés",
+      "itemsSynced": "{{count}} éléments synchronisés",
+      "syncComplete": "Synchronisation terminée : {{details}}",
+      "syncError": "Erreur lors de la synchronisation",
+      "testSuccess": "Connexion vérifiée — tout fonctionne !",
+      "testFailed": "La connexion ne fonctionne plus",
+      "testError": "Impossible de tester la connexion",
+      "settingsUpdated": "Paramètres mis à jour",
+      "settingsError": "Erreur lors de la mise à jour"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "subtitle": "Alertes intelligentes et rappels proactifs",
+    "errorLoading": "Erreur de chargement",
+    "pushNotSupported": "Les notifications push ne sont pas supportées",
+    "pushDisabled": "Notifications push désactivées",
+    "pushEnabled": "Notifications push activées !",
+    "permissionDenied": "Permission refusée",
+    "errorActivating": "Erreur lors de l'activation",
+    "preferencesUpdated": "Préférences mises à jour",
+    "errorUpdating": "Erreur de mise à jour",
+    "markedAllRead": "Notifications marquées comme lues",
+    "tabs": {
+      "coach": "Coach",
+      "history": "Historique",
+      "settings": "Réglages"
+    },
+    "smart": {
+      "description": "Suggestions personnalisées basées sur ton activité",
+      "refresh": "Actualiser",
+      "allGood": "Tout est en ordre !",
+      "noSuggestions": "Aucune suggestion pour le moment. Continue comme ça !"
+    },
+    "history": {
+      "markAllRead": "Tout marquer lu",
+      "empty": "Aucune notification"
+    },
+    "settings": {
+      "title": "Préférences",
+      "pushLabel": "Notifications Push",
+      "pushSupportedDesc": "Alertes même quand l'app est fermée",
+      "pushNotSupportedDesc": "Non supporté sur ce navigateur",
+      "dailyReminderLabel": "Rappel quotidien",
+      "dailyReminderDesc": "Un rappel pour ta micro-action du jour",
+      "reminderTimeLabel": "Heure du rappel",
+      "streakAlertsLabel": "Alertes streak",
+      "streakAlertsDesc": "Alerte si ton streak est en danger",
+      "newBadgesLabel": "Nouveaux badges",
+      "newBadgesDesc": "Notification quand tu obtiens un badge",
+      "weeklySummaryLabel": "Résumé hebdomadaire",
+      "weeklySummaryDesc": "Résumé de ta progression chaque semaine"
+    }
+  },
+  "challenges": {
+    "title": "Défis",
+    "subtitle": "Relève des défis et progresse avec la communauté",
+    "errorLoading": "Erreur de chargement",
+    "completed": "Complété",
+    "completedOn": "Complété le {{date}}",
+    "participantsCompleted_one": "{{count}} participant a réussi",
+    "participantsCompleted_other": "{{count}} participants ont réussi",
+    "tabs": {
+      "community": "Communauté",
+      "premium": "Premium"
+    },
+    "community": {
+      "empty": "Aucun défi communautaire ce mois-ci"
+    },
+    "premium": {
+      "lockedTitle": "Défis Premium",
+      "lockedDescription": "défis mensuels exclusifs avec badges et récompenses. Passe en Premium pour les débloquer.",
+      "discoverPremium": "Découvrir Premium",
+      "empty": "Aucun défi premium ce mois-ci"
+    }
+  },
+  "privacy": {
+    "title": "Politique de Confidentialité",
+    "lastUpdated": "Dernière mise à jour : 7 mars 2026",
+    "dataController": {
+      "heading": "1. Responsable du traitement",
+      "text": "Le responsable du traitement des données collectées sur InFinea est :",
+      "email": "Email :"
+    },
+    "dataCollected": {
+      "heading": "2. Données collectées",
+      "intro": "Dans le cadre de l'utilisation du service, nous collectons les données suivantes :",
+      "registrationLabel": "Données d'inscription :",
+      "registrationText": "nom, adresse email, mot de passe (hashé)",
+      "profileLabel": "Données de profil :",
+      "profileText": "objectifs, centres d'intérêt, préférences d'énergie",
+      "usageLabel": "Données d'utilisation :",
+      "usageText": "sessions réalisées, temps investi, progression",
+      "connectionLabel": "Données de connexion :",
+      "connectionText": "adresse IP, type de navigateur (via cookies analytiques)",
+      "integrationLabel": "Données d'intégration :",
+      "integrationText": "tokens d'accès aux services tiers (chiffrés AES-256)",
+      "googleCalendarLabel": "Données Google Calendar :",
+      "googleCalendarText": "informations d'agenda (titre, horaires, durée des événements) — accès en lecture seule"
+    },
+    "googleData": {
+      "heading": "3. Utilisation des données Google",
+      "intro": "InFinea utilise l'API Google Calendar avec un accès en lecture seule (scope",
+      "introSuffix": "). Cet accès est strictement limité aux finalités suivantes :",
+      "freeSlotLabel": "Détection de créneaux libres :",
+      "freeSlotText": "lecture de vos événements pour identifier les plages de temps disponibles et vous suggérer des micro-actions adaptées",
+      "contextualLabel": "Suggestions contextuelles :",
+      "contextualText": "adaptation des recommandations en fonction de la durée de vos créneaux libres",
+      "notDoTitle": "Ce que nous ne faisons PAS avec vos données Google :",
+      "notDo1": "Nous ne modifions, ne créons et ne supprimons aucun événement de votre calendrier",
+      "notDo2": "Nous ne partageons pas vos données Google Calendar avec des tiers",
+      "notDo3": "Nous ne stockons pas le contenu de vos événements de manière permanente — seuls les créneaux horaires sont analysés en temps réel",
+      "notDo4": "Nous n'utilisons pas vos données Google à des fins publicitaires",
+      "notDo5": "Nous ne transférons pas vos données Google à des outils d'intelligence artificielle ou de machine learning non liés au service",
+      "complianceText": "L'utilisation des données reçues des API Google respecte la",
+      "complianceLink": "Politique relative aux données utilisateur des services API Google",
+      "complianceSuffix": ", y compris les exigences d'utilisation limitée (Limited Use requirements).",
+      "revokeText": "Vous pouvez révoquer l'accès d'InFinea à votre Google Calendar à tout moment depuis la page",
+      "revokeLink": "Autorisations de votre compte Google",
+      "revokeSuffix": "ou depuis la page Intégrations de votre compte InFinea."
+    },
+    "purposes": {
+      "heading": "4. Finalités du traitement",
+      "item1": "Fourniture et personnalisation du service (suggestions IA, micro-actions)",
+      "item2": "Gestion de votre compte utilisateur",
+      "item3": "Amélioration continue du service et de l'expérience utilisateur",
+      "item4": "Communication relative au service (notifications, mises à jour)",
+      "item5": "Gestion des paiements et abonnements via Stripe"
+    },
+    "legalBasis": {
+      "heading": "5. Base légale du traitement",
+      "contractLabel": "Exécution du contrat :",
+      "contractText": "traitement nécessaire à la fourniture du service (article 6.1.b du RGPD)",
+      "consentLabel": "Consentement :",
+      "consentText": "pour les cookies analytiques et les communications optionnelles (article 6.1.a)",
+      "legitimateLabel": "Intérêt légitime :",
+      "legitimateText": "pour l'amélioration du service et la sécurité (article 6.1.f)"
+    },
+    "retention": {
+      "heading": "6. Durée de conservation",
+      "text": "Vos données sont conservées pendant la durée de votre utilisation du service. En cas de suppression de votre compte, vos données personnelles sont supprimées dans un délai de 30 jours, à l'exception des données nécessaires au respect de nos obligations légales (données de facturation : 10 ans)."
+    },
+    "rights": {
+      "heading": "7. Vos droits",
+      "intro": "Conformément au Règlement Général sur la Protection des Données (RGPD), vous disposez des droits suivants :",
+      "accessLabel": "Droit d'accès",
+      "accessText": "(article 15) : obtenir une copie de vos données personnelles",
+      "rectificationLabel": "Droit de rectification",
+      "rectificationText": "(article 16) : corriger vos données inexactes",
+      "erasureLabel": "Droit à l'effacement",
+      "erasureText": "(article 17) : demander la suppression de vos données",
+      "portabilityLabel": "Droit à la portabilité",
+      "portabilityText": "(article 20) : recevoir vos données dans un format structuré",
+      "objectionLabel": "Droit d'opposition",
+      "objectionText": "(article 21) : vous opposer au traitement de vos données",
+      "restrictionLabel": "Droit à la limitation",
+      "restrictionText": "(article 18) : limiter le traitement dans certaines circonstances",
+      "contact": "Pour exercer ces droits, contactez-nous à",
+      "responseTime": "Nous répondrons dans un délai de 30 jours."
+    },
+    "deletion": {
+      "heading": "8. Suppression de vos données",
+      "intro": "Vous pouvez demander la suppression de vos données de plusieurs manières :",
+      "accountLabel": "Suppression du compte :",
+      "accountText": "depuis la page Profil de l'application, vous pouvez supprimer votre compte. Toutes vos données personnelles, y compris vos tokens d'intégration et votre historique de sessions, seront supprimées sous 30 jours",
+      "googleLabel": "Révocation Google Calendar :",
+      "googleText": "vous pouvez déconnecter Google Calendar depuis la page Intégrations ou depuis les",
+      "googleLink": "paramètres de votre compte Google",
+      "googleSuffix": ". Vos tokens d'accès Google seront immédiatement supprimés de nos serveurs",
+      "emailLabel": "Demande par email :",
+      "emailText": "envoyez un email à",
+      "emailSuffix": "pour toute demande de suppression. Nous traiterons votre demande sous 30 jours"
+    },
+    "hosting": {
+      "heading": "9. Hébergement et sécurité",
+      "intro": "Vos données sont hébergées chez les prestataires suivants :",
+      "mongodb": "(base de données) — hébergement AWS, région EU",
+      "render": "(serveur API) — hébergement aux États-Unis",
+      "vercel": "(application web) — CDN mondial avec points de présence en Europe",
+      "stripe": "(paiements) — certifié PCI DSS niveau 1",
+      "encryption": "Les tokens d'intégration sont chiffrés avec l'algorithme AES-256 (Fernet) avant stockage en base de données. Les mots de passe sont hashés avec bcrypt."
+    },
+    "cookies": {
+      "heading": "10. Cookies et traceurs",
+      "intro": "InFinea utilise les cookies suivants :",
+      "essentialLabel": "Cookies essentiels :",
+      "essentialText": "authentification (JWT), préférences de session",
+      "analyticsLabel": "Cookies analytiques :",
+      "analyticsText": "PostHog (analyse d'usage anonymisée) — soumis à votre consentement",
+      "disable": "Vous pouvez à tout moment désactiver les cookies analytiques via les paramètres de votre navigateur."
+    },
+    "transfers": {
+      "heading": "11. Transferts de données",
+      "text": "Certaines données peuvent être transférées vers les États-Unis (Render, Vercel). Ces transferts sont encadrés par les clauses contractuelles types de la Commission européenne et/ou le Data Privacy Framework EU-US."
+    },
+    "contactSection": {
+      "heading": "12. Contact et réclamation",
+      "text": "Pour toute question relative à la protection de vos données, contactez-nous à",
+      "cnilText": "Si vous estimez que le traitement de vos données constitue une violation du RGPD, vous pouvez introduire une réclamation auprès de la",
+      "cnilName": "CNIL (Commission Nationale de l'Informatique et des Libertés)"
+    }
+  },
+  "cgu": {
+    "title": "Conditions Générales d'Utilisation",
+    "lastUpdated": "Dernière mise à jour : 7 mars 2026",
+    "purpose": {
+      "heading": "1. Objet",
+      "text1": "Les présentes Conditions Générales d'Utilisation (ci-après « CGU ») régissent l'accès et l'utilisation de la plateforme InFinea, accessible à l'adresse",
+      "text2": "InFinea est un service de productivité personnelle qui aide ses utilisateurs à transformer leur temps disponible en micro-actions productives, grâce à des suggestions personnalisées par intelligence artificielle."
+    },
+    "acceptance": {
+      "heading": "2. Acceptation des CGU",
+      "text": "L'inscription et l'utilisation du service impliquent l'acceptation pleine et entière des présentes CGU. Si vous n'acceptez pas ces conditions, vous ne devez pas utiliser le service. InFinea se réserve le droit de modifier les présentes CGU à tout moment. Les utilisateurs seront informés de toute modification substantielle par email ou notification dans l'application."
+    },
+    "access": {
+      "heading": "3. Accès au service",
+      "intro": "L'accès au service nécessite la création d'un compte utilisateur. Pour créer un compte, vous devez :",
+      "item1": "Être âgé d'au moins 16 ans",
+      "item2": "Fournir une adresse email valide",
+      "item3": "Créer un mot de passe sécurisé ou vous authentifier via Google",
+      "item4": "Ne créer qu'un seul compte par personne",
+      "responsibility": "Vous êtes responsable de la confidentialité de vos identifiants de connexion et de toute activité effectuée depuis votre compte."
+    },
+    "serviceDescription": {
+      "heading": "4. Description du service",
+      "intro": "InFinea propose les fonctionnalités suivantes :",
+      "microActionsLabel": "Micro-actions :",
+      "microActionsText": "catalogue de plus de 300 actions courtes (2-15 minutes) dans les domaines de l'apprentissage, de la productivité et du bien-être",
+      "aiSuggestionsLabel": "Suggestions IA :",
+      "aiSuggestionsText": "recommandations personnalisées basées sur votre profil, votre niveau d'énergie et le temps disponible",
+      "progressLabel": "Suivi de progression :",
+      "progressText": "tableau de bord, Capital-Temps, séries quotidiennes",
+      "integrationsLabel": "Intégrations :",
+      "integrationsText": "connexion à des services tiers (Google Calendar, Notion, Todoist, Slack, iCal) pour une expérience enrichie",
+      "journalLabel": "Journal :",
+      "journalText": "historique de vos sessions et débriefs"
+    },
+    "pricing": {
+      "heading": "5. Offres et tarifs",
+      "intro": "InFinea propose deux niveaux de service :",
+      "freeLabel": "Offre Gratuite :",
+      "freeText": "accès aux micro-actions de base, suggestions IA limitées, suivi de progression",
+      "premiumLabel": "Offre Premium (6,99 €/mois) :",
+      "premiumText": "suggestions IA illimitées, accès à toutes les micro-actions, intégrations complètes, statistiques détaillées",
+      "paymentInfo": "Les paiements sont gérés par Stripe. L'abonnement Premium est renouvelé automatiquement chaque mois. Vous pouvez annuler à tout moment depuis votre profil ; l'accès Premium reste actif jusqu'à la fin de la période payée."
+    },
+    "userObligations": {
+      "heading": "6. Obligations de l'utilisateur",
+      "intro": "En utilisant InFinea, vous vous engagez à :",
+      "item1": "Fournir des informations exactes lors de l'inscription",
+      "item2": "Ne pas utiliser le service à des fins illicites ou contraires aux présentes CGU",
+      "item3": "Ne pas tenter d'accéder de manière non autorisée aux systèmes d'InFinea",
+      "item4": "Ne pas perturber le fonctionnement du service",
+      "item5": "Respecter les droits de propriété intellectuelle d'InFinea et des tiers"
+    },
+    "intellectualProperty": {
+      "heading": "7. Propriété intellectuelle",
+      "text": "L'ensemble des éléments constituant le service InFinea (textes, graphismes, logiciels, images, marques, logos) sont protégés par le droit de la propriété intellectuelle. Toute reproduction, représentation ou exploitation non autorisée est interdite. Les contenus générés par l'IA à destination de l'utilisateur restent à l'usage personnel de celui-ci."
+    },
+    "liability": {
+      "heading": "8. Responsabilité",
+      "intro": "InFinea s'efforce d'assurer la disponibilité et le bon fonctionnement du service. Toutefois :",
+      "item1": "Le service est fourni « en l'état », sans garantie d'absence d'interruption ou d'erreur",
+      "item2": "Les suggestions IA sont indicatives et ne constituent pas des conseils professionnels (médicaux, financiers ou autres)",
+      "item3": "InFinea ne saurait être tenu responsable des dommages indirects résultant de l'utilisation du service",
+      "item4": "Les intégrations tierces sont soumises aux conditions de leurs fournisseurs respectifs"
+    },
+    "personalData": {
+      "heading": "9. Données personnelles",
+      "text1": "Le traitement de vos données personnelles est détaillé dans notre",
+      "privacyLink": "Politique de Confidentialité",
+      "text2": "En utilisant InFinea, vous acceptez ce traitement conformément au Règlement Général sur la Protection des Données (RGPD)."
+    },
+    "termination": {
+      "heading": "10. Résiliation",
+      "text": "Vous pouvez supprimer votre compte à tout moment depuis les paramètres de votre profil. InFinea se réserve le droit de suspendre ou supprimer un compte en cas de violation des présentes CGU, après notification préalable sauf cas d'urgence."
+    },
+    "modifications": {
+      "heading": "11. Modification des CGU",
+      "text": "InFinea se réserve le droit de modifier les présentes CGU à tout moment. Les modifications prennent effet dès leur publication. L'utilisation continue du service après modification vaut acceptation des nouvelles CGU. En cas de modification substantielle, les utilisateurs seront informés par email au moins 30 jours avant l'entrée en vigueur."
+    },
+    "applicableLaw": {
+      "heading": "12. Droit applicable",
+      "text": "Les présentes CGU sont régies par le droit français. En cas de litige, les parties s'engagent à rechercher une solution amiable. À défaut, les tribunaux français seront seuls compétents."
+    },
+    "contactSection": {
+      "heading": "13. Contact",
+      "text": "Pour toute question relative aux présentes CGU, contactez-nous à"
+    }
+  },
+  "activeSession": {
+    "sessionNotFound": "Session non trouvée",
+    "backToDashboard": "Retour au dashboard",
+    "completionToast": "Bravo ! Session terminée avec succès !",
+    "saveError": "Erreur lors de la sauvegarde",
+    "congratulations": "Félicitations ! 🎉",
+    "progressMessage": "Vous avez transformé {{minutes}} minutes en progrès !",
+    "minutesAdded": "minutes ajoutées",
+    "streakDays": "jours de streak",
+    "continueProgress": "Continuer ma progression",
+    "newAction": "Nouvelle action",
+    "abandon": "Abandonner",
+    "instructions": "Instructions",
+    "notesLabel": "Notes (optionnel)",
+    "notesPlaceholder": "Notez vos réflexions...",
+    "pause": "Pause",
+    "resume": "Reprendre",
+    "finish": "Terminer"
+  },
+  "publicShare": {
+    "expired": "Ce partage a expiré",
+    "notFound": "Partage introuvable",
+    "expiredDescription": "Les liens de partage expirent après 90 jours.",
+    "notFoundDescription": "Ce lien n'existe pas ou a été supprimé.",
+    "discoverInfinea": "Découvrir InFinea",
+    "defaultAuthor": "Un utilisateur InFinea",
+    "authorInvests": "{{name}} investit ses micro-instants avec InFinea.",
+    "tryFree": "Essaie InFinea gratuitement",
+    "tagline": "Transforme tes instants perdus en micro-victoires"
   }
 }

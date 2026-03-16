@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   Brain,
@@ -11,12 +12,6 @@ import {
 } from "lucide-react";
 import { API, authFetch } from "@/App";
 import VoiceInput from "@/components/VoiceInput";
-
-const QUICK_REPLIES = [
-  { label: "Que faire maintenant ?", message: "Que me conseilles-tu de faire maintenant ?" },
-  { label: "Mon bilan", message: "Fais-moi un bilan de ma progression récente." },
-  { label: "Motivation", message: "J'ai besoin d'un boost de motivation !" },
-];
 
 function CoachMessage({ msg }) {
   const isUser = msg.role === "user";
@@ -41,6 +36,7 @@ function CoachMessage({ msg }) {
 }
 
 export default function CoachFAB() {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -51,6 +47,12 @@ export default function CoachFAB() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const panelRef = useRef(null);
+
+  const QUICK_REPLIES = [
+    { label: t("components.coachFab.quickReplies.whatNow"), message: t("components.coachFab.quickReplies.whatNowMessage") },
+    { label: t("components.coachFab.quickReplies.myReport"), message: t("components.coachFab.quickReplies.myReportMessage") },
+    { label: t("components.coachFab.quickReplies.motivation"), message: t("components.coachFab.quickReplies.motivationMessage") },
+  ];
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -114,7 +116,7 @@ export default function CoachFAB() {
         ...prev,
         {
           role: "assistant",
-          content: "Oups, petit souci technique. Réessaie dans un instant !",
+          content: t("components.coachFab.errorMessage"),
           created_at: new Date().toISOString(),
         },
       ]);
@@ -169,10 +171,10 @@ export default function CoachFAB() {
                 <Brain className="w-4 h-4 text-primary" />
               </div>
               <div>
-                <h3 className="font-heading font-semibold text-sm">Coach IA</h3>
+                <h3 className="font-heading font-semibold text-sm">{t("components.coachFab.title")}</h3>
                 <div className="flex items-center gap-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] text-muted-foreground">En ligne</span>
+                  <span className="text-[10px] text-muted-foreground">{t("components.coachFab.online")}</span>
                 </div>
               </div>
             </div>
@@ -183,7 +185,7 @@ export default function CoachFAB() {
                   size="icon"
                   className="h-7 w-7 text-muted-foreground hover:text-destructive"
                   onClick={clearHistory}
-                  title="Effacer l'historique"
+                  title={t("components.coachFab.clearHistory")}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </Button>
@@ -214,9 +216,9 @@ export default function CoachFAB() {
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-4 ring-1 ring-primary/10">
                   <Brain className="w-8 h-8 text-primary" />
                 </div>
-                <h4 className="font-heading font-semibold text-base mb-1">Ton coach personnel</h4>
+                <h4 className="font-heading font-semibold text-base mb-1">{t("components.coachFab.emptyTitle")}</h4>
                 <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-                  Pose-moi une question, demande un conseil, ou dis-moi comment tu te sens.
+                  {t("components.coachFab.emptyDescription")}
                 </p>
                 <div className="flex flex-col gap-2 w-full">
                   {QUICK_REPLIES.map((qr) => (
@@ -282,7 +284,7 @@ export default function CoachFAB() {
                 <span className="w-0.5 h-1.5 bg-red-500/50 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
                 <span className="w-0.5 h-2.5 bg-red-500/70 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
               </div>
-              <span className="text-[11px] text-red-500/80 font-medium">Écoute en cours...</span>
+              <span className="text-[11px] text-red-500/80 font-medium">{t("components.coachFab.listening")}</span>
             </div>
           )}
 
@@ -295,7 +297,7 @@ export default function CoachFAB() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Écris au coach..."
+                  placeholder={t("components.coachFab.inputPlaceholder")}
                   rows={1}
                   maxLength={500}
                   className={`w-full resize-none rounded-xl border bg-muted/30 px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/30 placeholder:text-muted-foreground/50 max-h-24 transition-colors ${
