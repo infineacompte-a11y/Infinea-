@@ -27,6 +27,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
+import { CardsSkeleton } from "@/components/PageSkeleton";
 import AddToCalendarMenu from "@/components/AddToCalendarMenu";
 import { VoiceTextArea } from "@/components/VoiceInput";
 import { API, authFetch, useAuth } from "@/App";
@@ -256,9 +257,7 @@ export default function ObjectivesPage() {
 
           {/* Loading */}
           {isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
+            <CardsSkeleton count={3} />
           ) : objectives.length === 0 ? (
             /* Empty state */
             <Card className="p-8 text-center">

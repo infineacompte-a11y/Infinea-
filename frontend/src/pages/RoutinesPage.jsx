@@ -37,6 +37,7 @@ import {
   SkipForward,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
+import { CardsSkeleton } from "@/components/PageSkeleton";
 import AddToCalendarMenu from "@/components/AddToCalendarMenu";
 import { VoiceTextArea } from "@/components/VoiceInput";
 import { API, authFetch, useAuth } from "@/App";
@@ -639,9 +640,7 @@ export default function RoutinesPage() {
 
           {/* Loading */}
           {isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
+            <CardsSkeleton count={3} />
           ) : routines.length === 0 ? (
             <Card className="p-8 text-center">
               <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mx-auto mb-4 ring-1 ring-primary/10">

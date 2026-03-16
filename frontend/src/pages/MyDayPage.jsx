@@ -26,6 +26,7 @@ import {
   SkipForward,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
+import { MyDaySkeleton } from "@/components/PageSkeleton";
 import { API, authFetch, useAuth } from "@/App";
 import { toast } from "sonner";
 
@@ -490,9 +491,7 @@ export default function MyDayPage() {
           </div>
 
           {isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
+            <MyDaySkeleton />
           ) : !hasContent ? (
             /* Empty state */
             <Card className="p-8 text-center">

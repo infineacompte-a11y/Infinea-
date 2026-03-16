@@ -40,6 +40,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
+import { CardsSkeleton } from "@/components/PageSkeleton";
 import { API, authFetch, useAuth } from "@/App";
 import { toast } from "sonner";
 
@@ -1105,9 +1106,7 @@ export default function MicroInstantsPage() {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
+            <CardsSkeleton count={3} />
           ) : instants.length === 0 ? (
             <EmptyState />
           ) : (
