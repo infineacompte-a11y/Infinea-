@@ -87,7 +87,7 @@ export default function ActionsLibrary() {
   const fetchActions = async () => {
     try {
       const [actionsRes, customRes] = await Promise.all([
-        authFetch(`${API}/actions?limit=200`),
+        authFetch(`${API}/actions?limit=2500`),
         authFetch(`${API}/actions/custom`).catch(() => null),
       ]);
       if (!actionsRes.ok) throw new Error("Erreur");
