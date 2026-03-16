@@ -22,6 +22,103 @@ from services.feedback_loop import record_signal
 
 router = APIRouter()
 
+
+# ── Micro-instants context builder for AI coach ──
+
+async def _build_micro_instants_context(user_id: str) -> str:
+    """Aggregate micro-instant stats into a concise context paragraph for the AI coach.
+    Returns empty string if no data available (new user)."""
+    now = datetime.now(timezone.utc)
+    thirty_days_ago = (now - timedelta(days=30)).isoformat()
+    seven_days_ago = (now - timedelta(days=7)).isoformat()
+    fourteen_days_ago = (now - timedelta(days=14)).isoformat()
+
+    outcomes = await db.micro_instant_outcomes.find(
+        {"user_id": user_id, "recorded_at": {"$gte": thirty_days_ago}},
+        {"_id": 0, "outcome": 1, "recorded_at": 1, "duration": 1, "source": 1},
+    ).to_list(500)
+
+    if not outcomes:
+        return ""
+
+    total = len(outcomes)
+    exploited = [o for o in outcomes if o.get("outcome") == "exploited"]
+    skipped = len([o for o in outcomes if o.get("outcome") == "skipped"])
+    exploitation_rate = len(exploited) / total if total > 0 else 0.0
+    total_minutes = sum(o.get("duration", 0) for o in exploited)
+
+    # Weekly trend
+    this_week = [o for o in outcomes if o.get("recorded_at", "") >= seven_days_ago]
+    last_week = [o for o in outcomes
+                 if fourteen_days_ago <= o.get("recorded_at", "") < seven_days_ago]
+    this_week_exploited = len([o for o in this_week if o.get("outcome") == "exploited"])
+    this_week_rate = this_week_exploited / len(this_week) if this_week else 0.0
+    last_week_rate = (
+        len([o for o in last_week if o.get("outcome") == "exploited"]) / len(last_week)
+        if last_week else 0.0
+    )
+    trend_pct = round((this_week_rate - last_week_rate) * 100)
+
+    # Best hours (top 3 with at least 2 outcomes)
+    hourly: Dict[int, Dict[str, int]] = {}
+    for o in exploited:
+        try:
+            dt = datetime.fromisoformat(o["recorded_at"].replace("Z", "+00:00"))
+            h = dt.hour
+            hourly.setdefault(h, {"exploited": 0, "total": 0})
+            hourly[h]["exploited"] += 1
+        except (ValueError, TypeError, KeyError):
+            continue
+    for o in outcomes:
+        try:
+            dt = datetime.fromisoformat(o["recorded_at"].replace("Z", "+00:00"))
+            h = dt.hour
+            hourly.setdefault(h, {"exploited": 0, "total": 0})
+            hourly[h]["total"] += 1
+        except (ValueError, TypeError, KeyError):
+            continue
+
+    best_hours = sorted(
+        [(h, d["exploited"] / d["total"] if d["total"] >= 2 else 0.0, d["total"])
+         for h, d in hourly.items() if d["total"] >= 2],
+        key=lambda x: (x[1], x[2]),
+        reverse=True,
+    )[:3]
+
+    best_slots_str = ", ".join(
+        f"{h:02d}h-{h+1:02d}h ({round(rate*100)}%)"
+        for h, rate, _ in best_hours
+    ) if best_hours else "pas encore assez de données"
+
+    # Source distribution
+    sources = {"calendar_gap": 0, "routine_window": 0, "behavioral_pattern": 0}
+    for o in outcomes:
+        src = o.get("source", "")
+        if src in sources:
+            sources[src] += 1
+    dominant_source = max(sources, key=sources.get) if any(sources.values()) else None
+    source_labels = {
+        "calendar_gap": "ton agenda",
+        "routine_window": "tes routines",
+        "behavioral_pattern": "tes habitudes comportementales",
+    }
+
+    # Build context paragraph
+    trend_str = f"+{trend_pct}%" if trend_pct > 0 else f"{trend_pct}%"
+    trend_label = "en progression" if trend_pct > 0 else ("stable" if trend_pct == 0 else "en baisse")
+
+    ctx = f"""Micro-instants (30 derniers jours):
+- {total} instants détectés, {len(exploited)} exploités, {skipped} skippés (taux d'exploitation: {round(exploitation_rate*100)}%)
+- Tendance hebdo: {trend_str} vs semaine précédente ({trend_label})
+- Meilleurs créneaux: {best_slots_str}
+- {total_minutes} minutes investies via micro-instants cette semaine: {this_week_exploited} exploités sur {len(this_week)} détectés"""
+
+    if dominant_source and sources[dominant_source] > 0:
+        ctx += f"\n- Source principale des instants: {source_labels.get(dominant_source, dominant_source)}"
+
+    return ctx
+
+
 # ============== AI SUGGESTIONS ROUTE ==============
 
 @router.post("/suggestions")
@@ -609,7 +706,8 @@ Réponds en JSON:
 COACH_CHAT_SYSTEM = """Tu es le coach IA InFinea, un compagnon bienveillant et expert en productivité, apprentissage et bien-être.
 Tu discutes naturellement avec l'utilisateur pour l'aider à progresser.
 Tu es concis (2-3 phrases max par réponse), chaleureux, et tu tutoies l'utilisateur.
-Tu connais son profil, ses sessions récentes, et tu peux suggérer des actions concrètes.
+Tu connais son profil, ses sessions récentes, ses objectifs, et ses micro-instants (créneaux exploitables détectés automatiquement).
+Quand tu as des données sur ses micro-instants, utilise-les naturellement pour donner des conseils personnalisés (meilleurs créneaux, tendances, progression).
 Quand tu suggères une action, mentionne son nom exact pour que l'utilisateur puisse la lancer.
 Ne réponds JAMAIS en JSON — réponds en texte naturel conversationnel."""
 
@@ -699,6 +797,11 @@ async def coach_chat(
             lines.append(line)
         objectives_ctx = "\n\nObjectifs actifs de l'utilisateur (IMPORTANT — réfère-toi à ces parcours):\n" + "\n".join(lines)
 
+    # Fetch micro-instants context (exploitation stats, best slots, trends)
+    micro_instants_ctx = await _build_micro_instants_context(user["user_id"])
+    if micro_instants_ctx:
+        micro_instants_ctx = "\n\n" + micro_instants_ctx
+
     # Build conversation history (last 20 messages for context window)
     history_docs = await db.coach_messages.find(
         {"user_id": user["user_id"]},
@@ -709,7 +812,7 @@ async def coach_chat(
     # Build messages array for Anthropic API (system + history)
     system_prompt = f"""{COACH_CHAT_SYSTEM}
 
-{user_context}{sessions_ctx}{objectives_ctx}{actions_ctx}
+{user_context}{sessions_ctx}{objectives_ctx}{actions_ctx}{micro_instants_ctx}
 
 Streak actuel: {user.get('streak_days', 0)} jours.
 Temps total investi: {user.get('total_time_invested', 0)} minutes."""
