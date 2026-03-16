@@ -268,10 +268,10 @@ export default function B2BDashboard() {
       <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
         <div className="max-w-6xl mx-auto">
           {/* Header */}
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
             <div>
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="font-heading text-3xl font-semibold" data-testid="b2b-title">
+              <div className="flex items-center gap-3 mb-2 flex-wrap">
+                <h1 className="font-heading text-2xl sm:text-3xl font-semibold" data-testid="b2b-title">
                   {company?.name || "Dashboard Entreprise"}
                 </h1>
                 <Badge className="bg-primary/20 text-primary border-primary/30">Manager</Badge>
@@ -280,7 +280,7 @@ export default function B2BDashboard() {
                 Analytics d'équipe & ROI bien-être
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-2 sm:gap-3 shrink-0">
               <Button variant="outline" onClick={() => toast.info("Export PDF bientôt disponible")}>
                 <Download className="w-4 h-4 mr-2" />
                 Export
