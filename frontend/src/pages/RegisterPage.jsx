@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,7 @@ import { toast } from "sonner";
 import { API, useAuth } from "@/App";
 
 export default function RegisterPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { setUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -27,12 +29,12 @@ export default function RegisterPage() {
     e.preventDefault();
 
     if (formData.password !== formData.confirmPassword) {
-      toast.error("Les mots de passe ne correspondent pas");
+      toast.error(t("auth.register.errorPasswordMatch"));
       return;
     }
 
     if (formData.password.length < 6) {
-      toast.error("Le mot de passe doit contenir au moins 6 caractères");
+      toast.error(t("auth.register.errorPasswordLength"));
       return;
     }
 
@@ -53,10 +55,9 @@ export default function RegisterPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || "Erreur lors de l'inscription");
+        throw new Error(data.detail || t("auth.register.errorGeneric"));
       }
 
-      // Store tokens in localStorage
       if (data.token) {
         localStorage.setItem("infinea_token", data.token);
       }
@@ -65,7 +66,7 @@ export default function RegisterPage() {
       }
 
       setUser(data);
-      toast.success("Compte créé avec succès !");
+      toast.success(t("auth.register.success"));
       navigate("/onboarding", { state: { user: data } });
     } catch (error) {
       toast.error(error.message);
@@ -80,17 +81,15 @@ export default function RegisterPage() {
       const data = await response.json();
       window.location.href = data.auth_url;
     } catch (error) {
-      toast.error("Erreur lors de l'inscription avec Google");
+      toast.error(t("auth.register.errorGoogle"));
     }
   };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      {/* Background effect */}
       <div className="fixed inset-0 hero-glow pointer-events-none" />
 
       <div className="w-full max-w-md relative">
-        {/* Logo */}
         <Link to="/" className="flex items-center justify-center gap-2 mb-8">
           <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
             <Timer className="w-6 h-6 text-primary-foreground" />
@@ -100,13 +99,12 @@ export default function RegisterPage() {
 
         <Card className="bg-card/80 backdrop-blur-xl border-white/10">
           <CardHeader className="text-center">
-            <CardTitle className="font-heading text-2xl">Créez votre compte</CardTitle>
+            <CardTitle className="font-heading text-2xl">{t("auth.register.title")}</CardTitle>
             <p className="text-muted-foreground mt-2">
-              Commencez à investir vos instants perdus
+              {t("auth.register.subtitle")}
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Google Signup */}
             <Button
               variant="outline"
               className="w-full h-12 rounded-xl"
@@ -131,7 +129,7 @@ export default function RegisterPage() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              S'inscrire avec Google
+              {t("auth.register.google")}
             </Button>
 
             <div className="relative">
@@ -139,21 +137,20 @@ export default function RegisterPage() {
                 <div className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">ou</span>
+                <span className="bg-card px-2 text-muted-foreground">{t("auth.or")}</span>
               </div>
             </div>
 
-            {/* Email Registration Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Nom complet</Label>
+                <Label htmlFor="name">{t("auth.register.fullName")}</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
                     id="name"
                     name="name"
                     type="text"
-                    placeholder="Jean Dupont"
+                    placeholder={t("auth.register.namePlaceholder")}
                     className="pl-10 h-12 rounded-xl"
                     value={formData.name}
                     onChange={handleChange}
@@ -164,14 +161,14 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t("auth.email")}</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
                     id="email"
                     name="email"
                     type="email"
-                    placeholder="vous@exemple.com"
+                    placeholder={t("auth.emailPlaceholder")}
                     className="pl-10 h-12 rounded-xl"
                     value={formData.email}
                     onChange={handleChange}
@@ -182,7 +179,7 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Mot de passe</Label>
+                <Label htmlFor="password">{t("auth.password")}</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
@@ -200,7 +197,7 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirmer le mot de passe</Label>
+                <Label htmlFor="confirmPassword">{t("auth.register.confirmPassword")}</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
@@ -227,7 +224,7 @@ export default function RegisterPage() {
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    Créer mon compte
+                    {t("auth.register.submit")}
                     <ArrowRight className="w-5 h-5 ml-2" />
                   </>
                 )}
@@ -235,16 +232,16 @@ export default function RegisterPage() {
             </form>
 
             <p className="text-center text-sm text-muted-foreground">
-              Déjà un compte ?{" "}
+              {t("auth.register.hasAccount")}{" "}
               <Link to="/login" className="text-primary hover:underline" data-testid="login-link">
-                Se connecter
+                {t("auth.register.loginLink")}
               </Link>
             </p>
 
             <p className="text-center text-xs text-muted-foreground">
-              En créant un compte, vous acceptez nos{" "}
-              <a href="#" className="underline">conditions d'utilisation</a> et notre{" "}
-              <a href="#" className="underline">politique de confidentialité</a>.
+              {t("auth.register.terms")}{" "}
+              <Link to="/cgu" className="underline">{t("auth.register.termsLink")}</Link> {t("auth.register.termsAnd")}{" "}
+              <Link to="/privacy" className="underline">{t("auth.register.privacyLink")}</Link>.
             </p>
           </CardContent>
         </Card>

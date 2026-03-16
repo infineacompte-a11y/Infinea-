@@ -126,5 +126,60 @@
       "terms": "Terms",
       "contact": "Contact"
     }
+  },
+  "auth": {
+    "or": "or",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "login": {
+      "title": "Welcome back",
+      "subtitle": "Sign in to continue your progress",
+      "google": "Continue with Google",
+      "submit": "Sign in",
+      "noAccount": "Don't have an account?",
+      "createAccount": "Create an account",
+      "success": "Signed in successfully!",
+      "errorGeneric": "Login failed",
+      "errorGoogle": "Failed to sign in with Google"
+    },
+    "register": {
+      "title": "Create your account",
+      "subtitle": "Start investing your lost moments",
+      "google": "Sign up with Google",
+      "fullName": "Full name",
+      "namePlaceholder": "John Doe",
+      "confirmPassword": "Confirm password",
+      "submit": "Create my account",
+      "hasAccount": "Already have an account?",
+      "loginLink": "Sign in",
+      "terms": "By creating an account, you agree to our",
+      "termsLink": "terms of service",
+      "termsAnd": "and our",
+      "privacyLink": "privacy policy",
+      "success": "Account created successfully!",
+      "errorGeneric": "Registration failed",
+      "errorGoogle": "Failed to sign up with Google",
+      "errorPasswordMatch": "Passwords do not match",
+      "errorPasswordLength": "Password must be at least 6 characters"
+    }
+  },
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "myDay": "My Day",
+    "microInstants": "Micro-Instants",
+    "objectives": "My Goals",
+    "routines": "My Routines",
+    "library": "Library",
+    "integrations": "Integrations",
+    "journal": "Journal",
+    "notes": "My Notes",
+    "groups": "Groups",
+    "badges": "Badges",
+    "progress": "Progress",
+    "notifications": "Notifications",
+    "business": "Business",
+    "profile": "Profile",
+    "logout": "Log out"
   }
 }

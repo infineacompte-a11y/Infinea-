@@ -126,5 +126,60 @@
       "terms": "CGU",
       "contact": "Contact"
     }
+  },
+  "auth": {
+    "or": "ou",
+    "email": "Email",
+    "emailPlaceholder": "vous@exemple.com",
+    "password": "Mot de passe",
+    "login": {
+      "title": "Bon retour parmi nous",
+      "subtitle": "Connectez-vous pour continuer votre progression",
+      "google": "Continuer avec Google",
+      "submit": "Se connecter",
+      "noAccount": "Pas encore de compte ?",
+      "createAccount": "Créer un compte",
+      "success": "Connexion réussie !",
+      "errorGeneric": "Erreur de connexion",
+      "errorGoogle": "Erreur lors de la connexion avec Google"
+    },
+    "register": {
+      "title": "Créez votre compte",
+      "subtitle": "Commencez à investir vos instants perdus",
+      "google": "S'inscrire avec Google",
+      "fullName": "Nom complet",
+      "namePlaceholder": "Jean Dupont",
+      "confirmPassword": "Confirmer le mot de passe",
+      "submit": "Créer mon compte",
+      "hasAccount": "Déjà un compte ?",
+      "loginLink": "Se connecter",
+      "terms": "En créant un compte, vous acceptez nos",
+      "termsLink": "conditions d'utilisation",
+      "termsAnd": "et notre",
+      "privacyLink": "politique de confidentialité",
+      "success": "Compte créé avec succès !",
+      "errorGeneric": "Erreur lors de l'inscription",
+      "errorGoogle": "Erreur lors de l'inscription avec Google",
+      "errorPasswordMatch": "Les mots de passe ne correspondent pas",
+      "errorPasswordLength": "Le mot de passe doit contenir au moins 6 caractères"
+    }
+  },
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "myDay": "Ma Journée",
+    "microInstants": "Micro-Instants",
+    "objectives": "Mes Objectifs",
+    "routines": "Mes Habitudes",
+    "library": "Bibliothèque",
+    "integrations": "Intégrations",
+    "journal": "Journal",
+    "notes": "Mes Notes",
+    "groups": "Groupes",
+    "badges": "Badges",
+    "progress": "Progression",
+    "notifications": "Notifications",
+    "business": "Entreprise",
+    "profile": "Profil",
+    "logout": "Déconnexion"
   }
 }
