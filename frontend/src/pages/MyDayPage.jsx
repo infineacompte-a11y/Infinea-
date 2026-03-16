@@ -518,7 +518,7 @@ export default function MyDayPage() {
           ) : (
             <>
               {/* ── Stats du jour ─────────────────── */}
-              <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
                 <Card className="p-3 text-center">
                   <div className="flex items-center justify-center gap-1.5 mb-1">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
