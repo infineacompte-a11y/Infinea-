@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -23,7 +22,6 @@ import {
   Zap,
 } from "lucide-react";
 import { API, authFetch, useAuth } from "@/App";
-import LanguageSelector from "@/components/LanguageSelector";
 
 // ─── Lightweight poll for unread notification count ───
 function useUnreadCount(intervalMs = 60000) {
@@ -40,14 +38,17 @@ function useUnreadCount(intervalMs = 60000) {
     } catch { /* silent */ }
   }, []);
 
+  // Poll every intervalMs
   useEffect(() => {
     fetch_();
     const id = setInterval(fetch_, intervalMs);
     return () => clearInterval(id);
   }, [fetch_, intervalMs]);
 
+  // Reset when user visits /notifications
   useEffect(() => {
     if (location.pathname === "/notifications") {
+      // Small delay to let the page mark-read call go through
       const t = setTimeout(() => fetch_(), 2000);
       return () => clearTimeout(t);
     }
@@ -56,31 +57,30 @@ function useUnreadCount(intervalMs = 60000) {
   return count;
 }
 
-const NAV_ITEMS = [
-  { to: "/dashboard", key: "dashboard", icon: LayoutGrid },
-  { to: "/my-day", key: "myDay", icon: Zap },
-  { to: "/micro-instants", key: "microInstants", icon: Timer },
-  { to: "/objectives", key: "objectives", icon: Target },
-  { to: "/routines", key: "routines", icon: CalendarClock },
-  { to: "/actions", key: "library", icon: Sparkles },
-  { to: "/integrations", key: "integrations", icon: Calendar },
-  { to: "/journal", key: "journal", icon: Brain },
-  { to: "/notes", key: "notes", icon: FileText },
-  { to: "/groups", key: "groups", icon: Users },
-  { to: "/badges", key: "badges", icon: Award },
-  { to: "/progress", key: "progress", icon: BarChart3 },
-  { to: "/notifications", key: "notifications", icon: Bell },
-  { to: "/b2b", key: "business", icon: Building2 },
-  { to: "/profile", key: "profile", icon: User },
+const navItems = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { to: "/my-day", label: "Ma Journée", icon: Zap },
+  { to: "/micro-instants", label: "Micro-Instants", icon: Timer },
+  { to: "/objectives", label: "Mes Objectifs", icon: Target },
+  { to: "/routines", label: "Mes Habitudes", icon: CalendarClock },
+  { to: "/actions", label: "Bibliothèque", icon: Sparkles },
+  { to: "/integrations", label: "Intégrations", icon: Calendar },
+  { to: "/journal", label: "Journal", icon: Brain },
+  { to: "/notes", label: "Mes Notes", icon: FileText },
+  { to: "/groups", label: "Groupes", icon: Users },
+  { to: "/badges", label: "Badges", icon: Award },
+  { to: "/progress", label: "Progression", icon: BarChart3 },
+  { to: "/notifications", label: "Notifications", icon: Bell },
+  { to: "/b2b", label: "Entreprise", icon: Building2 },
+  { to: "/profile", label: "Profil", icon: User },
 ];
 
 function NavLinks({ mobile = false, onNavigate, unreadCount = 0 }) {
-  const { t } = useTranslation();
   const location = useLocation();
 
   return (
     <>
-      {NAV_ITEMS.map(({ to, key, icon: Icon }) => {
+      {navItems.map(({ to, label, icon: Icon }) => {
         const isActive = location.pathname === to ||
           (to === "/dashboard" && location.pathname === "/");
         const isNotif = to === "/notifications";
@@ -104,7 +104,7 @@ function NavLinks({ mobile = false, onNavigate, unreadCount = 0 }) {
                 </span>
               )}
             </div>
-            <span>{t(`sidebar.${key}`)}</span>
+            <span>{label}</span>
           </Link>
         );
       })}
@@ -113,7 +113,6 @@ function NavLinks({ mobile = false, onNavigate, unreadCount = 0 }) {
 }
 
 export default function Sidebar() {
-  const { t } = useTranslation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -139,15 +138,14 @@ export default function Sidebar() {
           <NavLinks unreadCount={unreadCount} />
         </nav>
 
-        <div className="pt-4 border-t border-border space-y-2">
-          <LanguageSelector className="px-4 py-2" />
+        <div className="pt-4 border-t border-border">
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
             data-testid="logout-btn"
           >
             <LogOut className="w-5 h-5" />
-            <span>{t("sidebar.logout")}</span>
+            <span>Déconnexion</span>
           </button>
         </div>
       </aside>
@@ -175,14 +173,13 @@ export default function Sidebar() {
               <nav className="flex flex-col gap-1 mt-8">
                 <NavLinks mobile onNavigate={() => setMobileMenuOpen(false)} unreadCount={unreadCount} />
               </nav>
-              <div className="mt-auto pt-4 border-t border-border absolute bottom-6 left-6 right-6 space-y-2">
-                <LanguageSelector className="px-4 py-2" />
+              <div className="mt-auto pt-4 border-t border-border absolute bottom-6 left-6 right-6">
                 <button
                   onClick={handleLogout}
                   className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground"
                 >
                   <LogOut className="w-5 h-5" />
-                  <span>{t("sidebar.logout")}</span>
+                  <span>Déconnexion</span>
                 </button>
               </div>
             </SheetContent>

@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,7 +9,6 @@ import { toast } from "sonner";
 import { API, useAuth } from "@/App";
 
 export default function LoginPage() {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const { setUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -38,9 +36,10 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || t("auth.login.errorGeneric"));
+        throw new Error(data.detail || "Erreur de connexion");
       }
 
+      // Store tokens in localStorage
       if (data.token) {
         localStorage.setItem("infinea_token", data.token);
       }
@@ -49,7 +48,7 @@ export default function LoginPage() {
       }
 
       setUser(data);
-      toast.success(t("auth.login.success"));
+      toast.success("Connexion réussie !");
       navigate("/dashboard", { state: { user: data } });
     } catch (error) {
       toast.error(error.message);
@@ -64,15 +63,17 @@ export default function LoginPage() {
       const data = await response.json();
       window.location.href = data.auth_url;
     } catch (error) {
-      toast.error(t("auth.login.errorGoogle"));
+      toast.error("Erreur lors de la connexion avec Google");
     }
   };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      {/* Background effect */}
       <div className="fixed inset-0 hero-glow pointer-events-none" />
 
       <div className="w-full max-w-md relative">
+        {/* Logo */}
         <Link to="/" className="flex items-center justify-center gap-2 mb-8">
           <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
             <Timer className="w-6 h-6 text-primary-foreground" />
@@ -82,12 +83,13 @@ export default function LoginPage() {
 
         <Card className="bg-card/80 backdrop-blur-xl border-white/10">
           <CardHeader className="text-center">
-            <CardTitle className="font-heading text-2xl">{t("auth.login.title")}</CardTitle>
+            <CardTitle className="font-heading text-2xl">Bon retour parmi nous</CardTitle>
             <p className="text-muted-foreground mt-2">
-              {t("auth.login.subtitle")}
+              Connectez-vous pour continuer votre progression
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Google Login */}
             <Button
               variant="outline"
               className="w-full h-12 rounded-xl"
@@ -112,7 +114,7 @@ export default function LoginPage() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              {t("auth.login.google")}
+              Continuer avec Google
             </Button>
 
             <div className="relative">
@@ -120,20 +122,21 @@ export default function LoginPage() {
                 <div className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">{t("auth.or")}</span>
+                <span className="bg-card px-2 text-muted-foreground">ou</span>
               </div>
             </div>
 
+            {/* Email Login Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">{t("auth.email")}</Label>
+                <Label htmlFor="email">Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
                     id="email"
                     name="email"
                     type="email"
-                    placeholder={t("auth.emailPlaceholder")}
+                    placeholder="vous@exemple.com"
                     className="pl-10 h-12 rounded-xl"
                     value={formData.email}
                     onChange={handleChange}
@@ -144,7 +147,7 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">{t("auth.password")}</Label>
+                <Label htmlFor="password">Mot de passe</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
@@ -171,7 +174,7 @@ export default function LoginPage() {
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    {t("auth.login.submit")}
+                    Se connecter
                     <ArrowRight className="w-5 h-5 ml-2" />
                   </>
                 )}
@@ -179,9 +182,9 @@ export default function LoginPage() {
             </form>
 
             <p className="text-center text-sm text-muted-foreground">
-              {t("auth.login.noAccount")}{" "}
+              Pas encore de compte ?{" "}
               <Link to="/register" className="text-primary hover:underline" data-testid="register-link">
-                {t("auth.login.createAccount")}
+                Créer un compte
               </Link>
             </p>
           </CardContent>

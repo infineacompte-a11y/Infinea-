@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -47,9 +46,12 @@ import { VoiceTextArea } from "@/components/VoiceInput";
 import { API, authFetch } from "@/App";
 import { toast } from "sonner";
 
-// ─── CurriculumStep ───
+const DIFFICULTY_LABELS = ["", "Fondamental", "Débutant", "Intermédiaire", "Avancé", "Expert"];
+const DIFFICULTY_COLORS = ["", "text-emerald-500", "text-blue-500", "text-amber-500", "text-orange-500", "text-rose-500"];
 
-function CurriculumStep({ step, index, isNext, onStart, t }) {
+// ─── CurriculumStep (unchanged) ───
+
+function CurriculumStep({ step, index, isNext, onStart }) {
   const [expanded, setExpanded] = useState(isNext);
   const completed = step.completed;
 
@@ -80,17 +82,15 @@ function CurriculumStep({ step, index, isNext, onStart, t }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-medium text-muted-foreground">{t("objectiveDetail.dayLabel", { day: step.day })}</span>
+            <span className="text-[10px] font-medium text-muted-foreground">JOUR {step.day}</span>
             {step.review && (
               <Badge variant="outline" className="text-[9px] bg-sky-500/10 text-sky-500 border-sky-500/20">
-                {t("objectiveDetail.review")}
+                Révision
               </Badge>
             )}
             {step.difficulty && (
-              <span className={`text-[10px] ${
-                ["", "text-emerald-500", "text-blue-500", "text-amber-500", "text-orange-500", "text-rose-500"][step.difficulty] || ""
-              }`}>
-                {t(`objectiveDetail.difficulty.${step.difficulty}`)}
+              <span className={`text-[10px] ${DIFFICULTY_COLORS[step.difficulty] || ""}`}>
+                {DIFFICULTY_LABELS[step.difficulty] || ""}
               </span>
             )}
           </div>
@@ -116,7 +116,7 @@ function CurriculumStep({ step, index, isNext, onStart, t }) {
           {step.focus && (
             <div className="flex items-center gap-1.5 text-xs">
               <BookOpen className="w-3 h-3 text-primary" />
-              <span className="text-muted-foreground">{t("objectiveDetail.focus")} :</span>
+              <span className="text-muted-foreground">Focus :</span>
               <span className="font-medium">{step.focus}</span>
             </div>
           )}
@@ -138,14 +138,14 @@ function CurriculumStep({ step, index, isNext, onStart, t }) {
           )}
           {completed && step.actual_duration && (
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              <span>{t("objectiveDetail.durationResult", { minutes: step.actual_duration })}</span>
-              {step.notes && <span className="truncate">{t("objectiveDetail.noteLabel")} : {step.notes}</span>}
+              <span>Durée : {step.actual_duration} min</span>
+              {step.notes && <span className="truncate">Note : {step.notes}</span>}
             </div>
           )}
           {isNext && !completed && (
             <Button onClick={() => onStart(step, index)} className="w-full gap-2 mt-2">
               <Play className="w-4 h-4" />
-              {t("objectiveDetail.startSession")}
+              Commencer cette session
             </Button>
           )}
         </div>
@@ -156,29 +156,16 @@ function CurriculumStep({ step, index, isNext, onStart, t }) {
 
 // ─── SkillsTab (C.3 — Skill Graph Visualization) ───
 
-const MASTERY_BAR_COLORS = {
-  notStarted: { bar: "bg-muted", text: "text-muted-foreground", bg: "bg-muted/20" },
-  beginner: { bar: "bg-blue-500", text: "text-blue-500", bg: "bg-blue-500/10" },
-  progressing: { bar: "bg-emerald-500", text: "text-emerald-500", bg: "bg-emerald-500/10" },
-  intermediate: { bar: "bg-amber-500", text: "text-amber-500", bg: "bg-amber-500/10" },
-  advanced: { bar: "bg-orange-500", text: "text-orange-500", bg: "bg-orange-500/10" },
-  mastered: { bar: "bg-primary", text: "text-primary", bg: "bg-primary/10" },
+const MASTERY_COLORS = {
+  "Non démarré": { bar: "bg-muted", text: "text-muted-foreground", bg: "bg-muted/20" },
+  "Débutant": { bar: "bg-blue-500", text: "text-blue-500", bg: "bg-blue-500/10" },
+  "En progression": { bar: "bg-emerald-500", text: "text-emerald-500", bg: "bg-emerald-500/10" },
+  "Intermédiaire": { bar: "bg-amber-500", text: "text-amber-500", bg: "bg-amber-500/10" },
+  "Avancé": { bar: "bg-orange-500", text: "text-orange-500", bg: "bg-orange-500/10" },
+  "Maîtrisé": { bar: "bg-primary", text: "text-primary", bg: "bg-primary/10" },
 };
 
-// Map French level strings from API to internal keys
-function masteryKeyFromLevel(level) {
-  const map = {
-    "Non démarré": "notStarted",
-    "Débutant": "beginner",
-    "En progression": "progressing",
-    "Intermédiaire": "intermediate",
-    "Avancé": "advanced",
-    "Maîtrisé": "mastered",
-  };
-  return map[level] || "notStarted";
-}
-
-function SkillsTab({ objectiveId, t }) {
+function SkillsTab({ objectiveId }) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -207,17 +194,16 @@ function SkillsTab({ objectiveId, t }) {
     return (
       <Card className="p-8 text-center">
         <Brain className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-        <h3 className="font-heading font-semibold mb-1">{t("objectiveDetail.skills.emptyTitle")}</h3>
+        <h3 className="font-heading font-semibold mb-1">Pas encore de compétences</h3>
         <p className="text-sm text-muted-foreground">
-          {t("objectiveDetail.skills.emptyDescription")}
+          Complète quelques sessions pour voir ta carte de compétences.
         </p>
       </Card>
     );
   }
 
   const { skills, overall_mastery, level, review_needed } = data;
-  const overallKey = masteryKeyFromLevel(level);
-  const overallColor = MASTERY_BAR_COLORS[overallKey] || MASTERY_BAR_COLORS.notStarted;
+  const overallColor = MASTERY_COLORS[level] || MASTERY_COLORS["Non démarré"];
 
   return (
     <div className="space-y-4">
@@ -225,18 +211,18 @@ function SkillsTab({ objectiveId, t }) {
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">{t("objectiveDetail.skills.overallMastery")}</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Maîtrise globale</p>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-2xl font-bold tabular-nums">{overall_mastery}%</span>
               <Badge variant="outline" className={`text-[10px] ${overallColor.text} ${overallColor.bg} border-current/20`}>
-                {t(`objectiveDetail.skills.levels.${overallKey}`)}
+                {level}
               </Badge>
             </div>
           </div>
           {review_needed > 0 && (
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
               <RotateCcw className="w-3.5 h-3.5 text-amber-500" />
-              <span className="text-xs font-medium text-amber-600">{t("objectiveDetail.skills.toReview", { count: review_needed })}</span>
+              <span className="text-xs font-medium text-amber-600">{review_needed} à réviser</span>
             </div>
           )}
         </div>
@@ -246,8 +232,7 @@ function SkillsTab({ objectiveId, t }) {
       {/* Skills grid */}
       <div className="space-y-2">
         {skills.map((skill) => {
-          const mKey = masteryKeyFromLevel(skill.level);
-          const mc = MASTERY_BAR_COLORS[mKey] || MASTERY_BAR_COLORS.notStarted;
+          const mc = MASTERY_COLORS[skill.level] || MASTERY_COLORS["Non démarré"];
           return (
             <Card key={skill.name} className={`p-4 transition-all ${skill.needs_review ? "border-amber-500/30 bg-amber-500/3" : ""}`}>
               <div className="flex items-start justify-between mb-2">
@@ -257,15 +242,15 @@ function SkillsTab({ objectiveId, t }) {
                     {skill.needs_review && (
                       <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-600 border-amber-500/20 shrink-0">
                         <RotateCcw className="w-2.5 h-2.5 mr-0.5" />
-                        {t("objectiveDetail.review")}
+                        Révision
                       </Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                    <span>{t("objectiveDetail.sessionsCount", { completed: skill.sessions_done, total: skill.sessions_total })}</span>
-                    <span>{t("objectiveDetail.minutesShort", { count: skill.total_minutes })}</span>
+                    <span>{skill.sessions_done}/{skill.sessions_total} sessions</span>
+                    <span>{skill.total_minutes} min</span>
                     <Badge variant="outline" className={`text-[9px] ${mc.text} ${mc.bg} border-current/20`}>
-                      {t(`objectiveDetail.skills.levels.${mKey}`)}
+                      {skill.level}
                     </Badge>
                   </div>
                 </div>
@@ -284,12 +269,12 @@ function SkillsTab({ objectiveId, t }) {
 
       {/* Legend */}
       <div className="flex flex-wrap gap-2 pt-2">
-        {["beginner", "progressing", "intermediate", "advanced", "mastered"].map((lvl) => {
-          const mc = MASTERY_BAR_COLORS[lvl];
+        {["Débutant", "En progression", "Intermédiaire", "Avancé", "Maîtrisé"].map((lvl) => {
+          const mc = MASTERY_COLORS[lvl];
           return (
             <div key={lvl} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
               <div className={`w-2 h-2 rounded-full ${mc.bar}`} />
-              {t(`objectiveDetail.skills.levels.${lvl}`)}
+              {lvl}
             </div>
           );
         })}
@@ -308,23 +293,23 @@ const MOMENTUM_CONFIG = {
 
 const DIFFICULTY_BAR_COLORS = [
   "",
-  "bg-emerald-500",   // 1
-  "bg-blue-500",      // 2
-  "bg-amber-500",     // 3
-  "bg-orange-500",    // 4
-  "bg-rose-500",      // 5
+  "bg-emerald-500",   // 1 — Fondamental
+  "bg-blue-500",      // 2 — Débutant
+  "bg-amber-500",     // 3 — Intermédiaire
+  "bg-orange-500",    // 4 — Avancé
+  "bg-rose-500",      // 5 — Expert
 ];
 
-function InsightsTab({ objectiveId, t, i18n }) {
+const INSIGHT_TABS = [
+  { key: "analyse", label: "Analyse", icon: Brain },
+  { key: "activite", label: "Activité", icon: BarChart3 },
+  { key: "journal", label: "Journal", icon: MessageSquare },
+];
+
+function InsightsTab({ objectiveId }) {
   const [insights, setInsights] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [subTab, setSubTab] = useState("analyse");
-
-  const INSIGHT_TABS = [
-    { key: "analyse", label: t("objectiveDetail.insights.tabs.analysis"), icon: Brain },
-    { key: "activite", label: t("objectiveDetail.insights.tabs.activity"), icon: BarChart3 },
-    { key: "journal", label: t("objectiveDetail.insights.tabs.journal"), icon: MessageSquare },
-  ];
 
   useEffect(() => {
     (async () => {
@@ -351,9 +336,9 @@ function InsightsTab({ objectiveId, t, i18n }) {
     return (
       <Card className="p-8 text-center">
         <BarChart3 className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-        <h4 className="font-heading font-semibold text-sm mb-1">{t("objectiveDetail.insights.emptyTitle")}</h4>
+        <h4 className="font-heading font-semibold text-sm mb-1">Pas encore d'insights</h4>
         <p className="text-xs text-muted-foreground">
-          {t("objectiveDetail.insights.emptyDescription")}
+          Complète quelques sessions pour débloquer l'analyse de ta progression.
         </p>
       </Card>
     );
@@ -364,7 +349,7 @@ function InsightsTab({ objectiveId, t, i18n }) {
   return (
     <div className="space-y-4">
 
-      {/* Sub-tab navigation */}
+      {/* ── Sub-tab navigation ── */}
       <div className="flex border-b border-border/50">
         {INSIGHT_TABS.map((tab) => {
           const Icon = tab.icon;
@@ -389,26 +374,26 @@ function InsightsTab({ objectiveId, t, i18n }) {
         })}
       </div>
 
-      {/* ANALYSE TAB */}
+      {/* ══════════ ANALYSE TAB ══════════ */}
       {subTab === "analyse" && (
         <div className="space-y-4">
-          {/* Stats Grid */}
+          {/* Stats Grid — always visible */}
           {stats && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <Card className="p-3 text-center">
                 <Activity className="w-4 h-4 text-blue-500 mx-auto mb-1" />
                 <div className="text-lg font-bold">{stats.completion_rate}%</div>
-                <div className="text-[10px] text-muted-foreground">{t("objectiveDetail.insights.completion")}</div>
+                <div className="text-[10px] text-muted-foreground">Complétion</div>
               </Card>
               <Card className="p-3 text-center">
                 <Clock className="w-4 h-4 text-purple-500 mx-auto mb-1" />
                 <div className="text-lg font-bold">{stats.avg_duration}<span className="text-xs font-normal">m</span></div>
-                <div className="text-[10px] text-muted-foreground">{t("objectiveDetail.insights.avgPerSession")}</div>
+                <div className="text-[10px] text-muted-foreground">Moy. / session</div>
               </Card>
               <Card className="p-3 text-center">
                 <Calendar className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
                 <div className="text-lg font-bold">{stats.active_days}</div>
-                <div className="text-[10px] text-muted-foreground">{t("objectiveDetail.insights.activeDays")}</div>
+                <div className="text-[10px] text-muted-foreground">Jours actifs</div>
               </Card>
             </div>
           )}
@@ -420,7 +405,7 @@ function InsightsTab({ objectiveId, t, i18n }) {
                 <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center">
                   <Brain className="w-4 h-4 text-primary" />
                 </div>
-                <h3 className="font-heading font-semibold text-sm">{t("objectiveDetail.insights.aiAnalysis")}</h3>
+                <h3 className="font-heading font-semibold text-sm">Analyse IA</h3>
                 {ai_analysis.momentum && (() => {
                   const mc = MOMENTUM_CONFIG[ai_analysis.momentum] || MOMENTUM_CONFIG.stable;
                   const Icon = mc.icon;
@@ -442,7 +427,7 @@ function InsightsTab({ objectiveId, t, i18n }) {
                   <div className="bg-emerald-500/5 rounded-xl p-3 border border-emerald-500/10">
                     <div className="flex items-center gap-1.5 mb-2">
                       <Zap className="w-3.5 h-3.5 text-emerald-500" />
-                      <span className="text-xs font-semibold text-emerald-500">{t("objectiveDetail.insights.strengths")}</span>
+                      <span className="text-xs font-semibold text-emerald-500">Points forts</span>
                     </div>
                     <div className="space-y-1.5">
                       {ai_analysis.strengths.map((s, i) => (
@@ -459,7 +444,7 @@ function InsightsTab({ objectiveId, t, i18n }) {
                   <div className="bg-amber-500/5 rounded-xl p-3 border border-amber-500/10">
                     <div className="flex items-center gap-1.5 mb-2">
                       <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                      <span className="text-xs font-semibold text-amber-500">{t("objectiveDetail.insights.improvements")}</span>
+                      <span className="text-xs font-semibold text-amber-500">À améliorer</span>
                     </div>
                     <div className="space-y-1.5">
                       {ai_analysis.improvements.map((s, i) => (
@@ -478,7 +463,7 @@ function InsightsTab({ objectiveId, t, i18n }) {
                   <div className="flex items-start gap-2">
                     <Lightbulb className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                     <div>
-                      <span className="text-[10px] font-semibold text-primary uppercase tracking-wide">{t("objectiveDetail.insights.advice")}</span>
+                      <span className="text-[10px] font-semibold text-primary uppercase tracking-wide">Conseil</span>
                       <p className="text-xs text-foreground/70 leading-relaxed mt-0.5">{ai_analysis.next_advice}</p>
                     </div>
                   </div>
@@ -489,14 +474,14 @@ function InsightsTab({ objectiveId, t, i18n }) {
             <Card className="p-6 text-center border-dashed">
               <Brain className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
               <p className="text-xs text-muted-foreground">
-                {t("objectiveDetail.insights.aiLocked")}
+                L'analyse IA se débloque après 3 sessions complétées.
               </p>
             </Card>
           )}
         </div>
       )}
 
-      {/* ACTIVITE TAB */}
+      {/* ══════════ ACTIVITÉ TAB ══════════ */}
       {subTab === "activite" && (
         <div className="space-y-4">
           {/* Weekly Activity */}
@@ -504,7 +489,7 @@ function InsightsTab({ objectiveId, t, i18n }) {
             <Card className="p-4">
               <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-primary" />
-                {t("objectiveDetail.insights.weeklyActivity")}
+                Activité hebdomadaire
               </h4>
               <div className="space-y-2.5">
                 {weekly_activity.slice(-8).map((week, i) => {
@@ -525,7 +510,7 @@ function InsightsTab({ objectiveId, t, i18n }) {
                           )}
                         </div>
                       </div>
-                      <span className="text-[10px] text-muted-foreground w-12 text-right">{t("objectiveDetail.insights.sessionsShort", { count: week.sessions })}</span>
+                      <span className="text-[10px] text-muted-foreground w-12 text-right">{week.sessions} sess.</span>
                     </div>
                   );
                 })}
@@ -538,14 +523,14 @@ function InsightsTab({ objectiveId, t, i18n }) {
             <Card className="p-4">
               <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-primary" />
-                {t("objectiveDetail.insights.difficultyProgression")}
+                Progression de difficulté
               </h4>
               <div className="flex items-end gap-1.5 h-28 px-1">
                 {difficulty_curve.map((point, i) => {
                   const heightPct = Math.max(15, (point.difficulty / 5) * 100);
                   const barColor = DIFFICULTY_BAR_COLORS[point.difficulty] || "bg-primary";
                   return (
-                    <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1.5 group" title={`${point.title} — ${t(`objectiveDetail.difficulty.${point.difficulty}`)}`}>
+                    <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1.5 group" title={`${point.title} — ${DIFFICULTY_LABELS[point.difficulty]}`}>
                       <div className="opacity-0 group-hover:opacity-100 transition-opacity text-[8px] text-center text-muted-foreground leading-tight max-w-[60px] truncate">
                         {point.title}
                       </div>
@@ -553,16 +538,16 @@ function InsightsTab({ objectiveId, t, i18n }) {
                         className={`w-full rounded-t-md ${barColor} transition-all duration-300 min-h-[8px]`}
                         style={{ height: `${heightPct}%` }}
                       />
-                      <span className="text-[9px] text-muted-foreground font-medium">{t("objectiveDetail.dayShort", { day: point.day })}</span>
+                      <span className="text-[9px] text-muted-foreground font-medium">J{point.day}</span>
                     </div>
                   );
                 })}
               </div>
               <div className="flex items-center justify-between mt-3 px-1">
-                {[1, 2, 3, 4, 5].map((level) => (
-                  <div key={level} className="flex items-center gap-1">
-                    <div className={`w-2 h-2 rounded-sm ${DIFFICULTY_BAR_COLORS[level]}`} />
-                    <span className="text-[8px] text-muted-foreground">{t(`objectiveDetail.difficulty.${level}`)}</span>
+                {DIFFICULTY_LABELS.slice(1).map((label, i) => (
+                  <div key={i} className="flex items-center gap-1">
+                    <div className={`w-2 h-2 rounded-sm ${DIFFICULTY_BAR_COLORS[i + 1]}`} />
+                    <span className="text-[8px] text-muted-foreground">{label}</span>
                   </div>
                 ))}
               </div>
@@ -574,8 +559,8 @@ function InsightsTab({ objectiveId, t, i18n }) {
             <Card className="p-4">
               <h4 className="font-heading font-semibold text-sm mb-3 flex items-center gap-2">
                 <Clock className="w-4 h-4 text-primary" />
-                {t("objectiveDetail.insights.sessionHistory")}
-                <span className="text-[10px] text-muted-foreground font-normal ml-auto">{t("objectiveDetail.insights.sessionsTotal", { count: insights.timeline.length })}</span>
+                Historique des sessions
+                <span className="text-[10px] text-muted-foreground font-normal ml-auto">{insights.timeline.length} sessions</span>
               </h4>
               <div className="space-y-1.5 max-h-[350px] overflow-y-auto pr-1">
                 {insights.timeline.slice().reverse().map((entry, i) => (
@@ -587,7 +572,7 @@ function InsightsTab({ objectiveId, t, i18n }) {
                     ) : (
                       <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
                     )}
-                    <span className="font-semibold text-muted-foreground w-8 shrink-0">{t("objectiveDetail.dayShort", { day: entry.day })}</span>
+                    <span className="font-semibold text-muted-foreground w-8 shrink-0">J{entry.day}</span>
                     <span className="flex-1 truncate">{entry.step_title}</span>
                     <span className="text-muted-foreground/50 shrink-0">{entry.duration}m</span>
                   </div>
@@ -598,7 +583,7 @@ function InsightsTab({ objectiveId, t, i18n }) {
         </div>
       )}
 
-      {/* JOURNAL TAB */}
+      {/* ══════════ JOURNAL TAB ══════════ */}
       {subTab === "journal" && (
         <div className="space-y-4">
           {notes?.length > 0 ? (
@@ -607,7 +592,7 @@ function InsightsTab({ objectiveId, t, i18n }) {
                 <Card key={i} className="p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Badge variant="outline" className="text-[10px] bg-primary/5 border-primary/15 text-primary">
-                      {t("objectiveDetail.journal.dayEntry", { day: entry.day })}
+                      Jour {entry.day}
                     </Badge>
                     <span className="text-xs text-muted-foreground flex-1 truncate">{entry.step_title}</span>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -619,7 +604,7 @@ function InsightsTab({ objectiveId, t, i18n }) {
                       )}
                       {entry.date && (
                         <span className="text-[10px] text-muted-foreground/50">
-                          {new Date(entry.date).toLocaleDateString(i18n.language, { day: "numeric", month: "short" })}
+                          {new Date(entry.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
                         </span>
                       )}
                     </div>
@@ -631,9 +616,9 @@ function InsightsTab({ objectiveId, t, i18n }) {
           ) : (
             <Card className="p-8 text-center border-dashed">
               <MessageSquare className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
-              <h4 className="font-heading font-semibold text-sm mb-1">{t("objectiveDetail.journal.emptyTitle")}</h4>
+              <h4 className="font-heading font-semibold text-sm mb-1">Aucune note pour l'instant</h4>
               <p className="text-xs text-muted-foreground">
-                {t("objectiveDetail.journal.emptyDescription")}
+                Ajoute des notes lors de tes sessions pour les retrouver ici.
               </p>
             </Card>
           )}
@@ -648,7 +633,6 @@ function InsightsTab({ objectiveId, t, i18n }) {
 export default function ObjectiveDetailPage() {
   const { objectiveId } = useParams();
   const navigate = useNavigate();
-  const { t, i18n } = useTranslation();
   const [objective, setObjective] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("parcours");
@@ -667,15 +651,15 @@ export default function ObjectiveDetailPage() {
       if (res.ok) {
         setObjective(await res.json());
       } else {
-        toast.error(t("objectiveDetail.errors.notFound"));
+        toast.error("Objectif non trouvé");
         navigate("/objectives");
       }
     } catch {
-      toast.error(t("objectiveDetail.errors.loadFailed"));
+      toast.error("Erreur de chargement");
     } finally {
       setIsLoading(false);
     }
-  }, [objectiveId, navigate, t]);
+  }, [objectiveId, navigate]);
 
   useEffect(() => {
     loadObjective();
@@ -716,21 +700,21 @@ export default function ObjectiveDetailPage() {
           completed,
         }),
       });
-      if (!res.ok) throw new Error(t("common.error"));
+      if (!res.ok) throw new Error("Erreur");
       const result = await res.json();
 
       if (completed) {
         toast.success(
           result.is_finished
-            ? t("objectiveDetail.session.courseComplete")
-            : t("objectiveDetail.session.sessionComplete", { percent: result.progress_percent })
+            ? "Parcours terminé ! Bravo !"
+            : `Session terminée ! ${result.progress_percent}% du parcours`
         );
       }
 
       setShowSession(false);
       loadObjective();
     } catch {
-      toast.error(t("objectiveDetail.errors.saveFailed"));
+      toast.error("Erreur lors de la sauvegarde");
     } finally {
       setIsCompleting(false);
     }
@@ -744,11 +728,11 @@ export default function ObjectiveDetailPage() {
         body: JSON.stringify({ status }),
       });
       if (res.ok) {
-        toast.success(status === "paused" ? t("objectiveDetail.statusPaused") : t("objectiveDetail.statusResumed"));
+        toast.success(status === "paused" ? "Objectif mis en pause" : "Objectif repris !");
         loadObjective();
       }
     } catch {
-      toast.error(t("common.error"));
+      toast.error("Erreur");
     }
   };
 
@@ -756,11 +740,11 @@ export default function ObjectiveDetailPage() {
     try {
       const res = await authFetch(`${API}/objectives/${objectiveId}`, { method: "DELETE" });
       if (res.ok) {
-        toast.success(t("objectiveDetail.deleteSuccess"));
+        toast.success("Objectif supprimé");
         navigate("/objectives");
       }
     } catch {
-      toast.error(t("common.error"));
+      toast.error("Erreur");
     }
   };
 
@@ -794,7 +778,7 @@ export default function ObjectiveDetailPage() {
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            {t("objectiveDetail.backToObjectives")}
+            Mes Objectifs
           </button>
 
           {/* Header card */}
@@ -822,19 +806,19 @@ export default function ObjectiveDetailPage() {
                   className="h-8 w-8"
                   onClick={async () => {
                     const text = [
-                      t("objectiveDetail.share.line1", { day: objective.current_day || 0, title: objective.title }),
-                      t("objectiveDetail.share.line2", { percent, streak: objective.streak_days || 0, minutes: objective.total_minutes || 0 }),
+                      `Jour ${objective.current_day || 0} sur « ${objective.title} »`,
+                      `${percent}% complété · ${objective.streak_days || 0}j de streak · ${objective.total_minutes || 0} min investies`,
                       ``,
-                      t("objectiveDetail.share.line3"),
+                      `Mon parcours sur InFinea !`,
                     ].join("\n");
                     if (navigator.share) {
                       try { await navigator.share({ title: objective.title, text }); } catch {}
                     } else {
                       await navigator.clipboard.writeText(text);
-                      toast.success(t("common.copied"));
+                      toast.success("Copié !");
                     }
                   }}
-                  title={t("objectiveDetail.share.button")}
+                  title="Partager"
                 >
                   <Share2 className="w-4 h-4" />
                 </Button>
@@ -852,7 +836,7 @@ export default function ObjectiveDetailPage() {
             {/* Progress */}
             <div className="mb-4">
               <div className="flex items-center justify-between text-sm mb-2">
-                <span className="text-muted-foreground">{t("objectiveDetail.progression")}</span>
+                <span className="text-muted-foreground">Progression</span>
                 <span className="font-semibold">{percent}%</span>
               </div>
               <Progress value={percent} className="h-3" />
@@ -863,27 +847,27 @@ export default function ObjectiveDetailPage() {
               <div className="text-center p-2 rounded-lg bg-muted/30">
                 <Flame className="w-4 h-4 text-orange-500 mx-auto mb-1" />
                 <div className="text-lg font-bold">{objective.streak_days || 0}</div>
-                <div className="text-[10px] text-muted-foreground">{t("objectiveDetail.stats.streak")}</div>
+                <div className="text-[10px] text-muted-foreground">Streak</div>
               </div>
               <div className="text-center p-2 rounded-lg bg-muted/30">
                 <Clock className="w-4 h-4 text-blue-500 mx-auto mb-1" />
                 <div className="text-lg font-bold">{objective.total_minutes || 0}</div>
-                <div className="text-[10px] text-muted-foreground">{t("objectiveDetail.stats.minutes")}</div>
+                <div className="text-[10px] text-muted-foreground">Minutes</div>
               </div>
               <div className="text-center p-2 rounded-lg bg-muted/30">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
                 <div className="text-lg font-bold">{completedSteps}</div>
-                <div className="text-[10px] text-muted-foreground">{t("objectiveDetail.stats.sessions")}</div>
+                <div className="text-[10px] text-muted-foreground">Sessions</div>
               </div>
               <div className="text-center p-2 rounded-lg bg-muted/30">
                 <Calendar className="w-4 h-4 text-purple-500 mx-auto mb-1" />
-                <div className="text-lg font-bold">{t("objectiveDetail.dayShort", { day: objective.current_day || 0 })}</div>
-                <div className="text-[10px] text-muted-foreground">/{objective.target_duration_days}{t("objectiveDetail.stats.daysShort")}</div>
+                <div className="text-lg font-bold">J{objective.current_day || 0}</div>
+                <div className="text-[10px] text-muted-foreground">/{objective.target_duration_days}j</div>
               </div>
             </div>
           </Card>
 
-          {/* Tab Switcher */}
+          {/* ── Tab Switcher ── */}
           <div className="flex gap-1 p-1 mb-4 bg-muted/30 rounded-xl">
             <button
               onClick={() => setActiveTab("parcours")}
@@ -894,7 +878,7 @@ export default function ObjectiveDetailPage() {
               }`}
             >
               <BookOpen className="w-4 h-4" />
-              {t("objectiveDetail.tabs.curriculum")}
+              Parcours
             </button>
             <button
               onClick={() => setActiveTab("skills")}
@@ -905,7 +889,7 @@ export default function ObjectiveDetailPage() {
               }`}
             >
               <Brain className="w-4 h-4" />
-              {t("objectiveDetail.tabs.skills")}
+              Skills
             </button>
             <button
               onClick={() => setActiveTab("insights")}
@@ -916,26 +900,26 @@ export default function ObjectiveDetailPage() {
               }`}
             >
               <BarChart3 className="w-4 h-4" />
-              {t("objectiveDetail.tabs.insights")}
+              Insights
               {completedSteps >= 3 && (
                 <span className="w-1.5 h-1.5 rounded-full bg-primary" />
               )}
             </button>
           </div>
 
-          {/* Tab Content */}
+          {/* ── Tab Content ── */}
           {activeTab === "skills" ? (
-            <SkillsTab objectiveId={objectiveId} t={t} />
+            <SkillsTab objectiveId={objectiveId} />
           ) : activeTab === "parcours" ? (
             <>
               {/* Curriculum header */}
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="font-heading font-semibold text-base">
-                  {isGenerating ? t("objectiveDetail.curriculum.generating") : t("objectiveDetail.curriculum.title")}
+                  {isGenerating ? "Génération en cours..." : "Mon parcours"}
                 </h2>
                 {!isGenerating && (
                   <span className="text-xs text-muted-foreground">
-                    {t("objectiveDetail.sessionsCount", { completed: completedSteps, total: totalSteps })}
+                    {completedSteps}/{totalSteps} sessions
                   </span>
                 )}
               </div>
@@ -944,13 +928,13 @@ export default function ObjectiveDetailPage() {
                 <Card className="p-8 text-center">
                   <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
                   <p className="text-sm text-muted-foreground">
-                    {t("objectiveDetail.curriculum.generatingMessage")}
+                    L'IA génère ton parcours personnalisé...
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {t("objectiveDetail.curriculum.generatingHint")}
+                    Reviens dans quelques secondes !
                   </p>
                   <Button variant="outline" size="sm" className="mt-4" onClick={loadObjective}>
-                    {t("objectiveDetail.curriculum.refresh")}
+                    Rafraîchir
                   </Button>
                 </Card>
               ) : (
@@ -962,7 +946,6 @@ export default function ObjectiveDetailPage() {
                       index={i}
                       isNext={i === nextStepIndex && objective.status === "active"}
                       onStart={startSession}
-                      t={t}
                     />
                   ))}
                 </div>
@@ -972,18 +955,18 @@ export default function ObjectiveDetailPage() {
               {percent >= 100 && (
                 <Card className="p-6 mt-6 text-center border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-amber-500/5">
                   <Trophy className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-                  <h3 className="font-heading font-bold text-lg">{t("objectiveDetail.curriculum.completedTitle")}</h3>
+                  <h3 className="font-heading font-bold text-lg">Parcours terminé !</h3>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {t("objectiveDetail.curriculum.completedDescription", { sessions: completedSteps, minutes: objective.total_minutes || 0 })}
+                    Tu as complété {completedSteps} sessions et investi {objective.total_minutes || 0} minutes.
                   </p>
                   <Button className="mt-4" onClick={() => navigate("/objectives")}>
-                    {t("objectiveDetail.curriculum.viewObjectives")}
+                    Voir mes objectifs
                   </Button>
                 </Card>
               )}
             </>
           ) : (
-            <InsightsTab objectiveId={objectiveId} t={t} i18n={i18n} />
+            <InsightsTab objectiveId={objectiveId} />
           )}
         </div>
       </main>
@@ -1008,7 +991,7 @@ export default function ObjectiveDetailPage() {
                 <div className="flex items-start gap-2 bg-blue-500/5 rounded-lg px-3 py-2 border border-blue-500/10">
                   <BookOpen className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
                   <div className="text-xs text-blue-400">
-                    <span className="font-medium">{t("objectiveDetail.session.lastSession")} :</span> {last.step_title}
+                    <span className="font-medium">Dernière session :</span> {last.step_title}
                     {last.notes && <span className="block text-blue-400/70 mt-0.5">"{last.notes}"</span>}
                   </div>
                 </div>
@@ -1019,7 +1002,7 @@ export default function ObjectiveDetailPage() {
             <div className="text-center">
               <div className="text-4xl font-mono font-bold tabular-nums">{formatTime(sessionTimer)}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                {t("objectiveDetail.session.target")} : {activeStep?.duration_min}-{activeStep?.duration_max} min
+                Objectif : {activeStep?.duration_min}-{activeStep?.duration_max} min
               </p>
             </div>
 
@@ -1050,7 +1033,7 @@ export default function ObjectiveDetailPage() {
             <VoiceTextArea
               value={sessionNotes}
               onChange={setSessionNotes}
-              placeholder={t("objectiveDetail.session.notesPlaceholder")}
+              placeholder="Notes sur cette session..."
               rows={2}
             />
           </div>
@@ -1062,7 +1045,7 @@ export default function ObjectiveDetailPage() {
               disabled={isCompleting}
               className="text-muted-foreground"
             >
-              {t("objectiveDetail.session.abandon")}
+              Abandonner
             </Button>
             <Button
               onClick={() => completeStep(true)}
@@ -1074,7 +1057,7 @@ export default function ObjectiveDetailPage() {
               ) : (
                 <CheckCircle2 className="w-4 h-4" />
               )}
-              {t("objectiveDetail.session.complete")}
+              Terminer la session
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1084,17 +1067,17 @@ export default function ObjectiveDetailPage() {
       <Dialog open={showConfirmDelete} onOpenChange={setShowConfirmDelete}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>{t("objectiveDetail.deleteConfirm.title")}</DialogTitle>
+            <DialogTitle>Supprimer cet objectif ?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            {t("objectiveDetail.deleteConfirm.description")}
+            Cette action est irréversible. Toute la progression sera perdue.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowConfirmDelete(false)}>
-              {t("common.cancel")}
+              Annuler
             </Button>
             <Button variant="destructive" onClick={deleteObjective}>
-              {t("objectiveDetail.deleteConfirm.confirm")}
+              Supprimer
             </Button>
           </DialogFooter>
         </DialogContent>

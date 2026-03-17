@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,13 +39,23 @@ import {
 } from "@/components/ui/select";
 
 const moodIcons = {
-  positive: { icon: Smile, color: "text-emerald-500", bg: "bg-emerald-500/10", labelKey: "journal.mood.positive" },
-  neutral: { icon: Meh, color: "text-amber-500", bg: "bg-amber-500/10", labelKey: "journal.mood.neutral" },
-  negative: { icon: Frown, color: "text-red-500", bg: "bg-red-500/10", labelKey: "journal.mood.negative" },
+  positive: { icon: Smile, color: "text-emerald-500", bg: "bg-emerald-500/10", label: "Positif" },
+  neutral: { icon: Meh, color: "text-amber-500", bg: "bg-amber-500/10", label: "Neutre" },
+  negative: { icon: Frown, color: "text-red-500", bg: "bg-red-500/10", label: "Difficile" },
 };
 
+const categoryLabels = {
+  learning: "Apprentissage",
+  productivity: "Productivité",
+  well_being: "Bien-être",
+};
+
+const JOURNAL_TABS = [
+  { key: "reflexions", label: "Réflexions", icon: BookOpen },
+  { key: "analyse", label: "Analyse IA", icon: Brain },
+];
+
 export default function JournalPage() {
-  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("reflexions");
   const [reflections, setReflections] = useState([]);
@@ -59,11 +68,6 @@ export default function JournalPage() {
     mood: "neutral",
     category: null,
   });
-
-  const JOURNAL_TABS = [
-    { key: "reflexions", label: t("journal.tabs.reflections"), icon: BookOpen },
-    { key: "analyse", label: t("journal.tabs.aiAnalysis"), icon: Brain },
-  ];
 
   useEffect(() => {
     fetchData();
@@ -88,7 +92,7 @@ export default function JournalPage() {
         }
       }
     } catch (error) {
-      toast.error(t("journal.errors.loading"));
+      toast.error("Erreur de chargement");
     } finally {
       setIsLoading(false);
     }
@@ -96,7 +100,7 @@ export default function JournalPage() {
 
   const handleCreateReflection = async () => {
     if (!newReflection.content.trim()) {
-      toast.error(t("journal.errors.emptyContent"));
+      toast.error("Écrivez quelque chose d'abord!");
       return;
     }
 
@@ -113,12 +117,12 @@ export default function JournalPage() {
 
       if (!response.ok) throw new Error("Erreur");
 
-      toast.success(t("journal.toast.reflectionSaved"));
+      toast.success("Réflexion enregistrée!");
       setNewReflection({ content: "", mood: "neutral", category: null });
       setShowNewReflection(false);
       fetchData();
     } catch (error) {
-      toast.error(t("journal.errors.save"));
+      toast.error("Erreur lors de l'enregistrement");
     }
   };
 
@@ -130,10 +134,10 @@ export default function JournalPage() {
 
       if (!response.ok) throw new Error("Erreur");
 
-      toast.success(t("journal.toast.reflectionDeleted"));
+      toast.success("Réflexion supprimée");
       setReflections(reflections.filter((r) => r.reflection_id !== reflectionId));
     } catch (error) {
-      toast.error(t("journal.errors.delete"));
+      toast.error("Erreur lors de la suppression");
     }
   };
 
@@ -147,12 +151,12 @@ export default function JournalPage() {
       const data = await response.json();
       if (data.summary) {
         setSummary({ summary: data.summary, created_at: new Date().toISOString() });
-        toast.success(t("journal.toast.analysisGenerated"));
+        toast.success("Analyse générée!");
       } else {
         toast.info(data.message);
       }
     } catch (error) {
-      toast.error(t("journal.errors.generate"));
+      toast.error("Erreur lors de la génération");
     } finally {
       setIsGeneratingSummary(false);
     }
@@ -164,10 +168,10 @@ export default function JournalPage() {
     const diff = now - date;
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-    if (days === 0) return t("journal.date.today");
-    if (days === 1) return t("journal.date.yesterday");
-    if (days < 7) return t("journal.date.daysAgo", { count: days });
-    return date.toLocaleDateString(i18n.language, { day: "numeric", month: "short" });
+    if (days === 0) return "Aujourd'hui";
+    if (days === 1) return "Hier";
+    if (days < 7) return `Il y a ${days} jours`;
+    return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
   };
 
   return (
@@ -180,19 +184,19 @@ export default function JournalPage() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="font-heading text-3xl font-semibold mb-1" data-testid="journal-title">
-                {t("journal.title")}
+                Mon Journal
               </h1>
               <p className="text-sm text-muted-foreground">
-                {t("journal.subtitle")}
+                Suivi de tes réflexions et analyse intelligente
               </p>
             </div>
             <Button onClick={() => setShowNewReflection(true)} data-testid="new-reflection-btn">
               <Plus className="w-4 h-4 mr-2" />
-              {t("journal.newReflection")}
+              Nouvelle réflexion
             </Button>
           </div>
 
-          {/* Tab Switcher */}
+          {/* ── Tab Switcher ── */}
           <div className="flex gap-1 p-1 mb-6 bg-muted/30 rounded-xl">
             {JOURNAL_TABS.map((tab) => {
               const Icon = tab.icon;
@@ -226,12 +230,12 @@ export default function JournalPage() {
             </div>
           ) : (
             <>
-              {/* REFLECTIONS TAB */}
+              {/* ══════════ RÉFLEXIONS TAB ══════════ */}
               {activeTab === "reflexions" && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h2 className="font-heading text-lg font-semibold">{t("journal.myReflections")}</h2>
-                    <Badge variant="secondary">{t("journal.entriesCount", { count: reflections.length })}</Badge>
+                    <h2 className="font-heading text-lg font-semibold">Mes réflexions</h2>
+                    <Badge variant="secondary">{reflections.length} entrées</Badge>
                   </div>
 
                   {reflections.length === 0 ? (
@@ -239,11 +243,11 @@ export default function JournalPage() {
                       <div className="text-center">
                         <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
                         <p className="text-muted-foreground mb-4">
-                          {t("journal.empty.noReflections")}
+                          Aucune réflexion pour le moment
                         </p>
                         <Button variant="outline" onClick={() => setShowNewReflection(true)}>
                           <Plus className="w-4 h-4 mr-2" />
-                          {t("journal.empty.addFirst")}
+                          Ajouter ma première réflexion
                         </Button>
                       </div>
                     </Card>
@@ -269,7 +273,7 @@ export default function JournalPage() {
                                         <>
                                           <span>•</span>
                                           <Badge variant="outline" className="text-xs">
-                                            {t(`categories.${reflection.related_category}`)}
+                                            {categoryLabels[reflection.related_category] || reflection.related_category}
                                           </Badge>
                                         </>
                                       )}
@@ -294,12 +298,12 @@ export default function JournalPage() {
                 </div>
               )}
 
-              {/* AI ANALYSIS TAB */}
+              {/* ══════════ ANALYSE IA TAB ══════════ */}
               {activeTab === "analyse" && (
                 <div className="space-y-4">
                   {/* Generate button */}
                   <div className="flex items-center justify-between">
-                    <h2 className="font-heading text-lg font-semibold">{t("journal.tabs.aiAnalysis")}</h2>
+                    <h2 className="font-heading text-lg font-semibold">Analyse IA</h2>
                     <Button
                       variant="outline"
                       size="sm"
@@ -312,7 +316,7 @@ export default function JournalPage() {
                       ) : (
                         <RefreshCw className="w-4 h-4 mr-2" />
                       )}
-                      {summary?.summary ? t("journal.analysis.refresh") : t("journal.analysis.generate")}
+                      {summary?.summary ? "Actualiser" : "Générer l'analyse"}
                     </Button>
                   </div>
 
@@ -320,7 +324,7 @@ export default function JournalPage() {
                     <div className="space-y-4">
                       {/* Last analysis date */}
                       <p className="text-xs text-muted-foreground">
-                        {t("journal.analysis.lastAnalysis", { date: formatDate(summary.created_at) })}
+                        Dernière analyse : {formatDate(summary.created_at)}
                       </p>
 
                       {/* Weekly Insight */}
@@ -331,7 +335,7 @@ export default function JournalPage() {
                               <Lightbulb className="w-4 h-4 text-amber-500" />
                             </div>
                             <div>
-                              <span className="text-xs font-semibold text-amber-500 uppercase tracking-wide">{t("journal.analysis.keyInsight")}</span>
+                              <span className="text-xs font-semibold text-amber-500 uppercase tracking-wide">Observation clé</span>
                               <p className="text-sm mt-1 text-foreground/80 leading-relaxed">{summary.summary.weekly_insight}</p>
                             </div>
                           </div>
@@ -344,7 +348,7 @@ export default function JournalPage() {
                           <Card className="p-4">
                             <div className="flex items-center gap-2 mb-3">
                               <TrendingUp className="w-4 h-4 text-blue-500" />
-                              <span className="text-sm font-semibold">{t("journal.analysis.patternsIdentified")}</span>
+                              <span className="text-sm font-semibold">Patterns identifiés</span>
                             </div>
                             <div className="space-y-2">
                               {summary.summary.patterns_identified.map((p, i) => (
@@ -361,7 +365,7 @@ export default function JournalPage() {
                           <Card className="p-4 border-emerald-500/10">
                             <div className="flex items-center gap-2 mb-3">
                               <Zap className="w-4 h-4 text-emerald-500" />
-                              <span className="text-sm font-semibold text-emerald-500">{t("journal.analysis.strengths")}</span>
+                              <span className="text-sm font-semibold text-emerald-500">Points forts</span>
                             </div>
                             <div className="space-y-2">
                               {summary.summary.strengths.map((s, i) => (
@@ -383,7 +387,7 @@ export default function JournalPage() {
                               <Target className="w-4 h-4 text-primary" />
                             </div>
                             <div>
-                              <span className="text-xs font-semibold text-primary uppercase tracking-wide">{t("journal.analysis.personalizedTip")}</span>
+                              <span className="text-xs font-semibold text-primary uppercase tracking-wide">Conseil personnalisé</span>
                               <p className="text-sm mt-1 text-foreground/80 leading-relaxed">{summary.summary.personalized_tip}</p>
                             </div>
                           </div>
@@ -396,7 +400,7 @@ export default function JournalPage() {
                           <div className="flex items-center gap-3">
                             <Heart className="w-4 h-4 text-rose-500" />
                             <span className="text-sm text-muted-foreground">
-                              {t("journal.analysis.moodTrend")}
+                              Tendance d'humeur :
                             </span>
                             <Badge variant="secondary">{summary.summary.mood_trend}</Badge>
                           </div>
@@ -406,9 +410,9 @@ export default function JournalPage() {
                   ) : (
                     <Card className="p-12 text-center border-dashed">
                       <Brain className="w-12 h-12 text-muted-foreground/20 mx-auto mb-4" />
-                      <h4 className="font-heading font-semibold text-sm mb-2">{t("journal.analysis.unavailable")}</h4>
+                      <h4 className="font-heading font-semibold text-sm mb-2">Analyse non disponible</h4>
                       <p className="text-xs text-muted-foreground mb-4 max-w-sm mx-auto">
-                        {t("journal.analysis.unavailableDescription")}
+                        Ajoute quelques réflexions dans l'onglet "Réflexions" puis clique sur "Générer l'analyse" pour obtenir des insights personnalisés.
                       </p>
                       <Button variant="outline" size="sm" onClick={handleGenerateSummary} disabled={isGeneratingSummary}>
                         {isGeneratingSummary ? (
@@ -416,7 +420,7 @@ export default function JournalPage() {
                         ) : (
                           <Brain className="w-4 h-4 mr-2" />
                         )}
-                        {t("journal.analysis.generate")}
+                        Générer l'analyse
                       </Button>
                     </Card>
                   )}
@@ -433,10 +437,10 @@ export default function JournalPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Brain className="w-5 h-5 text-primary" />
-              {t("journal.newReflection")}
+              Nouvelle réflexion
             </DialogTitle>
             <DialogDescription>
-              {t("journal.dialog.description")}
+              Notez vos pensées, idées ou observations du moment
             </DialogDescription>
           </DialogHeader>
 
@@ -444,12 +448,12 @@ export default function JournalPage() {
             <VoiceTextArea
               value={newReflection.content}
               onChange={(val) => setNewReflection((prev) => ({ ...prev, content: val }))}
-              placeholder={t("journal.dialog.placeholder")}
+              placeholder="Qu'avez-vous en tête? Comment vous sentez-vous après cette session?"
               rows={4}
             />
 
             <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">{t("journal.dialog.moodLabel")}</label>
+              <label className="text-sm text-muted-foreground">Comment vous sentez-vous?</label>
               <div className="flex gap-2">
                 {Object.entries(moodIcons).map(([key, mood]) => {
                   const Icon = mood.icon;
@@ -465,7 +469,7 @@ export default function JournalPage() {
                       data-testid={`mood-${key}-btn`}
                     >
                       <Icon className="w-5 h-5" />
-                      <span className="text-sm">{t(mood.labelKey)}</span>
+                      <span className="text-sm">{mood.label}</span>
                     </button>
                   );
                 })}
@@ -473,19 +477,19 @@ export default function JournalPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm text-muted-foreground">{t("journal.dialog.categoryLabel")}</label>
+              <label className="text-sm text-muted-foreground">Catégorie associée (optionnel)</label>
               <Select
                 value={newReflection.category || "none"}
                 onValueChange={(v) => setNewReflection({ ...newReflection, category: v === "none" ? null : v })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={t("journal.dialog.categoryPlaceholder")} />
+                  <SelectValue placeholder="Choisir une catégorie" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">{t("journal.dialog.categoryNone")}</SelectItem>
-                  <SelectItem value="learning">{t("categories.learning")}</SelectItem>
-                  <SelectItem value="productivity">{t("categories.productivity")}</SelectItem>
-                  <SelectItem value="well_being">{t("categories.well_being")}</SelectItem>
+                  <SelectItem value="none">Aucune</SelectItem>
+                  <SelectItem value="learning">Apprentissage</SelectItem>
+                  <SelectItem value="productivity">Productivité</SelectItem>
+                  <SelectItem value="well_being">Bien-être</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -493,10 +497,10 @@ export default function JournalPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowNewReflection(false)}>
-              {t("common.cancel")}
+              Annuler
             </Button>
             <Button onClick={handleCreateReflection} data-testid="save-reflection-btn">
-              {t("common.save")}
+              Enregistrer
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,5 +1,4 @@
 import React from "react";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +12,43 @@ import {
   Lock,
   Wifi,
   WifiOff,
+  ExternalLink,
 } from "lucide-react";
+
+const statusConfig = {
+  connected: {
+    label: "Connecte",
+    color: "bg-emerald-500",
+    badgeClass: "bg-emerald-500/20 text-emerald-500 border-emerald-500/30",
+    Icon: CheckCircle2,
+  },
+  error: {
+    label: "Erreur",
+    color: "bg-red-500",
+    badgeClass: "bg-red-500/20 text-red-500 border-red-500/30",
+    Icon: AlertCircle,
+  },
+  disconnected: {
+    label: "Non connecte",
+    color: "bg-zinc-500",
+    badgeClass: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
+    Icon: WifiOff,
+  },
+  syncing: {
+    label: "Sync...",
+    color: "bg-blue-500",
+    badgeClass: "bg-blue-500/20 text-blue-500 border-blue-500/30",
+    Icon: Loader2,
+  },
+};
+
+const colorClasses = {
+  blue: { bg: "bg-blue-500/10", text: "text-blue-500", border: "border-blue-500/30" },
+  gray: { bg: "bg-zinc-500/10", text: "text-zinc-400", border: "border-zinc-500/30" },
+  red: { bg: "bg-red-500/10", text: "text-red-500", border: "border-red-500/30" },
+  purple: { bg: "bg-purple-500/10", text: "text-purple-500", border: "border-purple-500/30" },
+  orange: { bg: "bg-orange-500/10", text: "text-orange-500", border: "border-orange-500/30" },
+};
 
 export default function IntegrationCard({
   service,
@@ -34,43 +69,6 @@ export default function IntegrationCard({
   onSettings,
   onTest,
 }) {
-  const { t, i18n } = useTranslation();
-
-  const statusConfig = {
-    connected: {
-      label: t("components.integrationCard.status.connected"),
-      color: "bg-emerald-500",
-      badgeClass: "bg-emerald-500/20 text-emerald-500 border-emerald-500/30",
-      Icon: CheckCircle2,
-    },
-    error: {
-      label: t("components.integrationCard.status.error"),
-      color: "bg-red-500",
-      badgeClass: "bg-red-500/20 text-red-500 border-red-500/30",
-      Icon: AlertCircle,
-    },
-    disconnected: {
-      label: t("components.integrationCard.status.disconnected"),
-      color: "bg-zinc-500",
-      badgeClass: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
-      Icon: WifiOff,
-    },
-    syncing: {
-      label: t("components.integrationCard.status.syncing"),
-      color: "bg-blue-500",
-      badgeClass: "bg-blue-500/20 text-blue-500 border-blue-500/30",
-      Icon: Loader2,
-    },
-  };
-
-  const colorClasses = {
-    blue: { bg: "bg-blue-500/10", text: "text-blue-500", border: "border-blue-500/30" },
-    gray: { bg: "bg-zinc-500/10", text: "text-zinc-400", border: "border-zinc-500/30" },
-    red: { bg: "bg-red-500/10", text: "text-red-500", border: "border-red-500/30" },
-    purple: { bg: "bg-purple-500/10", text: "text-purple-500", border: "border-purple-500/30" },
-    orange: { bg: "bg-orange-500/10", text: "text-orange-500", border: "border-orange-500/30" },
-  };
-
   const colors = colorClasses[color] || colorClasses.blue;
   const currentStatus = isSyncing ? "syncing" : status;
   const statusInfo = statusConfig[currentStatus] || statusConfig.disconnected;
@@ -107,14 +105,14 @@ export default function IntegrationCard({
               className="shrink-0 rounded-xl gap-1"
               data-testid={`connect-${service}-btn`}
             >
-              <span className="hidden sm:inline">{t("common.connect")}</span>
+              <span className="hidden sm:inline">Connecter</span>
               <ChevronRight className="w-4 h-4" />
             </Button>
           )}
           {!isConnected && isLimitReached && (
             <Button size="sm" variant="outline" className="text-amber-500 border-amber-500/30 shrink-0" disabled>
               <Lock className="w-4 h-4 sm:mr-1" />
-              <span className="hidden sm:inline">{t("components.integrationCard.premium")}</span>
+              <span className="hidden sm:inline">Premium</span>
             </Button>
           )}
         </div>
@@ -127,9 +125,9 @@ export default function IntegrationCard({
                 <p className="text-sm text-muted-foreground truncate">{accountName}</p>
               )}
               <p className="text-xs text-muted-foreground">
-                {t("components.integrationCard.connectedOn")} {connectedAt ? new Date(connectedAt).toLocaleDateString(i18n.language) : "\u2014"}
+                Connecte le {connectedAt ? new Date(connectedAt).toLocaleDateString("fr-FR") : "\u2014"}
                 {lastSync && (
-                  <> &middot; {t("components.integrationCard.sync")}: {new Date(lastSync).toLocaleString(i18n.language, { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}</>
+                  <> &middot; Sync : {new Date(lastSync).toLocaleString("fr-FR", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}</>
                 )}
               </p>
               {lastError && (
@@ -165,7 +163,7 @@ export default function IntegrationCard({
                   data-testid={`test-${service}-btn`}
                 >
                   <Wifi className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">{t("components.integrationCard.test")}</span>
+                  <span className="hidden sm:inline">Tester</span>
                 </Button>
               )}
               <Button
@@ -175,7 +173,7 @@ export default function IntegrationCard({
                 className="h-8 gap-1.5 text-xs"
               >
                 <Settings className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{t("components.integrationCard.settings")}</span>
+                <span className="hidden sm:inline">Param.</span>
               </Button>
             </div>
           </div>

@@ -1,6 +1,5 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +18,6 @@ import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 
 export default function ProfilePage() {
-  const { t } = useTranslation();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -48,10 +46,10 @@ export default function ProfilePage() {
           {/* Header */}
           <div className="mb-8">
             <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="profile-title">
-              {t("profile.title")}
+              Mon profil
             </h1>
             <p className="text-muted-foreground">
-              {t("profile.subtitle")}
+              Gérez vos informations et votre abonnement
             </p>
           </div>
 
@@ -68,7 +66,7 @@ export default function ProfilePage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
                     <h2 className="font-heading text-2xl font-semibold" data-testid="profile-name">
-                      {user?.name || t("profile.defaultUser")}
+                      {user?.name || "Utilisateur"}
                     </h2>
                     {user?.subscription_tier === "premium" && (
                       <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
@@ -91,23 +89,23 @@ export default function ProfilePage() {
             <CardHeader>
               <CardTitle className="font-heading text-lg flex items-center gap-2">
                 <CreditCard className="w-5 h-5" />
-                {t("profile.subscription.title")}
+                Abonnement
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 mb-4">
                 <div>
                   <p className="font-medium mb-1">
-                    {user?.subscription_tier === "premium" ? t("profile.subscription.premiumPlan") : t("profile.subscription.freePlan")}
+                    {user?.subscription_tier === "premium" ? "Plan Premium" : "Plan Gratuit"}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {user?.subscription_tier === "premium"
-                      ? t("profile.subscription.premiumDesc")
-                      : t("profile.subscription.freeDesc")}
+                      ? "Accès illimité à toutes les fonctionnalités"
+                      : "Fonctionnalités de base"}
                   </p>
                 </div>
                 <Badge variant={user?.subscription_tier === "premium" ? "default" : "secondary"}>
-                  {user?.subscription_tier === "premium" ? t("profile.subscription.active") : t("profile.subscription.free")}
+                  {user?.subscription_tier === "premium" ? "Actif" : "Gratuit"}
                 </Badge>
               </div>
 
@@ -122,21 +120,21 @@ export default function ProfilePage() {
                         const data = await res.json();
                         window.open(data.url, "_blank");
                       } else {
-                        toast.error(t("profile.errors.portalError"));
+                        toast.error("Erreur lors de l'ouverture du portail");
                       }
                     } catch {
-                      toast.error(t("profile.errors.connectionError"));
+                      toast.error("Erreur de connexion");
                     }
                   }}
                 >
                   <Settings className="w-5 h-5 mr-2" />
-                  {t("profile.subscription.manage")}
+                  Gérer mon abonnement
                 </Button>
               ) : (
                 <Link to="/pricing">
                   <Button className="w-full rounded-xl" data-testid="upgrade-btn">
                     <Crown className="w-5 h-5 mr-2" />
-                    {t("profile.subscription.upgrade")}
+                    Passer à Premium
                     <ChevronRight className="w-5 h-5 ml-2" />
                   </Button>
                 </Link>
@@ -147,7 +145,7 @@ export default function ProfilePage() {
           {/* Stats Summary */}
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle className="font-heading text-lg">{t("profile.summary.title")}</CardTitle>
+              <CardTitle className="font-heading text-lg">Résumé</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
@@ -155,13 +153,13 @@ export default function ProfilePage() {
                   <p className="text-2xl font-heading font-bold text-primary">
                     {user?.total_time_invested || 0}
                   </p>
-                  <p className="text-sm text-muted-foreground">{t("profile.summary.minutesInvested")}</p>
+                  <p className="text-sm text-muted-foreground">minutes investies</p>
                 </div>
                 <div className="p-4 rounded-xl bg-white/5">
                   <p className="text-2xl font-heading font-bold text-amber-500">
                     {user?.streak_days || 0}
                   </p>
-                  <p className="text-sm text-muted-foreground">{t("profile.summary.streakDays")}</p>
+                  <p className="text-sm text-muted-foreground">jours de streak</p>
                 </div>
               </div>
             </CardContent>
@@ -170,19 +168,19 @@ export default function ProfilePage() {
           {/* Actions */}
           <Card>
             <CardHeader>
-              <CardTitle className="font-heading text-lg">{t("profile.actions.title")}</CardTitle>
+              <CardTitle className="font-heading text-lg">Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <Link to="/progress">
                 <button className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors">
                   <div className="flex items-center gap-3">
                     <BarChart3 className="w-5 h-5 text-muted-foreground" />
-                    <span>{t("profile.actions.viewStats")}</span>
+                    <span>Voir mes statistiques</span>
                   </div>
                   <ChevronRight className="w-5 h-5 text-muted-foreground" />
                 </button>
               </Link>
-
+              
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors text-destructive"
@@ -190,7 +188,7 @@ export default function ProfilePage() {
               >
                 <div className="flex items-center gap-3">
                   <LogOut className="w-5 h-5" />
-                  <span>{t("profile.actions.logout")}</span>
+                  <span>Se déconnecter</span>
                 </div>
                 <ChevronRight className="w-5 h-5" />
               </button>

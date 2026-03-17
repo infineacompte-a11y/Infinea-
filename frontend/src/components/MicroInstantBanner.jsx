@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   Zap,
@@ -47,7 +46,6 @@ function isApproaching(instant, thresholdMin = 10) {
 // Renders as a slim, animated bar at the top of the viewport.
 // ═══════════════════════════════════════════════════════════════
 export default function MicroInstantBanner() {
-  const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -160,7 +158,7 @@ export default function MicroInstantBanner() {
                 isNow ? "text-white" : "text-foreground"
               }`}
             >
-              {isNow ? t("components.microInstantBanner.available") : t("components.microInstantBanner.incoming")}
+              {isNow ? "Micro-instant disponible" : "Micro-instant dans"}
               {!isNow && (
                 <span className="font-semibold"> {minsLeft} min</span>
               )}
@@ -199,7 +197,7 @@ export default function MicroInstantBanner() {
             onClick={handleAction}
           >
             <Play className="w-3 h-3" />
-            {isNow ? t("components.microInstantBanner.start") : t("components.microInstantBanner.view")}
+            {isNow ? "Commencer" : "Voir"}
           </Button>
 
           {/* Dismiss */}

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -53,8 +52,21 @@ const categoryColors = {
   entrepreneurship: "#f97316",
 };
 
+const categoryLabels = {
+  learning: "Apprentissage",
+  productivity: "Productivité",
+  well_being: "Bien-être",
+  creativity: "Créativité",
+  fitness: "Fitness",
+  mindfulness: "Mindfulness",
+  leadership: "Leadership",
+  finance: "Finance",
+  relations: "Relations",
+  mental_health: "Santé mentale",
+  entrepreneurship: "Entrepreneuriat",
+};
+
 export default function ProgressStats() {
-  const { t, i18n } = useTranslation();
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
@@ -69,7 +81,7 @@ export default function ProgressStats() {
       const data = await response.json();
       setStats(data);
     } catch (error) {
-      toast.error(t("progressStats.errorLoad"));
+      toast.error("Impossible de charger les statistiques");
     } finally {
       setIsLoading(false);
     }
@@ -77,7 +89,7 @@ export default function ProgressStats() {
 
   const pieData = stats
     ? Object.entries(stats.sessions_by_category || {}).map(([key, value]) => ({
-        name: t(`categories.${key}`, { defaultValue: key }),
+        name: categoryLabels[key] || key,
         value,
         color: categoryColors[key] || "#6366f1",
       }))
@@ -85,7 +97,7 @@ export default function ProgressStats() {
 
   const barData = stats
     ? Object.entries(stats.time_by_category || {}).map(([key, value]) => ({
-        name: t(`categories.${key}`, { defaultValue: key }),
+        name: categoryLabels[key] || key,
         minutes: value,
         fill: categoryColors[key] || "#6366f1",
       }))
@@ -102,10 +114,10 @@ export default function ProgressStats() {
           <div className="flex items-start justify-between mb-8">
             <div>
               <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="progress-title">
-                {t("progressStats.title")}
+                Votre Capital-Temps
               </h1>
               <p className="text-muted-foreground">
-                {t("progressStats.subtitle")}
+                Suivez votre progression et vos accomplissements
               </p>
             </div>
             {stats && (
@@ -116,7 +128,7 @@ export default function ProgressStats() {
                 onClick={() => setShareOpen(true)}
               >
                 <Share2 className="w-4 h-4" />
-                {t("progressStats.share")}
+                Partager
               </Button>
             )}
             <ShareDialog open={shareOpen} onOpenChange={setShareOpen} shareType="weekly_recap" />
@@ -140,7 +152,7 @@ export default function ProgressStats() {
                         <p className="text-2xl font-heading font-bold" data-testid="total-time">
                           {stats?.total_time_invested || 0}
                         </p>
-                        <p className="text-xs text-muted-foreground">{t("progressStats.stats.totalMinutes")}</p>
+                        <p className="text-xs text-muted-foreground">minutes totales</p>
                       </div>
                     </div>
                   </CardContent>
@@ -156,7 +168,7 @@ export default function ProgressStats() {
                         <p className="text-2xl font-heading font-bold" data-testid="total-sessions">
                           {stats?.total_sessions || 0}
                         </p>
-                        <p className="text-xs text-muted-foreground">{t("common.sessions")}</p>
+                        <p className="text-xs text-muted-foreground">sessions</p>
                       </div>
                     </div>
                   </CardContent>
@@ -172,7 +184,7 @@ export default function ProgressStats() {
                         <p className="text-2xl font-heading font-bold" data-testid="streak-days">
                           {stats?.streak_days || 0}
                         </p>
-                        <p className="text-xs text-muted-foreground">{t("progressStats.stats.streakDays")}</p>
+                        <p className="text-xs text-muted-foreground">jours streak</p>
                       </div>
                     </div>
                   </CardContent>
@@ -188,7 +200,7 @@ export default function ProgressStats() {
                         <p className="text-2xl font-heading font-bold">
                           {Math.round((stats?.total_time_invested || 0) / 60)}h
                         </p>
-                        <p className="text-xs text-muted-foreground">{t("progressStats.stats.hoursInvested")}</p>
+                        <p className="text-xs text-muted-foreground">heures investies</p>
                       </div>
                     </div>
                   </CardContent>
@@ -200,7 +212,7 @@ export default function ProgressStats() {
                 {/* Time by Category */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="font-heading text-lg">{t("progressStats.charts.timeByCategory")}</CardTitle>
+                    <CardTitle className="font-heading text-lg">Temps par catégorie</CardTitle>
                   </CardHeader>
                   <CardContent>
                     {barData.length > 0 ? (
@@ -221,7 +233,7 @@ export default function ProgressStats() {
                       </ResponsiveContainer>
                     ) : (
                       <div className="h-[250px] flex items-center justify-center text-muted-foreground">
-                        <p>{t("progressStats.noData")}</p>
+                        <p>Pas encore de données</p>
                       </div>
                     )}
                   </CardContent>
@@ -230,7 +242,7 @@ export default function ProgressStats() {
                 {/* Sessions Distribution */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="font-heading text-lg">{t("progressStats.charts.sessionDistribution")}</CardTitle>
+                    <CardTitle className="font-heading text-lg">Répartition des sessions</CardTitle>
                   </CardHeader>
                   <CardContent>
                     {pieData.length > 0 ? (
@@ -260,7 +272,7 @@ export default function ProgressStats() {
                       </ResponsiveContainer>
                     ) : (
                       <div className="h-[250px] flex items-center justify-center text-muted-foreground">
-                        <p>{t("progressStats.noData")}</p>
+                        <p>Pas encore de données</p>
                       </div>
                     )}
                     <div className="flex justify-center flex-wrap gap-x-4 gap-y-1 mt-4">
@@ -284,7 +296,7 @@ export default function ProgressStats() {
               {/* Recent Sessions */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="font-heading text-lg">{t("progressStats.recentSessions.title")}</CardTitle>
+                  <CardTitle className="font-heading text-lg">Sessions récentes</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {stats?.recent_sessions?.length > 0 ? (
@@ -319,7 +331,7 @@ export default function ProgressStats() {
                             <div>
                               <p className="font-medium">{session.action_title}</p>
                               <p className="text-xs text-muted-foreground">
-                                {new Date(session.completed_at).toLocaleDateString(i18n.language)}
+                                {new Date(session.completed_at).toLocaleDateString("fr-FR")}
                               </p>
                             </div>
                           </div>
@@ -332,10 +344,10 @@ export default function ProgressStats() {
                   ) : (
                     <div className="text-center py-8 text-muted-foreground">
                       <Clock className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                      <p>{t("progressStats.recentSessions.empty")}</p>
+                      <p>Aucune session complétée</p>
                       <Link to="/dashboard">
                         <Button variant="link" className="mt-2">
-                          {t("progressStats.recentSessions.startSession")}
+                          Commencer une session
                         </Button>
                       </Link>
                     </div>

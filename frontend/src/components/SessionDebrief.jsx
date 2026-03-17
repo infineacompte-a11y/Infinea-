@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +12,6 @@ import {
 import { API, authFetch } from "@/App";
 
 export default function SessionDebrief({ sessionId, duration, notes, onStartAction, onContinue }) {
-  const { t } = useTranslation();
   const [debrief, setDebrief] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -85,10 +83,10 @@ export default function SessionDebrief({ sessionId, duration, notes, onStartActi
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-heading font-semibold text-sm">{t("components.sessionDebrief.title")}</h3>
+                <h3 className="font-heading font-semibold text-sm">Debrief IA</h3>
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-medium text-primary">
                   <Sparkles className="w-2.5 h-2.5" />
-                  {t("components.sessionDebrief.analysisBadge")}
+                  Analyse
                 </span>
               </div>
             </div>
@@ -115,7 +113,7 @@ export default function SessionDebrief({ sessionId, duration, notes, onStartActi
                   <Sparkles className="w-4 h-4 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-primary mb-0.5">{t("components.sessionDebrief.nextAction")}</p>
+                  <p className="text-xs font-medium text-primary mb-0.5">Prochaine action</p>
                   <p className="text-sm leading-relaxed">{debrief.next_suggestion}</p>
                 </div>
               </div>
@@ -126,7 +124,7 @@ export default function SessionDebrief({ sessionId, duration, notes, onStartActi
                   onClick={() => onStartAction(nextActionId)}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  {t("components.sessionDebrief.startAction")}
+                  Commencer cette action
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Button>
               )}

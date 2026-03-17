@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -45,30 +44,26 @@ import { CardsSkeleton } from "@/components/PageSkeleton";
 import { API, authFetch, useAuth } from "@/App";
 import { toast } from "sonner";
 
-// ─── Source icons & colors ──────────────────────────────────
+// ─── Source icons & labels ──────────────────────────────────
 const SOURCE_CONFIG = {
   calendar_gap: {
     icon: Calendar,
+    label: "Calendrier",
     color: "text-blue-400",
     bgColor: "bg-blue-500/10",
   },
   routine_window: {
     icon: Repeat,
+    label: "Routine",
     color: "text-emerald-400",
     bgColor: "bg-emerald-500/10",
   },
   behavioral_pattern: {
     icon: TrendingUp,
+    label: "Pattern détecté",
     color: "text-purple-400",
     bgColor: "bg-purple-500/10",
   },
-};
-
-// ─── Source label keys (for i18n) ───────────────────────────
-const SOURCE_LABEL_KEYS = {
-  calendar_gap: "microInstantsPage.source.calendar",
-  routine_window: "microInstantsPage.source.routine",
-  behavioral_pattern: "microInstantsPage.source.pattern",
 };
 
 // ─── Time helpers ───────────────────────────────────────────
@@ -78,10 +73,10 @@ function getTimeOfDayIcon(hour) {
   return Moon;
 }
 
-function formatTime(isoString, language) {
+function formatTime(isoString) {
   if (!isoString) return "";
   const d = new Date(isoString);
-  return d.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }
 
 function formatDuration(minutes) {
@@ -92,11 +87,12 @@ function formatDuration(minutes) {
   return m > 0 ? `${h}h${m.toString().padStart(2, "0")}` : `${h}h`;
 }
 
-function getGreetingKey(name) {
+function getGreeting(name) {
   const h = new Date().getHours();
-  if (h < 12) return name ? "morningName" : "morning";
-  if (h < 18) return name ? "afternoonName" : "afternoon";
-  return name ? "eveningName" : "evening";
+  const first = name?.split(" ")[0] || "";
+  if (h < 12) return `Bonjour${first ? ` ${first}` : ""} !`;
+  if (h < 18) return `Bon après-midi${first ? ` ${first}` : ""} !`;
+  return `Bonsoir${first ? ` ${first}` : ""} !`;
 }
 
 function isInstantNow(instant) {
@@ -116,7 +112,6 @@ function isInstantFuture(instant) {
 
 // ─── Confidence badge ───────────────────────────────────────
 function ConfidenceBadge({ score }) {
-  const { t } = useTranslation();
   const pct = Math.round((score || 0) * 100);
   let variant = "outline";
   let className = "text-muted-foreground border-border/50";
@@ -128,22 +123,21 @@ function ConfidenceBadge({ score }) {
   }
   return (
     <Badge variant={variant} className={`text-[10px] ${className}`}>
-      {t("microInstantsPage.confidencePct", { pct })}
+      {pct}% confiance
     </Badge>
   );
 }
 
 // ─── Skip reasons ────────────────────────────────────────────
-const SKIP_REASON_KEYS = [
-  { value: "busy", labelKey: "microInstantsPage.skipReasons.busy", icon: BriefcaseBusiness },
-  { value: "wrong_time", labelKey: "microInstantsPage.skipReasons.wrongTime", icon: Clock3 },
-  { value: "not_interested", labelKey: "microInstantsPage.skipReasons.notInterested", icon: Ban },
-  { value: "other", labelKey: "microInstantsPage.skipReasons.other", icon: MessageSquare },
+const SKIP_REASONS = [
+  { value: "busy", label: "Occupé en ce moment", icon: BriefcaseBusiness },
+  { value: "wrong_time", label: "Mauvais moment", icon: Clock3 },
+  { value: "not_interested", label: "Pas intéressé", icon: Ban },
+  { value: "other", label: "Autre raison", icon: MessageSquare },
 ];
 
 // ─── Skip Dialog ─────────────────────────────────────────────
 function SkipDialog({ open, onOpenChange, onConfirm, isLoading }) {
-  const { t } = useTranslation();
   const [reason, setReason] = useState(null);
 
   const handleConfirm = () => {
@@ -155,13 +149,13 @@ function SkipDialog({ open, onOpenChange, onConfirm, isLoading }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle className="text-base">{t("microInstantsPage.skipDialog.title")}</DialogTitle>
+          <DialogTitle className="text-base">Passer ce micro-instant ?</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground -mt-1">
-          {t("microInstantsPage.skipDialog.description")}
+          Ton feedback améliore les prochaines prédictions.
         </p>
         <div className="grid grid-cols-2 gap-2 mt-2">
-          {SKIP_REASON_KEYS.map((r) => {
+          {SKIP_REASONS.map((r) => {
             const Icon = r.icon;
             const selected = reason === r.value;
             return (
@@ -175,7 +169,7 @@ function SkipDialog({ open, onOpenChange, onConfirm, isLoading }) {
                 }`}
               >
                 <Icon className="w-4 h-4 shrink-0" />
-                <span className="text-xs leading-tight">{t(r.labelKey)}</span>
+                <span className="text-xs leading-tight">{r.label}</span>
               </button>
             );
           })}
@@ -186,7 +180,7 @@ function SkipDialog({ open, onOpenChange, onConfirm, isLoading }) {
             className="flex-1"
             onClick={() => onOpenChange(false)}
           >
-            {t("common.cancel")}
+            Annuler
           </Button>
           <Button
             variant="default"
@@ -194,7 +188,7 @@ function SkipDialog({ open, onOpenChange, onConfirm, isLoading }) {
             disabled={isLoading}
             onClick={handleConfirm}
           >
-            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("microInstantsPage.skipDialog.confirm")}
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Passer"}
           </Button>
         </div>
       </DialogContent>
@@ -240,13 +234,11 @@ function CountdownBadge({ windowEnd }) {
 // Instant Card — the core interaction unit
 // ═══════════════════════════════════════════════════════════════
 function InstantCard({ instant, onExploit, onSkip, onUndoSkip, isLoading }) {
-  const { t, i18n } = useTranslation();
   const [skipDialogOpen, setSkipDialogOpen] = useState(false);
   const [undoCountdown, setUndoCountdown] = useState(0);
   const undoTimerRef = useRef(null);
 
   const source = SOURCE_CONFIG[instant.source] || SOURCE_CONFIG.behavioral_pattern;
-  const sourceLabelKey = SOURCE_LABEL_KEYS[instant.source] || SOURCE_LABEL_KEYS.behavioral_pattern;
   const SourceIcon = source.icon;
   const now = isInstantNow(instant);
   const past = isInstantPast(instant);
@@ -254,8 +246,8 @@ function InstantCard({ instant, onExploit, onSkip, onUndoSkip, isLoading }) {
   const skipped = instant._skipped;
 
   const action = instant.recommended_action || {};
-  const startTime = formatTime(instant.window_start, i18n.language);
-  const endTime = formatTime(instant.window_end, i18n.language);
+  const startTime = formatTime(instant.window_start);
+  const endTime = formatTime(instant.window_end);
   const duration = instant.duration_minutes || 0;
 
   const handleExploit = () => {
@@ -320,11 +312,11 @@ function InstantCard({ instant, onExploit, onSkip, onUndoSkip, isLoading }) {
                   </span>
                   {now && (
                     <Badge className="bg-primary/20 text-primary text-[9px] px-1.5 py-0 animate-pulse">
-                      {t("microInstantsPage.now")}
+                      MAINTENANT
                     </Badge>
                   )}
                 </div>
-                <span className="text-[11px] text-muted-foreground">{t(sourceLabelKey)}</span>
+                <span className="text-[11px] text-muted-foreground">{source.label}</span>
               </div>
             </div>
 
@@ -381,7 +373,7 @@ function InstantCard({ instant, onExploit, onSkip, onUndoSkip, isLoading }) {
                 ) : (
                   <Play className="w-4 h-4" />
                 )}
-                {now ? t("microInstantsPage.card.startNow") : t("microInstantsPage.card.launch")}
+                {now ? "Commencer" : "Lancer"}
               </Button>
               <Button
                 variant="ghost"
@@ -402,7 +394,7 @@ function InstantCard({ instant, onExploit, onSkip, onUndoSkip, isLoading }) {
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-emerald-400">{t("microInstantsPage.card.exploited")}</p>
+                <p className="text-sm font-medium text-emerald-400">Exploité</p>
                 {action.title && (
                   <p className="text-[11px] text-muted-foreground">{action.title}</p>
                 )}
@@ -417,15 +409,10 @@ function InstantCard({ instant, onExploit, onSkip, onUndoSkip, isLoading }) {
                 <XCircle className="w-4 h-4 text-muted-foreground" />
               </div>
               <div className="flex-1">
-                <p className="text-sm text-muted-foreground">{t("microInstantsPage.card.skipped")}</p>
+                <p className="text-sm text-muted-foreground">Passé</p>
                 {instant._skipReason && (
                   <p className="text-[11px] text-muted-foreground/60">
-                    {t(`microInstantsPage.skipReasons.${
-                      instant._skipReason === "busy" ? "busy" :
-                      instant._skipReason === "wrong_time" ? "wrongTime" :
-                      instant._skipReason === "not_interested" ? "notInterested" :
-                      "other"
-                    }`)}
+                    {SKIP_REASONS.find((r) => r.value === instant._skipReason)?.label || instant._skipReason}
                   </p>
                 )}
               </div>
@@ -437,7 +424,7 @@ function InstantCard({ instant, onExploit, onSkip, onUndoSkip, isLoading }) {
                   onClick={handleUndo}
                 >
                   <Undo2 className="w-3.5 h-3.5" />
-                  {t("microInstantsPage.card.undoCountdown", { seconds: undoCountdown })}
+                  Annuler ({undoCountdown}s)
                 </Button>
               )}
             </div>
@@ -460,13 +447,12 @@ function InstantCard({ instant, onExploit, onSkip, onUndoSkip, isLoading }) {
 // Hero Card — the big CTA for the current/next instant
 // ═══════════════════════════════════════════════════════════════
 function HeroInstant({ instant, onExploit, isLoading }) {
-  const { t, i18n } = useTranslation();
   if (!instant) return null;
 
   const action = instant.recommended_action || {};
   const duration = instant.duration_minutes || 0;
   const now = isInstantNow(instant);
-  const startTime = formatTime(instant.window_start, i18n.language);
+  const startTime = formatTime(instant.window_start);
 
   return (
     <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 shadow-xl shadow-primary/5 overflow-hidden">
@@ -474,12 +460,12 @@ function HeroInstant({ instant, onExploit, isLoading }) {
         <div className="flex items-center gap-2 mb-1">
           <Zap className="w-5 h-5 text-primary" />
           <span className="text-xs text-primary font-medium uppercase tracking-wider">
-            {now ? t("microInstantsPage.hero.available") : t("microInstantsPage.hero.nextAt", { time: startTime })}
+            {now ? "Micro-instant disponible" : `Prochain à ${startTime}`}
           </span>
         </div>
 
         <h2 className="text-xl font-semibold text-foreground mt-2 mb-1">
-          {action.title || t("microInstantsPage.hero.recommendedAction")}
+          {action.title || "Action recommandée"}
         </h2>
 
         <p className="text-sm text-muted-foreground mb-4">
@@ -498,7 +484,7 @@ function HeroInstant({ instant, onExploit, isLoading }) {
           ) : (
             <Play className="w-5 h-5" />
           )}
-          {now ? t("microInstantsPage.hero.startNow") : t("microInstantsPage.hero.launchAction")}
+          {now ? "Commencer maintenant" : "Lancer cette action"}
         </Button>
       </CardContent>
     </Card>
@@ -509,7 +495,6 @@ function HeroInstant({ instant, onExploit, isLoading }) {
 // Stats Summary — quick metrics row
 // ═══════════════════════════════════════════════════════════════
 function StatsSummary({ instants, stats }) {
-  const { t } = useTranslation();
   const total = instants.length;
   const exploited = instants.filter((i) => i._exploited).length;
   const available = instants.filter((i) => !isInstantPast(i) && !i._exploited && !i._skipped).length;
@@ -518,15 +503,15 @@ function StatsSummary({ instants, stats }) {
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
       <div className="text-center p-3 rounded-xl bg-card border border-border/20">
         <p className="text-2xl font-bold text-foreground">{total}</p>
-        <p className="text-[11px] text-muted-foreground">{t("microInstantsPage.stats.detected")}</p>
+        <p className="text-[11px] text-muted-foreground">Détectés</p>
       </div>
       <div className="text-center p-3 rounded-xl bg-card border border-border/20">
         <p className="text-2xl font-bold text-emerald-400">{exploited}</p>
-        <p className="text-[11px] text-muted-foreground">{t("microInstantsPage.stats.exploited")}</p>
+        <p className="text-[11px] text-muted-foreground">Exploités</p>
       </div>
       <div className="text-center p-3 rounded-xl bg-card border border-border/20">
         <p className="text-2xl font-bold text-primary">{available}</p>
-        <p className="text-[11px] text-muted-foreground">{t("microInstantsPage.stats.available")}</p>
+        <p className="text-[11px] text-muted-foreground">Disponibles</p>
       </div>
     </div>
   );
@@ -536,7 +521,6 @@ function StatsSummary({ instants, stats }) {
 // Empty State
 // ═══════════════════════════════════════════════════════════════
 function EmptyState() {
-  const { t } = useTranslation();
   return (
     <Card className="border-dashed border-border/50">
       <CardContent className="p-8 text-center">
@@ -544,17 +528,18 @@ function EmptyState() {
           <Zap className="w-7 h-7 text-primary/60" />
         </div>
         <h3 className="text-lg font-medium text-foreground mb-2">
-          {t("microInstantsPage.empty.title")}
+          Pas de micro-instants détectés
         </h3>
         <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-          {t("microInstantsPage.empty.description")}
+          Le moteur apprend tes patterns d'usage. Continue d'utiliser InFinea et les
+          micro-instants apparaîtront automatiquement.
         </p>
         <div className="mt-4 flex flex-col gap-2 max-w-xs mx-auto">
-          <p className="text-[11px] text-muted-foreground">{t("microInstantsPage.empty.accelerateTitle")}</p>
+          <p className="text-[11px] text-muted-foreground">Pour accélérer la détection :</p>
           <ul className="text-[11px] text-muted-foreground text-left space-y-1">
-            <li>• {t("microInstantsPage.empty.tip1")}</li>
-            <li>• {t("microInstantsPage.empty.tip2")}</li>
-            <li>• {t("microInstantsPage.empty.tip3")}</li>
+            <li>• Connecte ton calendrier Google</li>
+            <li>• Crée des routines quotidiennes</li>
+            <li>• Complète quelques sessions</li>
           </ul>
         </div>
       </CardContent>
@@ -567,7 +552,6 @@ function EmptyState() {
 // ═══════════════════════════════════════════════════════════════
 
 function WeeklyTrendBadge({ trend, thisWeekRate, lastWeekRate }) {
-  const { t } = useTranslation();
   if (thisWeekRate === 0 && lastWeekRate === 0) return null;
   const pct = Math.round(trend * 100);
   const isUp = pct > 0;
@@ -583,29 +567,28 @@ function WeeklyTrendBadge({ trend, thisWeekRate, lastWeekRate }) {
     <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${color}`}>
       <Icon className="w-3 h-3" />
       {isUp ? "+" : ""}
-      {t("microInstantsPage.analytics.vsLastWeek", { pct })}
+      {pct}% vs semaine dernière
     </div>
   );
 }
 
 function DailyChart({ dailyChart }) {
-  const { t } = useTranslation();
   if (!dailyChart || dailyChart.length === 0) return null;
   const maxTotal = Math.max(...dailyChart.map((d) => d.total), 1);
 
-  const dayKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  const dayNames = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 
   return (
     <Card className="border-border/30">
       <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-4">
           <BarChart3 className="w-4 h-4 text-primary" />
-          <span className="text-sm font-medium text-foreground">{t("microInstantsPage.analytics.last7Days")}</span>
+          <span className="text-sm font-medium text-foreground">7 derniers jours</span>
         </div>
         <div className="flex items-end gap-1.5 h-28">
           {dailyChart.map((day) => {
             const dt = new Date(day.date + "T12:00:00");
-            const dayName = t(`microInstantsPage.analytics.days.${dayKeys[dt.getDay()]}`);
+            const dayName = dayNames[dt.getDay()];
             const dayNum = dt.getDate();
             const exploitedH = day.total > 0 ? (day.exploited / maxTotal) * 100 : 0;
             const skippedH = day.total > 0 ? (day.skipped / maxTotal) * 100 : 0;
@@ -649,11 +632,11 @@ function DailyChart({ dailyChart }) {
         <div className="flex items-center gap-4 mt-3 justify-center">
           <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-sm bg-emerald-500/70" />
-            <span className="text-[10px] text-muted-foreground">{t("microInstantsPage.analytics.legendExploited")}</span>
+            <span className="text-[10px] text-muted-foreground">Exploités</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-sm bg-muted-foreground/20" />
-            <span className="text-[10px] text-muted-foreground">{t("microInstantsPage.analytics.legendSkipped")}</span>
+            <span className="text-[10px] text-muted-foreground">Passés</span>
           </div>
         </div>
       </CardContent>
@@ -662,14 +645,13 @@ function DailyChart({ dailyChart }) {
 }
 
 function HourlyHeatmap({ hourlyRates }) {
-  const { t } = useTranslation();
   if (!hourlyRates || Object.keys(hourlyRates).length === 0) return null;
 
-  // Group hours into time blocks — reuse myDay.timeOfDay keys
+  // Group hours into time blocks
   const blocks = [
-    { labelKey: "microInstantsPage.analytics.timeBlocks.morning", range: [6, 12], icon: Sunrise },
-    { labelKey: "microInstantsPage.analytics.timeBlocks.afternoon", range: [12, 18], icon: Sun },
-    { labelKey: "microInstantsPage.analytics.timeBlocks.evening", range: [18, 24], icon: Moon },
+    { label: "Matin", range: [6, 12], icon: Sunrise },
+    { label: "Après-midi", range: [12, 18], icon: Sun },
+    { label: "Soir", range: [18, 24], icon: Moon },
   ];
 
   return (
@@ -677,16 +659,16 @@ function HourlyHeatmap({ hourlyRates }) {
       <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-4">
           <Clock className="w-4 h-4 text-primary" />
-          <span className="text-sm font-medium text-foreground">{t("microInstantsPage.analytics.exploitationHours")}</span>
+          <span className="text-sm font-medium text-foreground">Heures d'exploitation</span>
         </div>
         <div className="space-y-3">
           {blocks.map((block) => {
             const BlockIcon = block.icon;
             return (
-              <div key={block.labelKey}>
+              <div key={block.label}>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <BlockIcon className="w-3 h-3 text-muted-foreground" />
-                  <span className="text-[11px] text-muted-foreground">{t(block.labelKey)}</span>
+                  <span className="text-[11px] text-muted-foreground">{block.label}</span>
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
                   {Array.from({ length: block.range[1] - block.range[0] }, (_, i) => {
@@ -740,7 +722,6 @@ function HourlyHeatmap({ hourlyRates }) {
 }
 
 function BestSlotsCard({ bestSlots }) {
-  const { t } = useTranslation();
   if (!bestSlots || bestSlots.length === 0) return null;
 
   const medals = ["🥇", "🥈", "🥉"];
@@ -750,7 +731,7 @@ function BestSlotsCard({ bestSlots }) {
       <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-3">
           <Award className="w-4 h-4 text-amber-400" />
-          <span className="text-sm font-medium text-foreground">{t("microInstantsPage.analytics.bestSlots")}</span>
+          <span className="text-sm font-medium text-foreground">Meilleurs créneaux</span>
         </div>
         <div className="space-y-2">
           {bestSlots.map((slot, i) => (
@@ -762,7 +743,7 @@ function BestSlotsCard({ bestSlots }) {
               <div className="flex-1">
                 <p className="text-sm font-medium text-foreground">{slot.label}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  {t("microInstantsPage.analytics.exploitedCount", { exploited: slot.exploited_count, total: slot.total_outcomes })}
+                  {slot.exploited_count}/{slot.total_outcomes} exploités
                 </p>
               </div>
               <Badge
@@ -786,7 +767,6 @@ function BestSlotsCard({ bestSlots }) {
 }
 
 function SourceBreakdown({ sourceDistribution }) {
-  const { t } = useTranslation();
   if (!sourceDistribution) return null;
   const sources = Object.entries(sourceDistribution).filter(([, d]) => d.total > 0);
   if (sources.length === 0) return null;
@@ -798,12 +778,11 @@ function SourceBreakdown({ sourceDistribution }) {
       <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-3">
           <Sparkles className="w-4 h-4 text-primary" />
-          <span className="text-sm font-medium text-foreground">{t("microInstantsPage.analytics.detectionSources")}</span>
+          <span className="text-sm font-medium text-foreground">Sources de détection</span>
         </div>
         <div className="space-y-3">
           {sources.map(([src, data]) => {
             const config = SOURCE_CONFIG[src] || SOURCE_CONFIG.behavioral_pattern;
-            const sourceLabelKey = SOURCE_LABEL_KEYS[src] || SOURCE_LABEL_KEYS.behavioral_pattern;
             const SrcIcon = config.icon;
             const pct = totalAll > 0 ? Math.round((data.total / totalAll) * 100) : 0;
             const rate = Math.round(data.rate * 100);
@@ -815,12 +794,12 @@ function SourceBreakdown({ sourceDistribution }) {
                     <div className={`w-6 h-6 rounded-md ${config.bgColor} flex items-center justify-center`}>
                       <SrcIcon className={`w-3 h-3 ${config.color}`} />
                     </div>
-                    <span className="text-sm text-foreground">{t(sourceLabelKey)}</span>
+                    <span className="text-sm text-foreground">{config.label}</span>
                   </div>
                   <div className="text-right">
                     <span className="text-xs text-muted-foreground">{pct}%</span>
                     <span className="text-[10px] text-muted-foreground/60 ml-1">
-                      ({t("microInstantsPage.analytics.exploitedPct", { rate })})
+                      ({rate}% exploités)
                     </span>
                   </div>
                 </div>
@@ -846,7 +825,6 @@ function SourceBreakdown({ sourceDistribution }) {
 }
 
 function StreakConsistencyCard({ streak, avgPerDay, activeDays, totalMinutes }) {
-  const { t } = useTranslation();
   return (
     <Card className="border-border/30">
       <CardContent className="p-4">
@@ -854,22 +832,22 @@ function StreakConsistencyCard({ streak, avgPerDay, activeDays, totalMinutes }) 
           <div className="text-center p-3 rounded-xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20">
             <Flame className="w-5 h-5 text-amber-400 mx-auto mb-1" />
             <p className="text-2xl font-bold text-foreground">{streak}</p>
-            <p className="text-[10px] text-muted-foreground">{t("microInstantsPage.analytics.consecutiveDays")}</p>
+            <p className="text-[10px] text-muted-foreground">Jours consécutifs</p>
           </div>
           <div className="text-center p-3 rounded-xl bg-card border border-border/20">
             <Target className="w-5 h-5 text-primary mx-auto mb-1" />
             <p className="text-2xl font-bold text-foreground">{avgPerDay}</p>
-            <p className="text-[10px] text-muted-foreground">{t("microInstantsPage.analytics.avgPerActiveDay")}</p>
+            <p className="text-[10px] text-muted-foreground">Moy. / jour actif</p>
           </div>
           <div className="text-center p-3 rounded-xl bg-card border border-border/20">
             <Calendar className="w-5 h-5 text-blue-400 mx-auto mb-1" />
             <p className="text-2xl font-bold text-foreground">{activeDays}</p>
-            <p className="text-[10px] text-muted-foreground">{t("microInstantsPage.analytics.activeDays30")}</p>
+            <p className="text-[10px] text-muted-foreground">Jours actifs (30j)</p>
           </div>
           <div className="text-center p-3 rounded-xl bg-card border border-border/20">
             <Clock className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
             <p className="text-2xl font-bold text-foreground">{formatDuration(totalMinutes)}</p>
-            <p className="text-[10px] text-muted-foreground">{t("microInstantsPage.analytics.timeInvested")}</p>
+            <p className="text-[10px] text-muted-foreground">Temps investi</p>
           </div>
         </div>
       </CardContent>
@@ -878,7 +856,6 @@ function StreakConsistencyCard({ streak, avgPerDay, activeDays, totalMinutes }) 
 }
 
 function AnalyticsDashboard() {
-  const { t } = useTranslation();
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
@@ -922,10 +899,10 @@ function AnalyticsDashboard() {
             <BarChart3 className="w-4.5 h-4.5 text-primary" />
           </div>
           <div className="text-left">
-            <p className="text-sm font-medium text-foreground">{t("microInstantsPage.analytics.title")}</p>
+            <p className="text-sm font-medium text-foreground">Analytics (30 jours)</p>
             <div className="flex items-center gap-2 mt-0.5">
               <span className="text-xs text-muted-foreground">
-                {t("microInstantsPage.analytics.summary", { total: dashboard.total_instants, rate: summaryRate })}
+                {dashboard.total_instants} instants · {summaryRate}% exploités
               </span>
               <WeeklyTrendBadge
                 trend={dashboard.weekly_trend}
@@ -973,17 +950,12 @@ function AnalyticsDashboard() {
 // Main Page
 // ═══════════════════════════════════════════════════════════════
 export default function MicroInstantsPage() {
-  const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [instants, setInstants] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
-
-  // ── Greeting ──
-  const firstName = user?.name?.split(" ")[0] || "";
-  const greetingKey = getGreetingKey(firstName);
 
   // ── Fetch today's micro-instants ──
   const fetchInstants = useCallback(async () => {
@@ -994,11 +966,11 @@ export default function MicroInstantsPage() {
         setInstants(data.instants || []);
       }
     } catch {
-      toast.error(t("microInstantsPage.errors.loadFailed"));
+      toast.error("Impossible de charger les micro-instants");
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, []);
 
   // ── Fetch stats ──
   const fetchStats = useCallback(async () => {
@@ -1036,9 +1008,9 @@ export default function MicroInstantsPage() {
           )
         );
         // Enriched success feedback
-        const actionTitle = data.action?.title || t("microInstantsPage.toasts.actionLaunched");
+        const actionTitle = data.action?.title || "Action lancée";
         toast.success(`${actionTitle}`, {
-          description: t("microInstantsPage.toasts.exploitedSuccess"),
+          description: "Micro-instant exploité — bravo !",
         });
 
         if (data.action?.action_id) {
@@ -1046,10 +1018,10 @@ export default function MicroInstantsPage() {
         }
       } else {
         const err = await res.json().catch(() => ({}));
-        toast.error(err.detail || t("microInstantsPage.errors.exploitFailed"));
+        toast.error(err.detail || "Erreur lors de l'exploitation");
       }
     } catch {
-      toast.error(t("microInstantsPage.errors.network"));
+      toast.error("Erreur réseau");
     } finally {
       setActionLoading(null);
     }
@@ -1090,7 +1062,7 @@ export default function MicroInstantsPage() {
           : i
       )
     );
-    toast(t("microInstantsPage.toasts.restored"), { description: t("microInstantsPage.toasts.restoredDescription") });
+    toast("Micro-instant restauré", { description: "Tu peux encore l'exploiter." });
   };
 
   // ── Determine hero instant (current or next available) ──
@@ -1116,18 +1088,18 @@ export default function MicroInstantsPage() {
           {/* Header */}
           <div>
             <h1 className="text-2xl font-bold text-foreground">
-              {t(`microInstantsPage.greeting.${greetingKey}`, { name: firstName })}
+              {getGreeting(user?.name)}
             </h1>
             <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
               <Zap className="w-4 h-4 text-primary" />
-              {t("microInstantsPage.subtitle")}
+              Tes micro-instants du jour
               {exploitRate !== null && (
                 <Badge
                   variant="outline"
                   className="text-[10px] ml-1 text-primary border-primary/30"
                 >
                   <Flame className="w-3 h-3 mr-1" />
-                  {t("microInstantsPage.exploitedRate", { rate: exploitRate })}
+                  {exploitRate}% exploités
                 </Badge>
               )}
             </p>
@@ -1154,7 +1126,7 @@ export default function MicroInstantsPage() {
               {/* All instants list */}
               <div>
                 <h3 className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-3">
-                  {t("microInstantsPage.allInstants")}
+                  Tous les instants
                 </h3>
                 <div className="space-y-3">
                   {[heroInstant, ...otherInstants]

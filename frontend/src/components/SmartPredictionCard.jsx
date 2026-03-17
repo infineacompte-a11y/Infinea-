@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +33,12 @@ const categoryColors = {
   well_being: "text-emerald-500 bg-emerald-500/10",
 };
 
+const categoryLabels = {
+  learning: "Apprentissage",
+  productivity: "Productivité",
+  well_being: "Bien-être",
+};
+
 const serviceLabels = {
   google_calendar: "Google Calendar",
   ical: "iCal",
@@ -42,8 +47,23 @@ const serviceLabels = {
   slack: "Slack",
 };
 
+function formatCountdown(isoTime) {
+  const now = new Date();
+  const target = new Date(isoTime);
+  const diff = target - now;
+
+  if (diff <= 0) return "Maintenant";
+
+  const minutes = Math.floor(diff / 60000);
+  if (minutes > 60) {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `dans ${hours}h${mins > 0 ? ` ${mins}min` : ""}`;
+  }
+  return `dans ${minutes} min`;
+}
+
 export default function SmartPredictionCard() {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,24 +72,6 @@ export default function SmartPredictionCard() {
   useEffect(() => {
     fetchPredictions();
   }, []);
-
-  const formatCountdown = (isoTime) => {
-    const now = new Date();
-    const target = new Date(isoTime);
-    const diff = target - now;
-
-    if (diff <= 0) return t("components.smartPrediction.now");
-
-    const minutes = Math.floor(diff / 60000);
-    if (minutes > 60) {
-      const hours = Math.floor(minutes / 60);
-      const mins = minutes % 60;
-      return mins > 0
-        ? t("components.smartPrediction.countdownHoursMin", { hours, minutes: mins })
-        : t("components.smartPrediction.countdownHours", { hours });
-    }
-    return t("components.smartPrediction.countdownMinutes", { minutes });
-  };
 
   const fetchPredictions = async () => {
     setIsLoading(true);
@@ -98,7 +100,7 @@ export default function SmartPredictionCard() {
       const session = await response.json();
       navigate(`/session/${session.session_id}`, { state: { session } });
     } catch (e) {
-      toast.error(t("components.smartPrediction.errorStart"));
+      toast.error("Erreur lors du démarrage");
     }
   };
 
@@ -109,7 +111,7 @@ export default function SmartPredictionCard() {
       <Card className="mb-8 border-indigo-500/20 bg-gradient-to-br from-indigo-500/5 to-purple-500/5">
         <CardContent className="p-5 flex items-center gap-3">
           <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
-          <span className="text-sm text-muted-foreground">{t("components.smartPrediction.analyzing")}</span>
+          <span className="text-sm text-muted-foreground">Analyse de votre agenda...</span>
         </CardContent>
       </Card>
     );
@@ -131,14 +133,14 @@ export default function SmartPredictionCard() {
               <Plug className="w-5 h-5 text-muted-foreground" />
             </div>
             <div className="flex-1">
-              <h3 className="font-heading font-semibold text-sm mb-1">{t("components.smartPrediction.title")}</h3>
+              <h3 className="font-heading font-semibold text-sm mb-1">Prédictions intelligentes</h3>
               <p className="text-sm text-muted-foreground mb-3">
-                {t("components.smartPrediction.connectDescription")}
+                Connectez votre calendrier pour que l'IA prédise vos prochains moments disponibles.
               </p>
               <Link to="/integrations">
                 <Button variant="outline" size="sm" className="rounded-xl">
                   <Calendar className="w-4 h-4 mr-2" />
-                  {t("components.smartPrediction.connectCalendar")}
+                  Connecter un calendrier
                 </Button>
               </Link>
             </div>
@@ -159,13 +161,13 @@ export default function SmartPredictionCard() {
             </div>
             <div className="flex-1">
               <div className="flex items-center justify-between mb-1">
-                <h3 className="font-heading font-semibold text-sm">{t("components.smartPrediction.title")}</h3>
+                <h3 className="font-heading font-semibold text-sm">Prédictions intelligentes</h3>
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={fetchPredictions}>
                   <RefreshCw className="w-3.5 h-3.5" />
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground">
-                {t("components.smartPrediction.noSlotsDetected")}
+                Aucun créneau détecté pour les prochaines 24h. Synchronisez votre calendrier pour mettre à jour.
               </p>
               <div className="flex gap-2 mt-3">
                 {integrations.map((integ) => (
@@ -193,9 +195,9 @@ export default function SmartPredictionCard() {
               <Brain className="w-5 h-5 text-indigo-500" />
             </div>
             <div>
-              <h3 className="font-heading font-semibold text-sm">{t("components.smartPrediction.title")}</h3>
+              <h3 className="font-heading font-semibold text-sm">Prédictions intelligentes</h3>
               <p className="text-xs text-muted-foreground">
-                {t("components.smartPrediction.slotsAvailable", { count: context.total_slots_today, minutes: context.total_free_minutes })}
+                {context.total_slots_today} {"créneau"}{context.total_slots_today > 1 ? "x" : ""} &bull; {context.total_free_minutes} min disponibles
               </p>
             </div>
           </div>
@@ -219,7 +221,7 @@ export default function SmartPredictionCard() {
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-indigo-500" />
                 <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
-                  {t("components.smartPrediction.nextMoment", { countdown: formatCountdown(next_prediction.start_time) })}
+                  {"Prochain moment : "}{formatCountdown(next_prediction.start_time)}
                 </span>
               </div>
               <Badge variant="secondary" className="font-mono text-xs">
@@ -241,10 +243,10 @@ export default function SmartPredictionCard() {
                   <div>
                     <p className="text-sm font-medium">{next_prediction.suggested_action.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      {t(`categories.${next_prediction.suggested_action.category}`, { defaultValue: t("components.smartPrediction.action") })}
+                      {categoryLabels[next_prediction.suggested_action.category] || "Action"}
                       {next_prediction.suggested_action.score && (
                         <span className="ml-2 text-indigo-500">
-                          {t("components.smartPrediction.score", { score: Math.round(next_prediction.suggested_action.score * 100) })}
+                          Score: {Math.round(next_prediction.suggested_action.score * 100)}%
                         </span>
                       )}
                     </p>
@@ -261,7 +263,7 @@ export default function SmartPredictionCard() {
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                {t(`categories.${next_prediction.suggested_category}`, { defaultValue: t("components.smartPrediction.freeSlotDetected") })}
+                {categoryLabels[next_prediction.suggested_category] || "Créneau libre détecté"}
               </p>
             )}
           </div>
@@ -317,10 +319,10 @@ export default function SmartPredictionCard() {
           <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-2 text-xs text-muted-foreground">
             <Zap className="w-3.5 h-3.5 text-indigo-400" />
             <span>
-              {t("components.smartPrediction.rhythm", { duration: proactive.preferred_duration })}
-              {", "}
-              {t(`dashboard.energy.${proactive.inferred_energy === "high" ? "high" : proactive.inferred_energy === "low" ? "low" : "medium"}`).toLowerCase()}
-              {proactive.consistency_index > 0.5 && ` \u2022 ${t("components.smartPrediction.solidConsistency")}`}
+              {"Votre rythme actuel : sessions de ~"}{proactive.preferred_duration}{" min, "}
+              {proactive.inferred_energy === "high" ? "énergie haute" :
+               proactive.inferred_energy === "low" ? "énergie basse" : "énergie modérée"}
+              {proactive.consistency_index > 0.5 && " • Régularité solide"}
             </span>
           </div>
         )}

@@ -1,16 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Mic, MicOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-/** Map i18n short code → BCP 47 speech recognition locale */
-const SPEECH_LANG_MAP = { fr: "fr-FR", en: "en-US" };
-function getSpeechLang(i18nLang) {
-  return SPEECH_LANG_MAP[i18nLang] || `${i18nLang}-${i18nLang.toUpperCase()}`;
-}
 
 /**
  * Clean up speech transcript: remove repeated words/stutters,
@@ -44,7 +37,6 @@ function cleanTranscript(raw) {
 }
 
 export default function VoiceNoteButton({ onTranscript, disabled = false }) {
-  const { t, i18n } = useTranslation();
   const [isListening, setIsListening] = useState(false);
   const [interimText, setInterimText] = useState("");
   const recognitionRef = useRef(null);
@@ -62,12 +54,12 @@ export default function VoiceNoteButton({ onTranscript, disabled = false }) {
 
   const startListening = useCallback(() => {
     if (!isSupported) {
-      toast.error(t("components.voiceNoteButton.unsupported"));
+      toast.error("Votre navigateur ne supporte pas la reconnaissance vocale. Utilisez Chrome ou Edge.");
       return;
     }
 
     const recognition = new SpeechRecognition();
-    recognition.lang = getSpeechLang(i18n.language);
+    recognition.lang = "fr-FR";
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
@@ -101,11 +93,11 @@ export default function VoiceNoteButton({ onTranscript, disabled = false }) {
 
     recognition.onerror = (event) => {
       if (event.error === "not-allowed") {
-        toast.error(t("components.voiceNoteButton.micDenied"));
+        toast.error("Accès au micro refusé. Autorisez le micro dans les paramètres de votre navigateur.");
       } else if (event.error === "no-speech") {
         // Silence — ignore, will auto-restart if continuous
       } else if (event.error !== "aborted") {
-        toast.error(t("components.voiceNoteButton.errorRecognition"));
+        toast.error("Erreur de reconnaissance vocale.");
       }
       setIsListening(false);
       setInterimText("");
@@ -129,10 +121,10 @@ export default function VoiceNoteButton({ onTranscript, disabled = false }) {
     try {
       recognition.start();
     } catch (e) {
-      toast.error(t("components.voiceNoteButton.errorStart"));
+      toast.error("Impossible de démarrer le micro.");
       setIsListening(false);
     }
-  }, [isSupported, onTranscript, t]);
+  }, [isSupported, onTranscript]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
@@ -175,19 +167,19 @@ export default function VoiceNoteButton({ onTranscript, disabled = false }) {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-white" />
               </span>
-              {t("components.voiceNoteButton.stop")}
+              Arrêter
             </>
           ) : (
             <>
               <Mic className="w-4 h-4" />
-              {t("components.voiceNoteButton.dictate")}
+              Dicter
             </>
           )}
         </Button>
 
         {isListening && (
           <span className="text-xs text-muted-foreground animate-pulse">
-            {t("components.voiceNoteButton.speakPrompt")}
+            Parlez, je vous écoute...
           </span>
         )}
       </div>

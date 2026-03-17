@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,53 +23,52 @@ import {
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 
+const STEPS = [
+  { id: "goals", title: "Vos objectifs", subtitle: "Qu'aimeriez-vous améliorer ?" },
+  { id: "availability", title: "Disponibilités", subtitle: "Quand êtes-vous le plus disponible ?" },
+  { id: "energy", title: "Votre énergie", subtitle: "Comment décririez-vous votre énergie typique ?" },
+  { id: "interests", title: "Vos intérêts", subtitle: "Quels domaines vous intéressent ?" },
+];
+
 const GOALS = [
-  { id: "learn_new_skills", labelKey: "onboarding.goals.learnNewSkills", icon: BookOpen },
-  { id: "boost_productivity", labelKey: "onboarding.goals.boostProductivity", icon: Target },
-  { id: "reduce_stress", labelKey: "onboarding.goals.reduceStress", icon: Heart },
-  { id: "build_habits", labelKey: "onboarding.goals.buildHabits", icon: Sparkles },
+  { id: "learn_new_skills", label: "Apprendre de nouvelles compétences", icon: BookOpen },
+  { id: "boost_productivity", label: "Booster ma productivité", icon: Target },
+  { id: "reduce_stress", label: "Réduire mon stress", icon: Heart },
+  { id: "build_habits", label: "Construire de bonnes habitudes", icon: Sparkles },
 ];
 
 const TIME_SLOTS = [
-  { id: "morning", labelKey: "onboarding.timeSlots.morning", sublabelKey: "onboarding.timeSlots.morningSub", icon: Sunrise },
-  { id: "afternoon", labelKey: "onboarding.timeSlots.afternoon", sublabelKey: "onboarding.timeSlots.afternoonSub", icon: Sun },
-  { id: "evening", labelKey: "onboarding.timeSlots.evening", sublabelKey: "onboarding.timeSlots.eveningSub", icon: Moon },
+  { id: "morning", label: "Matin", sublabel: "6h - 12h", icon: Sunrise },
+  { id: "afternoon", label: "Après-midi", sublabel: "12h - 18h", icon: Sun },
+  { id: "evening", label: "Soir", sublabel: "18h - 23h", icon: Moon },
 ];
 
 const ENERGY_LEVELS = [
-  { id: "low", labelKey: "onboarding.energy.low", descKey: "onboarding.energy.lowDesc", icon: BatteryLow },
-  { id: "medium", labelKey: "onboarding.energy.medium", descKey: "onboarding.energy.mediumDesc", icon: BatteryMedium },
-  { id: "high", labelKey: "onboarding.energy.high", descKey: "onboarding.energy.highDesc", icon: BatteryFull },
+  { id: "low", label: "Plutôt basse", description: "Je préfère des activités calmes", icon: BatteryLow },
+  { id: "medium", label: "Moyenne", description: "Un bon équilibre effort/repos", icon: BatteryMedium },
+  { id: "high", label: "Élevée", description: "Je suis prêt pour des défis", icon: BatteryFull },
 ];
 
 const INTERESTS = [
-  { id: "learning", color: "text-blue-500 bg-blue-500/10" },
-  { id: "productivity", color: "text-amber-500 bg-amber-500/10" },
-  { id: "well_being", color: "text-emerald-500 bg-emerald-500/10" },
-  { id: "creativity", color: "text-purple-500 bg-purple-500/10" },
-  { id: "fitness", color: "text-red-500 bg-red-500/10" },
-  { id: "mindfulness", color: "text-cyan-500 bg-cyan-500/10" },
-  { id: "leadership", color: "text-indigo-500 bg-indigo-500/10" },
-  { id: "finance", color: "text-green-500 bg-green-500/10" },
-  { id: "relations", color: "text-pink-500 bg-pink-500/10" },
-  { id: "mental_health", color: "text-teal-500 bg-teal-500/10" },
-  { id: "entrepreneurship", color: "text-orange-500 bg-orange-500/10" },
+  { id: "learning", label: "Apprentissage", color: "text-blue-500 bg-blue-500/10" },
+  { id: "productivity", label: "Productivité", color: "text-amber-500 bg-amber-500/10" },
+  { id: "well_being", label: "Bien-être", color: "text-emerald-500 bg-emerald-500/10" },
+  { id: "creativity", label: "Créativité", color: "text-purple-500 bg-purple-500/10" },
+  { id: "fitness", label: "Forme physique", color: "text-red-500 bg-red-500/10" },
+  { id: "mindfulness", label: "Pleine conscience", color: "text-cyan-500 bg-cyan-500/10" },
+  { id: "leadership", label: "Leadership", color: "text-indigo-500 bg-indigo-500/10" },
+  { id: "finance", label: "Finance", color: "text-green-500 bg-green-500/10" },
+  { id: "relations", label: "Relations", color: "text-pink-500 bg-pink-500/10" },
+  { id: "mental_health", label: "Santé mentale", color: "text-teal-500 bg-teal-500/10" },
+  { id: "entrepreneurship", label: "Entrepreneuriat", color: "text-orange-500 bg-orange-500/10" },
 ];
 
 export default function OnboardingPage() {
-  const { t } = useTranslation();
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState(null);
-
-  const STEPS = [
-    { id: "goals", title: t("onboarding.steps.goalsTitle"), subtitle: t("onboarding.steps.goalsSubtitle") },
-    { id: "availability", title: t("onboarding.steps.availabilityTitle"), subtitle: t("onboarding.steps.availabilitySubtitle") },
-    { id: "energy", title: t("onboarding.steps.energyTitle"), subtitle: t("onboarding.steps.energySubtitle") },
-    { id: "interests", title: t("onboarding.steps.interestsTitle"), subtitle: t("onboarding.steps.interestsSubtitle") },
-  ];
 
   const [profile, setProfile] = useState({
     goals: [],
@@ -129,9 +127,9 @@ export default function OnboardingPage() {
       const data = await response.json();
       // Update auth context so ProtectedRoute knows onboarding is done
       setUser((prev) => ({ ...prev, user_profile: data.user_profile || profile, onboarding_completed: true }));
-      setWelcomeMessage(data.welcome_message || data.first_recommendation || t("onboarding.defaultWelcome"));
+      setWelcomeMessage(data.welcome_message || data.first_recommendation || "Bienvenue sur InFinea ! Prêt(e) à transformer vos moments perdus en micro-victoires ?");
     } catch (error) {
-      toast.error(t("onboarding.errorSave"));
+      toast.error("Erreur lors de la sauvegarde du profil");
     } finally {
       setIsSubmitting(false);
     }
@@ -150,7 +148,7 @@ export default function OnboardingPage() {
             <Sparkles className="w-10 h-10 text-primary" />
           </div>
           <h1 className="font-heading text-3xl font-bold mb-4">
-            {t("onboarding.welcomeTitle", { name: user?.name?.split(" ")[0] || t("onboarding.defaultUser") })}
+            Bienvenue, {user?.name?.split(" ")[0] || "Utilisateur"} !
           </h1>
           <Card className="mb-8 text-left">
             <CardContent className="p-6">
@@ -158,7 +156,7 @@ export default function OnboardingPage() {
             </CardContent>
           </Card>
           <Button onClick={handleFinish} className="w-full h-12 rounded-xl">
-            {t("onboarding.startActions")}
+            Commencer mes micro-actions
             <ChevronRight className="w-5 h-5 ml-2" />
           </Button>
         </div>
@@ -178,7 +176,7 @@ export default function OnboardingPage() {
             <span className="font-heading text-lg font-semibold">InFinea</span>
           </div>
           <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")}>
-            {t("onboarding.skip")}
+            Passer
           </Button>
         </div>
       </header>
@@ -225,7 +223,7 @@ export default function OnboardingPage() {
                       }`}>
                         <Icon className="w-5 h-5" />
                       </div>
-                      <span className="flex-1 font-medium">{t(goal.labelKey)}</span>
+                      <span className="flex-1 font-medium">{goal.label}</span>
                       {selected && <Check className="w-5 h-5 text-primary" />}
                     </CardContent>
                   </Card>
@@ -254,8 +252,8 @@ export default function OnboardingPage() {
                         <Icon className="w-5 h-5" />
                       </div>
                       <div className="flex-1">
-                        <p className="font-medium">{t(slot.labelKey)}</p>
-                        <p className="text-sm text-muted-foreground">{t(slot.sublabelKey)}</p>
+                        <p className="font-medium">{slot.label}</p>
+                        <p className="text-sm text-muted-foreground">{slot.sublabel}</p>
                       </div>
                       {selected && <Check className="w-5 h-5 text-primary" />}
                     </CardContent>
@@ -285,8 +283,8 @@ export default function OnboardingPage() {
                         <Icon className="w-5 h-5" />
                       </div>
                       <div className="flex-1">
-                        <p className="font-medium">{t(level.labelKey)}</p>
-                        <p className="text-sm text-muted-foreground">{t(level.descKey)}</p>
+                        <p className="font-medium">{level.label}</p>
+                        <p className="text-sm text-muted-foreground">{level.description}</p>
                       </div>
                       {selected && <Check className="w-5 h-5 text-primary" />}
                     </CardContent>
@@ -312,7 +310,7 @@ export default function OnboardingPage() {
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center mx-auto mb-2 ${interest.color}`}>
                         {selected ? <Check className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
                       </div>
-                      <p className="text-sm font-medium">{t(`categories.${interest.id}`)}</p>
+                      <p className="text-sm font-medium">{interest.label}</p>
                     </CardContent>
                   </Card>
                 );
@@ -328,7 +326,7 @@ export default function OnboardingPage() {
           {currentStep > 0 && (
             <Button variant="outline" onClick={handleBack} className="h-12 rounded-xl px-6">
               <ChevronLeft className="w-5 h-5 mr-1" />
-              {t("common.back")}
+              Retour
             </Button>
           )}
           <Button
@@ -340,12 +338,12 @@ export default function OnboardingPage() {
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : currentStep === STEPS.length - 1 ? (
               <>
-                {t("onboarding.finish")}
+                Terminer
                 <Check className="w-5 h-5 ml-2" />
               </>
             ) : (
               <>
-                {t("common.next")}
+                Suivant
                 <ChevronRight className="w-5 h-5 ml-2" />
               </>
             )}

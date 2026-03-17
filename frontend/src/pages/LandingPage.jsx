@@ -1,6 +1,5 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -17,37 +16,79 @@ import {
   Timer,
   TrendingUp,
 } from "lucide-react";
-import LanguageSelector from "@/components/LanguageSelector";
-
-const FEATURE_ICONS = [
-  { icon: Clock, key: "time" },
-  { icon: Zap, key: "ai" },
-  { icon: TrendingUp, key: "capital" },
-];
-
-const CATEGORY_META = [
-  { icon: BookOpen, color: "text-blue-500", bg: "category-card-learning", key: "learning" },
-  { icon: Target, color: "text-amber-500", bg: "category-card-productivity", key: "productivity" },
-  { icon: Heart, color: "text-emerald-500", bg: "category-card-well-being", key: "wellBeing" },
-];
-
-const STEPS = ["step1", "step2", "step3", "step4"];
 
 export default function LandingPage() {
-  const { t } = useTranslation();
+  const features = [
+    {
+      icon: Clock,
+      title: "2-15 minutes",
+      description: "Des micro-actions pour chaque instant libre, puisées dans une bibliothèque en perpétuelle évolution",
+    },
+    {
+      icon: Zap,
+      title: "IA qui vous connait",
+      description: "Des suggestions personnalisées selon vos habitudes, votre énergie et le moment de la journée",
+    },
+    {
+      icon: TrendingUp,
+      title: "Capital-Temps",
+      description: "Chaque session enrichit votre profil. Plus vous agissez, plus l'IA devient pertinente",
+    },
+  ];
+
+  const categories = [
+    {
+      icon: BookOpen,
+      name: "Apprentissage",
+      color: "text-blue-500",
+      bg: "category-card-learning",
+      examples: ["Vocabulaire", "Lecture", "Concepts"],
+    },
+    {
+      icon: Target,
+      name: "Productivité",
+      color: "text-amber-500",
+      bg: "category-card-productivity",
+      examples: ["Planning", "Emails", "Brainstorm"],
+    },
+    {
+      icon: Heart,
+      name: "Bien-être",
+      color: "text-emerald-500",
+      bg: "category-card-well-being",
+      examples: ["Respiration", "Méditation", "Étirements"],
+    },
+  ];
 
   const pricingPlans = [
     {
-      key: "free",
+      name: "Gratuit",
+      price: "0€",
+      period: "",
+      features: [
+        "Accès aux micro-actions de base",
+        "Suggestions IA limitées",
+        "Suivi de progression",
+        "3 catégories d'actions",
+      ],
+      cta: "Commencer",
       popular: false,
-      link: "/register",
-      featureKeys: ["feature1", "feature2", "feature3", "feature4"],
     },
     {
-      key: "premium",
+      name: "Premium",
+      price: "6,99€",
+      period: "/mois",
+      features: [
+        "700+ actions (11 catégories)",
+        "IA avancée avec suggestions personnalisées",
+        "Suggestion proactive au bon moment",
+        "Bouclier de Streak (1x/semaine)",
+        "Analytics avancées & insights",
+        "20 badges Premium",
+      ],
+      cta: "Découvrir Premium",
       popular: true,
       link: "/pricing",
-      featureKeys: ["feature1", "feature2", "feature3", "feature4", "feature5", "feature6"],
     },
   ];
 
@@ -65,23 +106,23 @@ export default function LandingPage() {
             </div>
             <div className="hidden md:flex items-center gap-6">
               <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">
-                {t("landing.nav.features")}
+                Fonctionnalités
               </a>
               <Link to="/pricing" className="text-muted-foreground hover:text-foreground transition-colors">
-                {t("landing.nav.pricing")}
+                Tarifs
               </Link>
               <Link to="/login">
-                <Button variant="ghost" data-testid="nav-login-btn">{t("landing.nav.login")}</Button>
+                <Button variant="ghost" data-testid="nav-login-btn">Connexion</Button>
               </Link>
               <Link to="/register">
                 <Button data-testid="nav-register-btn" className="rounded-full">
-                  {t("landing.nav.getStarted")}
+                  Commencer gratuitement
                 </Button>
               </Link>
             </div>
             <div className="md:hidden">
               <Link to="/login">
-                <Button size="sm" data-testid="mobile-login-btn">{t("landing.nav.login")}</Button>
+                <Button size="sm" data-testid="mobile-login-btn">Connexion</Button>
               </Link>
             </div>
           </div>
@@ -95,28 +136,29 @@ export default function LandingPage() {
           <div className="text-center max-w-4xl mx-auto">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-8 animate-fade-in">
               <Sparkles className="w-4 h-4 text-primary" />
-              <span className="text-sm text-primary">{t("landing.hero.badge")}</span>
+              <span className="text-sm text-primary">Une IA qui apprend de vous, une bibliothèque qui grandit sans cesse</span>
             </div>
-
+            
             <h1 className="font-heading text-4xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-6 animate-fade-in stagger-1">
-              {t("landing.hero.titleStart")}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">{t("landing.hero.titleHighlight")}</span>
+              Investissez vos
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"> instants perdus</span>
             </h1>
-
+            
             <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto animate-fade-in stagger-2">
-              {t("landing.hero.subtitle")}
+              Transformez votre temps disponible en micro-victoires. Une bibliothèque de micro-actions en perpétuelle évolution,
+              portée par une IA qui s'adapte à vos habitudes, votre énergie et votre rythme.
             </p>
-
+            
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in stagger-3">
               <Link to="/register">
                 <Button size="lg" className="rounded-full px-8 h-12 text-base btn-lift" data-testid="hero-cta-btn">
-                  {t("landing.hero.cta")}
+                  Commencer gratuitement
                   <ArrowRight className="ml-2 w-5 h-5" />
                 </Button>
               </Link>
               <a href="#features">
                 <Button variant="outline" size="lg" className="rounded-full px-8 h-12 text-base" data-testid="hero-learn-more-btn">
-                  {t("landing.hero.learnMore")}
+                  En savoir plus
                 </Button>
               </a>
             </div>
@@ -125,16 +167,16 @@ export default function LandingPage() {
           {/* Stats */}
           <div className="grid grid-cols-3 gap-4 md:gap-8 mt-20 max-w-3xl mx-auto animate-fade-in stagger-4">
             <div className="text-center">
-              <div className="text-3xl md:text-4xl font-heading font-bold text-foreground">{t("landing.stats.timeValue")}</div>
-              <div className="text-sm text-muted-foreground mt-1">{t("landing.stats.timeLabel")}</div>
+              <div className="text-3xl md:text-4xl font-heading font-bold text-foreground">2-15</div>
+              <div className="text-sm text-muted-foreground mt-1">minutes/session</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl md:text-4xl font-heading font-bold text-foreground">{t("landing.stats.actionsValue")}</div>
-              <div className="text-sm text-muted-foreground mt-1">{t("landing.stats.actionsLabel")}</div>
+              <div className="text-3xl md:text-4xl font-heading font-bold text-foreground">700+</div>
+              <div className="text-sm text-muted-foreground mt-1">micro-actions et +</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl md:text-4xl font-heading font-bold text-foreground">{t("landing.stats.gdprValue")}</div>
-              <div className="text-sm text-muted-foreground mt-1">{t("landing.stats.gdprLabel")}</div>
+              <div className="text-3xl md:text-4xl font-heading font-bold text-foreground">100%</div>
+              <div className="text-sm text-muted-foreground mt-1">RGPD conforme</div>
             </div>
           </div>
         </div>
@@ -146,18 +188,24 @@ export default function LandingPage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
               <h2 className="font-heading text-3xl md:text-4xl font-semibold mb-6">
-                {t("landing.problem.title")}
+                Le temps, votre ressource la plus précieuse
               </h2>
               <p className="text-muted-foreground text-lg mb-8">
-                {t("landing.problem.description")}
+                Chaque jour, des dizaines de minutes de temps disponible s'envolent : transports,
+                files d'attente, pauses entre réunions. Ces moments fragmentés semblent trop courts
+                pour être utiles.
               </p>
               <div className="space-y-4">
-                {["point1", "point2", "point3"].map((key) => (
-                  <div key={key} className="flex items-start gap-3">
+                {[
+                  "2 à 15 minutes perdues, plusieurs fois par jour",
+                  "Trop court pour être productif, trop long pour ne rien faire",
+                  "Surcharge cognitive face aux nombreuses apps",
+                ].map((item, i) => (
+                  <div key={i} className="flex items-start gap-3">
                     <div className="w-5 h-5 rounded-full bg-destructive/20 flex items-center justify-center mt-0.5">
                       <div className="w-2 h-2 rounded-full bg-destructive" />
                     </div>
-                    <span className="text-muted-foreground">{t(`landing.problem.${key}`)}</span>
+                    <span className="text-muted-foreground">{item}</span>
                   </div>
                 ))}
               </div>
@@ -181,22 +229,22 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="font-heading text-3xl md:text-4xl font-semibold mb-4">
-              {t("landing.features.title")}
+              La solution InFinea
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              {t("landing.features.subtitle")}
+              Une bibliothèque infinie de micro-actions, une IA qui apprend de vous. Que faire maintenant ? InFinea sait.
             </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6 mb-16">
-            {FEATURE_ICONS.map((feature, i) => (
+            {features.map((feature, i) => (
               <Card key={i} className="bg-card border-border hover:border-primary/30 transition-colors">
                 <CardContent className="p-6">
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                     <feature.icon className="w-6 h-6 text-primary" />
                   </div>
-                  <h3 className="font-heading text-xl font-medium mb-2">{t(`landing.features.${feature.key}.title`)}</h3>
-                  <p className="text-muted-foreground">{t(`landing.features.${feature.key}.description`)}</p>
+                  <h3 className="font-heading text-xl font-medium mb-2">{feature.title}</h3>
+                  <p className="text-muted-foreground">{feature.description}</p>
                 </CardContent>
               </Card>
             ))}
@@ -204,15 +252,15 @@ export default function LandingPage() {
 
           {/* Categories */}
           <div className="grid md:grid-cols-3 gap-6">
-            {CATEGORY_META.map((cat, i) => (
+            {categories.map((cat, i) => (
               <Card key={i} className={`${cat.bg} border-border hover:border-opacity-50 transition-all`}>
                 <CardContent className="p-6">
                   <cat.icon className={`w-8 h-8 ${cat.color} mb-4`} />
-                  <h3 className="font-heading text-xl font-medium mb-3">{t(`landing.categories.${cat.key}.name`)}</h3>
+                  <h3 className="font-heading text-xl font-medium mb-3">{cat.name}</h3>
                   <div className="flex flex-wrap gap-2">
-                    {["ex1", "ex2", "ex3"].map((ex) => (
-                      <span key={ex} className="px-3 py-1 rounded-full bg-white/5 text-sm text-muted-foreground">
-                        {t(`landing.categories.${cat.key}.${ex}`)}
+                    {cat.examples.map((ex, j) => (
+                      <span key={j} className="px-3 py-1 rounded-full bg-white/5 text-sm text-muted-foreground">
+                        {ex}
                       </span>
                     ))}
                   </div>
@@ -228,16 +276,21 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="font-heading text-3xl md:text-4xl font-semibold mb-4">
-              {t("landing.howItWorks.title")}
+              Comment ça marche
             </h2>
           </div>
 
           <div className="grid md:grid-cols-4 gap-8">
-            {STEPS.map((stepKey, i) => (
-              <div key={stepKey} className="relative">
-                <div className="text-5xl font-heading font-bold text-primary/20 mb-4">{t(`landing.howItWorks.${stepKey}.num`)}</div>
-                <h3 className="font-heading text-lg font-medium mb-2">{t(`landing.howItWorks.${stepKey}.title`)}</h3>
-                <p className="text-muted-foreground text-sm">{t(`landing.howItWorks.${stepKey}.desc`)}</p>
+            {[
+              { step: "01", title: "Ouvrez l'app", desc: "En moins de 60 secondes" },
+              { step: "02", title: "Indiquez votre temps", desc: "De 2 à 15 minutes" },
+              { step: "03", title: "Choisissez l'énergie", desc: "Basse, moyenne ou haute" },
+              { step: "04", title: "Agissez !", desc: "L'IA vous guide" },
+            ].map((item, i) => (
+              <div key={i} className="relative">
+                <div className="text-5xl font-heading font-bold text-primary/20 mb-4">{item.step}</div>
+                <h3 className="font-heading text-lg font-medium mb-2">{item.title}</h3>
+                <p className="text-muted-foreground text-sm">{item.desc}</p>
                 {i < 3 && (
                   <ChevronRight className="hidden md:block absolute top-10 -right-4 w-8 h-8 text-primary/30" />
                 )}
@@ -252,46 +305,46 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="font-heading text-3xl md:text-4xl font-semibold mb-4">
-              {t("landing.pricing.title")}
+              Tarifs simples et transparents
             </h2>
             <p className="text-muted-foreground text-lg">
-              {t("landing.pricing.subtitle")}
+              Commencez gratuitement, passez Premium pour une IA qui s'adapte à vous
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            {pricingPlans.map((plan) => (
+            {pricingPlans.map((plan, i) => (
               <Card
-                key={plan.key}
+                key={i}
                 className={`relative ${plan.popular ? "pricing-card-premium" : "bg-card"} border-border`}
               >
                 {plan.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <span className="px-4 py-1 rounded-full bg-primary text-primary-foreground text-sm font-medium">
-                      {t("landing.pricing.popular")}
+                      Populaire
                     </span>
                   </div>
                 )}
                 <CardContent className="p-8">
-                  <h3 className="font-heading text-2xl font-semibold mb-2">{t(`landing.pricing.${plan.key}.name`)}</h3>
+                  <h3 className="font-heading text-2xl font-semibold mb-2">{plan.name}</h3>
                   <div className="flex items-baseline gap-1 mb-6">
-                    <span className="text-4xl font-heading font-bold">{t(`landing.pricing.${plan.key}.price`)}</span>
-                    <span className="text-muted-foreground">{t(`landing.pricing.${plan.key}.period`)}</span>
+                    <span className="text-4xl font-heading font-bold">{plan.price}</span>
+                    <span className="text-muted-foreground">{plan.period}</span>
                   </div>
                   <ul className="space-y-3 mb-8">
-                    {plan.featureKeys.map((fk) => (
-                      <li key={fk} className="flex items-center gap-3">
+                    {plan.features.map((feature, j) => (
+                      <li key={j} className="flex items-center gap-3">
                         <Check className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-                        <span className="text-muted-foreground">{t(`landing.pricing.${plan.key}.${fk}`)}</span>
+                        <span className="text-muted-foreground">{feature}</span>
                       </li>
                     ))}
                   </ul>
                   <Link to={plan.link || "/register"}>
                     <Button
                       className={`w-full rounded-full ${plan.popular ? "" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"}`}
-                      data-testid={`pricing-${plan.key}-btn`}
+                      data-testid={`pricing-${plan.name.toLowerCase()}-btn`}
                     >
-                      {t(`landing.pricing.${plan.key}.cta`)}
+                      {plan.cta}
                     </Button>
                   </Link>
                 </CardContent>
@@ -307,14 +360,14 @@ export default function LandingPage() {
           <div className="p-12 rounded-3xl bg-gradient-to-br from-primary/10 via-purple-500/10 to-pink-500/10 border border-primary/20">
             <Brain className="w-16 h-16 text-primary mx-auto mb-6" />
             <h2 className="font-heading text-3xl md:text-4xl font-semibold mb-4">
-              {t("landing.cta.title")}
+              Prêt à investir vos instants perdus ?
             </h2>
             <p className="text-muted-foreground text-lg mb-8 max-w-xl mx-auto">
-              {t("landing.cta.subtitle")}
+              Commencez dès maintenant à transformer votre temps en Capital-Temps.
             </p>
             <Link to="/register">
               <Button size="lg" className="rounded-full px-8 h-12 text-base btn-lift animate-pulse-glow" data-testid="final-cta-btn">
-                {t("landing.cta.button")}
+                Commencer maintenant
                 <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
             </Link>
@@ -333,11 +386,10 @@ export default function LandingPage() {
               <span className="font-heading text-xl font-semibold">InFinea</span>
             </div>
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <LanguageSelector />
-              <span>{t("landing.footer.copyright")}</span>
-              <Link to="/privacy" className="hover:text-foreground transition-colors">{t("landing.footer.privacy")}</Link>
-              <Link to="/cgu" className="hover:text-foreground transition-colors">{t("landing.footer.terms")}</Link>
-              <a href="mailto:Infinea.compte@gmail.com" className="hover:text-foreground transition-colors">{t("landing.footer.contact")}</a>
+              <span>© 2025 InFinea</span>
+              <Link to="/privacy" className="hover:text-foreground transition-colors">Confidentialité</Link>
+              <Link to="/cgu" className="hover:text-foreground transition-colors">CGU</Link>
+              <a href="mailto:Infinea.compte@gmail.com" className="hover:text-foreground transition-colors">Contact</a>
             </div>
           </div>
         </div>

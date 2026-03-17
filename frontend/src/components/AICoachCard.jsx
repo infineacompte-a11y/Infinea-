@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,68 +19,67 @@ import { API, authFetch } from "@/App";
 const COACH_MODES = {
   post_completion: {
     icon: Trophy,
-    badgeKey: "components.aiCoach.modes.postCompletion.badge",
+    badge: "Bravo !",
     badgeColor: "bg-emerald-500/10 text-emerald-500",
     glowFrom: "from-emerald-500/30",
     iconBg: "from-emerald-500/20 to-emerald-500/5",
     iconRing: "ring-emerald-500/10",
     iconColor: "text-emerald-500",
-    subtitleKey: "components.aiCoach.modes.postCompletion.subtitle",
+    subtitle: "Après ta session",
   },
   post_abandon: {
     icon: HandHeart,
-    badgeKey: "components.aiCoach.modes.postAbandon.badge",
+    badge: "On continue",
     badgeColor: "bg-amber-500/10 text-amber-500",
     glowFrom: "from-amber-500/30",
     iconBg: "from-amber-500/20 to-amber-500/5",
     iconRing: "ring-amber-500/10",
     iconColor: "text-amber-500",
-    subtitleKey: "components.aiCoach.modes.postAbandon.subtitle",
+    subtitle: "Pas de pression",
   },
   streak_milestone: {
     icon: Flame,
-    badgeKey: "components.aiCoach.modes.streakMilestone.badge",
+    badge: "Milestone !",
     badgeColor: "bg-orange-500/10 text-orange-500",
     glowFrom: "from-orange-500/30",
     iconBg: "from-orange-500/20 to-orange-500/5",
     iconRing: "ring-orange-500/10",
     iconColor: "text-orange-500",
-    subtitleKey: "components.aiCoach.modes.streakMilestone.subtitle",
+    subtitle: "Exploit débloqué",
   },
   comeback: {
     icon: Sunrise,
-    badgeKey: "components.aiCoach.modes.comeback.badge",
+    badge: "Bon retour",
     badgeColor: "bg-sky-500/10 text-sky-500",
     glowFrom: "from-sky-500/30",
     iconBg: "from-sky-500/20 to-sky-500/5",
     iconRing: "ring-sky-500/10",
     iconColor: "text-sky-500",
-    subtitleKey: "components.aiCoach.modes.comeback.subtitle",
+    subtitle: "Content de te revoir",
   },
   first_visit: {
     icon: Heart,
-    badgeKey: "components.aiCoach.modes.firstVisit.badge",
+    badge: "Bienvenue",
     badgeColor: "bg-rose-500/10 text-rose-500",
     glowFrom: "from-rose-500/30",
     iconBg: "from-rose-500/20 to-rose-500/5",
     iconRing: "ring-rose-500/10",
     iconColor: "text-rose-500",
-    subtitleKey: "components.aiCoach.modes.firstVisit.subtitle",
+    subtitle: "Ta première micro-action",
   },
   default: {
     icon: Brain,
-    badgeKey: "components.aiCoach.modes.default.badge",
+    badge: "Personnalisé",
     badgeColor: "bg-primary/10 text-primary",
     glowFrom: "from-primary/30",
     iconBg: "from-primary/20 to-primary/5",
     iconRing: "ring-primary/10",
     iconColor: "text-primary",
-    subtitleKey: "components.aiCoach.modes.default.subtitle",
+    subtitle: "Adapté à ton profil",
   },
 };
 
 export default function AICoachCard({ onStartAction }) {
-  const { t } = useTranslation();
   const [coaching, setCoaching] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -162,13 +160,13 @@ export default function AICoachCard({ onStartAction }) {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-heading font-semibold text-sm">{t("components.aiCoach.title")}</h3>
+                  <h3 className="font-heading font-semibold text-sm">Coach IA</h3>
                   <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${mode.badgeColor}`}>
                     <Sparkles className="w-2.5 h-2.5" />
-                    {t(mode.badgeKey)}
+                    {mode.badge}
                   </span>
                 </div>
-                <p className="text-[11px] text-muted-foreground">{t(mode.subtitleKey)}</p>
+                <p className="text-[11px] text-muted-foreground">{mode.subtitle}</p>
               </div>
             </div>
             <Button
@@ -201,10 +199,10 @@ export default function AICoachCard({ onStartAction }) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-primary mb-0.5">
-                      {coachMode === "post_completion" ? t("components.aiCoach.suggestionLabel.postCompletion") :
-                       coachMode === "post_abandon" ? t("components.aiCoach.suggestionLabel.postAbandon") :
-                       coachMode === "first_visit" ? t("components.aiCoach.suggestionLabel.firstVisit") :
-                       t("components.aiCoach.suggestionLabel.default")}
+                      {coachMode === "post_completion" ? "Enchaîne avec" :
+                       coachMode === "post_abandon" ? "Essaie plutôt" :
+                       coachMode === "first_visit" ? "Pour commencer" :
+                       "Suggestion pour toi"}
                     </p>
                     <p className="text-sm leading-relaxed">{suggestion}</p>
                   </div>
@@ -216,9 +214,9 @@ export default function AICoachCard({ onStartAction }) {
                     onClick={() => onStartAction(actionId)}
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    {coachMode === "post_completion" ? t("components.aiCoach.cta.postCompletion") :
-                     coachMode === "first_visit" ? t("components.aiCoach.cta.firstVisit") :
-                     t("components.aiCoach.cta.default")}
+                    {coachMode === "post_completion" ? "Continuer sur ma lancée" :
+                     coachMode === "first_visit" ? "Faire ma première action" :
+                     "Commencer cette action"}
                     <ArrowRight className="w-3.5 h-3.5" />
                   </Button>
                 )}

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Toaster } from "@/components/ui/sonner";
 
 // Pages
@@ -140,7 +139,6 @@ export const useAuth = () => {
 
 // Auth Callback Component - Handles Google OAuth redirect
 const AuthCallback = () => {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const hasProcessed = useRef(false);
@@ -196,7 +194,7 @@ const AuthCallback = () => {
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="text-center">
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="text-muted-foreground">{t("common.connecting")}</p>
+        <p className="text-muted-foreground">Connexion en cours...</p>
       </div>
     </div>
   );

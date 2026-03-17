@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +19,22 @@ import {
 } from "lucide-react";
 import { API, useAuth, authFetch } from "@/App";
 
+const dayLabels = {
+  monday: "Lundi",
+  tuesday: "Mardi",
+  wednesday: "Mercredi",
+  thursday: "Jeudi",
+  friday: "Vendredi",
+  saturday: "Samedi",
+  sunday: "Dimanche",
+};
+
+const timeLabels = {
+  morning: "Matin",
+  afternoon: "Après-midi",
+  evening: "Soir",
+};
+
 const timeIcons = {
   morning: Sunrise,
   afternoon: Sun,
@@ -27,7 +42,6 @@ const timeIcons = {
 };
 
 export default function PremiumAnalytics() {
-  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [analytics, setAnalytics] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,15 +77,16 @@ export default function PremiumAnalytics() {
             <Lock className="w-7 h-7 text-amber-500" />
           </div>
           <h3 className="font-heading text-lg font-semibold mb-2">
-            {t("components.premiumAnalytics.title")}
+            Analytics Avancées
           </h3>
           <p className="text-sm text-muted-foreground mb-4">
-            {t("components.premiumAnalytics.lockedDescription")}
+            Découvrez vos habitudes, votre meilleur moment de la journée,
+            et des insights personnalisés avec Premium.
           </p>
           <Link to="/pricing">
             <Button variant="outline" className="border-amber-500/30 text-amber-500 hover:bg-amber-500/10">
               <Crown className="w-4 h-4 mr-2" />
-              {t("components.premiumAnalytics.discoverPremium")}
+              Découvrir Premium
             </Button>
           </Link>
         </CardContent>
@@ -100,8 +115,8 @@ export default function PremiumAnalytics() {
           <Crown className="w-5 h-5 text-amber-500" />
         </div>
         <div>
-          <h2 className="font-heading text-xl font-semibold">{t("components.premiumAnalytics.premiumTitle")}</h2>
-          <p className="text-sm text-muted-foreground">{t("components.premiumAnalytics.subtitle")}</p>
+          <h2 className="font-heading text-xl font-semibold">Analytics Premium</h2>
+          <p className="text-sm text-muted-foreground">Insights avancés sur vos habitudes</p>
         </div>
       </div>
 
@@ -114,9 +129,9 @@ export default function PremiumAnalytics() {
                 <TimeIcon className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">{t("components.premiumAnalytics.bestTime")}</p>
+                <p className="text-sm text-muted-foreground">Meilleur moment</p>
                 <p className="font-heading font-bold">
-                  {t(`components.premiumAnalytics.timeOfDay.${analytics.best_time_of_day}`, { defaultValue: analytics.best_time_of_day || "\u2014" })}
+                  {timeLabels[analytics.best_time_of_day] || analytics.best_time_of_day || "—"}
                 </p>
               </div>
             </div>
@@ -130,9 +145,9 @@ export default function PremiumAnalytics() {
                 <Calendar className="w-5 h-5 text-emerald-500" />
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">{t("components.premiumAnalytics.mostProductiveDay")}</p>
+                <p className="text-sm text-muted-foreground">Jour le + productif</p>
                 <p className="font-heading font-bold">
-                  {t(`components.premiumAnalytics.days.${analytics.most_productive_day}`, { defaultValue: analytics.most_productive_day || "\u2014" })}
+                  {dayLabels[analytics.most_productive_day] || analytics.most_productive_day || "—"}
                 </p>
               </div>
             </div>
@@ -147,11 +162,11 @@ export default function PremiumAnalytics() {
                   <Target className="w-5 h-5 text-amber-500" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">{t("components.premiumAnalytics.nextMilestone")}</p>
+                  <p className="text-sm text-muted-foreground">Prochain palier</p>
                   <p className="font-heading font-bold">{analytics.milestones.next}</p>
                   {analytics.milestones.eta_days && (
                     <p className="text-xs text-muted-foreground">
-                      {t("components.premiumAnalytics.daysRemaining", { count: analytics.milestones.eta_days })}
+                      ~{analytics.milestones.eta_days}j restants
                     </p>
                   )}
                 </div>
@@ -167,7 +182,7 @@ export default function PremiumAnalytics() {
           <CardHeader>
             <CardTitle className="font-heading text-lg flex items-center gap-2">
               <Flame className="w-5 h-5 text-amber-500" />
-              {t("components.premiumAnalytics.activityTitle")}
+              Activité des 30 derniers jours
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -214,7 +229,7 @@ export default function PremiumAnalytics() {
           <CardHeader>
             <CardTitle className="font-heading text-lg flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-emerald-500" />
-              {t("components.premiumAnalytics.streakHistoryTitle")}
+              Historique des streaks
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -227,15 +242,15 @@ export default function PremiumAnalytics() {
                   <div className="flex items-center gap-3">
                     <Flame className={`w-5 h-5 ${i === 0 ? "text-amber-500" : "text-muted-foreground"}`} />
                     <div>
-                      <p className="font-medium">{t("components.premiumAnalytics.streakDays", { count: streak.days })}</p>
+                      <p className="font-medium">{streak.days} jours</p>
                       <p className="text-xs text-muted-foreground">
-                        {streak.start_date && new Date(streak.start_date).toLocaleDateString(i18n.language)}
-                        {streak.end_date && ` \u2014 ${new Date(streak.end_date).toLocaleDateString(i18n.language)}`}
+                        {streak.start_date && new Date(streak.start_date).toLocaleDateString("fr-FR")}
+                        {streak.end_date && ` — ${new Date(streak.end_date).toLocaleDateString("fr-FR")}`}
                       </p>
                     </div>
                   </div>
                   {i === 0 && (
-                    <Badge className="bg-amber-500/20 text-amber-500 text-xs">{t("components.premiumAnalytics.best")}</Badge>
+                    <Badge className="bg-amber-500/20 text-amber-500 text-xs">Meilleur</Badge>
                   )}
                 </div>
               ))}

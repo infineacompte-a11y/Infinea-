@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,7 +26,6 @@ import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 
 export default function PricingPage() {
-  const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -62,11 +60,11 @@ export default function PricingPage() {
 
       if (data.payment_status === "paid") {
         setPaymentStatus("success");
-        toast.success(t("pricing.toasts.paymentSuccess"));
+        toast.success("Paiement réussi ! Bienvenue dans Premium !");
         window.location.href = "/dashboard";
       } else if (data.status === "expired") {
         setPaymentStatus("expired");
-        toast.error(t("pricing.toasts.sessionExpired"));
+        toast.error("Session expirée. Veuillez réessayer.");
       } else {
         setPaymentStatus("pending");
         setTimeout(() => pollPaymentStatus(sessionId, attempts + 1), 2000);
@@ -93,11 +91,11 @@ export default function PricingPage() {
 
       if (!response.ok) throw new Error("Erreur d'activation");
 
-      toast.success(t("pricing.toasts.premiumActivated"));
+      toast.success("Premium activé ! Bienvenue dans Premium !");
       window.location.href = "/dashboard";
       return;
     } catch (error) {
-      toast.error(t("pricing.toasts.activationError"));
+      toast.error("Impossible d'activer Premium");
     } finally {
       setIsLoading(false);
     }
@@ -117,7 +115,7 @@ export default function PricingPage() {
       const data = await response.json();
       window.location.href = data.url;
     } catch (error) {
-      toast.error(t("pricing.toasts.portalError"));
+      toast.error("Impossible d'accéder à la gestion de l'abonnement");
     } finally {
       setPortalLoading(false);
     }
@@ -134,10 +132,10 @@ export default function PricingPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Erreur");
-      toast.success(t("pricing.toasts.premiumActivated"));
+      toast.success("Premium activé ! Bienvenue dans Premium !");
       window.location.href = "/dashboard";
     } catch (error) {
-      toast.error(error.message || t("pricing.toasts.invalidPromo"));
+      toast.error(error.message || "Code promo invalide");
     } finally {
       setPromoLoading(false);
     }
@@ -147,38 +145,38 @@ export default function PricingPage() {
 
   const plans = [
     {
-      name: t("pricing.plans.free.name"),
-      price: t("pricing.plans.free.price"),
+      name: "Gratuit",
+      price: "0€",
       period: "",
-      description: t("pricing.plans.free.description"),
+      description: "Pour découvrir InFinea",
       features: [
-        t("pricing.plans.free.feature1"),
-        t("pricing.plans.free.feature2"),
-        t("pricing.plans.free.feature3"),
-        t("pricing.plans.free.feature4"),
-        t("pricing.plans.free.feature5"),
+        "300+ micro-actions (3 catégories)",
+        "Coach IA personnalisé",
+        "Suivi de progression & streaks",
+        "12 badges à débloquer",
+        "Journal de réflexion",
       ],
-      cta: user ? t("pricing.plans.free.ctaCurrent") : t("pricing.plans.free.ctaStart"),
+      cta: user ? "Plan actuel" : "Commencer",
       action: () => navigate("/register"),
       popular: false,
       disabled: !!user,
     },
     {
-      name: t("pricing.plans.premium.name"),
-      price: t("pricing.plans.premium.price"),
-      period: t("pricing.plans.premium.period"),
-      description: t("pricing.plans.premium.description"),
+      name: "Premium",
+      price: "6,99€",
+      period: "/mois",
+      description: "L'expérience complète",
       features: [
-        t("pricing.plans.premium.feature1"),
-        t("pricing.plans.premium.feature2"),
-        t("pricing.plans.premium.feature3"),
-        t("pricing.plans.premium.feature4"),
-        t("pricing.plans.premium.feature5"),
-        t("pricing.plans.premium.feature6"),
-        t("pricing.plans.premium.feature7"),
-        t("pricing.plans.premium.feature8"),
+        "Tout le plan Gratuit +",
+        "8 catégories exclusives (400+ actions)",
+        "IA avancée avec suggestions personnalisées",
+        "Suggestion proactive au bon moment",
+        "Bouclier de Streak (1x/semaine)",
+        "Défis mensuels & récompenses",
+        "Analytics avancées & insights",
+        "20 badges Premium",
       ],
-      cta: isPremium ? t("pricing.plans.premium.ctaAlready") : t("pricing.plans.premium.ctaUpgrade"),
+      cta: isPremium ? "Déjà Premium" : "Passer à Premium",
       action: handleUpgrade,
       popular: true,
       disabled: isPremium,
@@ -186,20 +184,20 @@ export default function PricingPage() {
   ];
 
   const comparisonFeatures = [
-    { name: t("pricing.comparison.microActions.name"), free: t("pricing.comparison.microActions.free"), premium: t("pricing.comparison.microActions.premium") },
-    { name: t("pricing.comparison.categories.name"), free: t("pricing.comparison.categories.free"), premium: t("pricing.comparison.categories.premium") },
-    { name: t("pricing.comparison.aiCoach.name"), free: t("pricing.comparison.aiCoach.free"), premium: t("pricing.comparison.aiCoach.premium") },
-    { name: t("pricing.comparison.aiSuggestions.name"), free: true, premium: true },
-    { name: t("pricing.comparison.personalizedSuggestions.name"), free: t("pricing.comparison.personalizedSuggestions.free"), premium: t("pricing.comparison.personalizedSuggestions.premium") },
-    { name: t("pricing.comparison.proactiveSuggestion.name"), free: false, premium: t("pricing.comparison.proactiveSuggestion.premium") },
-    { name: t("pricing.comparison.postSessionDebrief.name"), free: true, premium: true },
-    { name: t("pricing.comparison.weeklyAnalysis.name"), free: true, premium: true },
-    { name: t("pricing.comparison.customActions.name"), free: true, premium: true },
-    { name: t("pricing.comparison.badges.name"), free: t("pricing.comparison.badges.free"), premium: t("pricing.comparison.badges.premium") },
-    { name: t("pricing.comparison.streakShield.name"), free: false, premium: true },
-    { name: t("pricing.comparison.monthlyChallenges.name"), free: false, premium: true },
-    { name: t("pricing.comparison.advancedAnalytics.name"), free: false, premium: true },
-    { name: t("pricing.comparison.integrations.name"), free: t("pricing.comparison.integrations.free"), premium: t("pricing.comparison.integrations.premium") },
+    { name: "Micro-actions", free: "300+ (3 catégories)", premium: "700+ (11 catégories)" },
+    { name: "Catégories", free: "Learning, Productivité, Bien-être", premium: "+ Créativité, Fitness, Mindfulness, Leadership, Finance, Relations, Santé mentale, Entrepreneuriat" },
+    { name: "Coach IA", free: "Claude Haiku", premium: "Claude Sonnet (avancé)" },
+    { name: "Suggestions IA", free: true, premium: true },
+    { name: "Suggestions personnalisées", free: "Basiques", premium: "IA comportementale avancée" },
+    { name: "Suggestion proactive", free: false, premium: "Au bon moment, sans rien demander" },
+    { name: "Débrief post-session", free: true, premium: true },
+    { name: "Analyse hebdomadaire", free: true, premium: true },
+    { name: "Création d'actions custom", free: true, premium: true },
+    { name: "Badges", free: "12 badges", premium: "20 badges (dont 8 exclusifs)" },
+    { name: "Bouclier de Streak", free: false, premium: true },
+    { name: "Défis mensuels", free: false, premium: true },
+    { name: "Analytics avancées", free: false, premium: true },
+    { name: "Intégrations", free: "1 (Google Calendar)", premium: "Toutes (Calendar, Notion, Todoist, Slack)" },
   ];
 
   if (paymentStatus === "pending") {
@@ -207,8 +205,8 @@ export default function PricingPage() {
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-          <h2 className="font-heading text-2xl mb-2">{t("pricing.payment.verifying")}</h2>
-          <p className="text-muted-foreground">{t("pricing.payment.pleaseWait")}</p>
+          <h2 className="font-heading text-2xl mb-2">Vérification du paiement...</h2>
+          <p className="text-muted-foreground">Merci de patienter quelques instants</p>
         </div>
       </div>
     );
@@ -234,10 +232,10 @@ export default function PricingPage() {
               ) : (
                 <>
                   <Link to="/login">
-                    <Button variant="ghost">{t("pricing.nav.login")}</Button>
+                    <Button variant="ghost">Connexion</Button>
                   </Link>
                   <Link to="/register">
-                    <Button className="rounded-full">{t("pricing.nav.getStarted")}</Button>
+                    <Button className="rounded-full">Commencer</Button>
                   </Link>
                 </>
               )}
@@ -253,13 +251,13 @@ export default function PricingPage() {
           <div className="text-center mb-16">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-6">
               <Crown className="w-4 h-4 text-primary" />
-              <span className="text-sm text-primary">{t("pricing.header.badge")}</span>
+              <span className="text-sm text-primary">Investissez dans votre temps</span>
             </div>
             <h1 className="font-heading text-4xl md:text-5xl font-bold mb-4" data-testid="pricing-title">
-              {t("pricing.header.title")}
+              Choisissez votre plan
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              {t("pricing.header.subtitle")}
+              Commencez gratuitement et passez à Premium pour une IA qui apprend de vous et une bibliothèque de micro-actions en perpétuelle évolution.
             </p>
           </div>
 
@@ -277,7 +275,7 @@ export default function PricingPage() {
                 {plan.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <span className="px-4 py-1 rounded-full bg-primary text-primary-foreground text-sm font-medium">
-                      {t("pricing.popular")}
+                      Populaire
                     </span>
                   </div>
                 )}
@@ -327,7 +325,7 @@ export default function PricingPage() {
                       ) : (
                         <Settings className="w-4 h-4 mr-2" />
                       )}
-                      {t("pricing.manageSubscription")}
+                      Gérer mon abonnement
                     </Button>
                   )}
                 </CardContent>
@@ -343,14 +341,14 @@ export default function PricingPage() {
                 className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mx-auto"
               >
                 <Gift className="w-4 h-4" />
-                {t("pricing.promo.haveCode")}
+                Vous avez un code promo ?
                 <ChevronDown className={`w-4 h-4 transition-transform ${promoOpen ? "rotate-180" : ""}`} />
               </button>
               {promoOpen && (
                 <div className="mt-4 flex gap-3 max-w-md mx-auto">
                   <Input
                     type="text"
-                    placeholder={t("pricing.promo.placeholder")}
+                    placeholder="Entrez votre code"
                     value={promoCode}
                     onChange={(e) => setPromoCode(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handlePromoRedeem()}
@@ -365,7 +363,7 @@ export default function PricingPage() {
                     {promoLoading ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
-                      t("pricing.promo.activate")
+                      "Activer"
                     )}
                   </Button>
                 </div>
@@ -376,26 +374,26 @@ export default function PricingPage() {
           {/* Premium Categories Showcase */}
           <div className="max-w-4xl mx-auto mb-16">
             <h2 className="font-heading text-2xl font-semibold text-center mb-8">
-              {t("pricing.premiumCategories.title")}
+              8 catégories exclusives Premium
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { icon: Palette, nameKey: "creativity", color: "text-pink-500", bg: "bg-pink-500/10" },
-                { icon: Dumbbell, nameKey: "fitness", color: "text-orange-500", bg: "bg-orange-500/10" },
-                { icon: Leaf, nameKey: "mindfulness", color: "text-green-500", bg: "bg-green-500/10" },
-                { icon: Crown, nameKey: "leadership", color: "text-amber-500", bg: "bg-amber-500/10" },
-                { icon: Zap, nameKey: "finance", color: "text-emerald-500", bg: "bg-emerald-500/10" },
-                { icon: Sparkles, nameKey: "relations", color: "text-blue-500", bg: "bg-blue-500/10" },
-                { icon: Brain, nameKey: "mental_health", color: "text-purple-500", bg: "bg-purple-500/10" },
-                { icon: Trophy, nameKey: "entrepreneurship", color: "text-red-500", bg: "bg-red-500/10" },
-              ].map(({ icon: Icon, nameKey, color, bg }) => (
-                <Card key={nameKey} className="bg-card/50 border-dashed">
+                { icon: Palette, name: "Créativité", color: "text-pink-500", bg: "bg-pink-500/10" },
+                { icon: Dumbbell, name: "Fitness", color: "text-orange-500", bg: "bg-orange-500/10" },
+                { icon: Leaf, name: "Mindfulness", color: "text-green-500", bg: "bg-green-500/10" },
+                { icon: Crown, name: "Leadership", color: "text-amber-500", bg: "bg-amber-500/10" },
+                { icon: Zap, name: "Finance", color: "text-emerald-500", bg: "bg-emerald-500/10" },
+                { icon: Sparkles, name: "Relations", color: "text-blue-500", bg: "bg-blue-500/10" },
+                { icon: Brain, name: "Santé mentale", color: "text-purple-500", bg: "bg-purple-500/10" },
+                { icon: Trophy, name: "Entrepreneuriat", color: "text-red-500", bg: "bg-red-500/10" },
+              ].map(({ icon: Icon, name, color, bg }) => (
+                <Card key={name} className="bg-card/50 border-dashed">
                   <CardContent className="p-4 text-center">
                     <div className={`w-10 h-10 rounded-lg ${bg} flex items-center justify-center mx-auto mb-2`}>
                       <Icon className={`w-5 h-5 ${color}`} />
                     </div>
-                    <p className="text-sm font-medium">{t(`categories.${nameKey}`)}</p>
-                    <p className="text-xs text-muted-foreground">{t("pricing.premiumCategories.actionsCount")}</p>
+                    <p className="text-sm font-medium">{name}</p>
+                    <p className="text-xs text-muted-foreground">50 actions</p>
                   </CardContent>
                 </Card>
               ))}
@@ -405,7 +403,7 @@ export default function PricingPage() {
           {/* Features Comparison */}
           <div className="max-w-4xl mx-auto mb-16">
             <h2 className="font-heading text-2xl font-semibold text-center mb-8">
-              {t("pricing.whyPremium.title")}
+              Pourquoi passer à Premium ?
             </h2>
             <div className="grid md:grid-cols-3 gap-6 mb-12">
               <Card className="bg-card/50">
@@ -413,9 +411,9 @@ export default function PricingPage() {
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                     <Sparkles className="w-6 h-6 text-primary" />
                   </div>
-                  <h3 className="font-heading text-lg font-medium mb-2">{t("pricing.whyPremium.aiTitle")}</h3>
+                  <h3 className="font-heading text-lg font-medium mb-2">IA qui vous connait</h3>
                   <p className="text-sm text-muted-foreground">
-                    {t("pricing.whyPremium.aiDescription")}
+                    Suggestions personnalisées selon vos habitudes, votre énergie et le moment de la journée
                   </p>
                 </CardContent>
               </Card>
@@ -424,9 +422,9 @@ export default function PricingPage() {
                   <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
                     <Zap className="w-6 h-6 text-amber-500" />
                   </div>
-                  <h3 className="font-heading text-lg font-medium mb-2">{t("pricing.whyPremium.libraryTitle")}</h3>
+                  <h3 className="font-heading text-lg font-medium mb-2">Bibliothèque infinie</h3>
                   <p className="text-sm text-muted-foreground">
-                    {t("pricing.whyPremium.libraryDescription")}
+                    700+ micro-actions dans 11 catégories, enrichie en continu pour ne jamais manquer d'inspiration
                   </p>
                 </CardContent>
               </Card>
@@ -435,9 +433,9 @@ export default function PricingPage() {
                   <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
                     <Shield className="w-6 h-6 text-emerald-500" />
                   </div>
-                  <h3 className="font-heading text-lg font-medium mb-2">{t("pricing.whyPremium.shieldTitle")}</h3>
+                  <h3 className="font-heading text-lg font-medium mb-2">Bouclier de Streak</h3>
                   <p className="text-sm text-muted-foreground">
-                    {t("pricing.whyPremium.shieldDescription")}
+                    Protégez votre streak une fois par semaine si vous manquez un jour
                   </p>
                 </CardContent>
               </Card>
@@ -450,11 +448,11 @@ export default function PricingPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left p-4 font-heading font-semibold">{t("pricing.comparisonTable.feature")}</th>
-                        <th className="text-center p-4 font-heading font-semibold">{t("pricing.comparisonTable.free")}</th>
+                        <th className="text-left p-4 font-heading font-semibold">Fonctionnalité</th>
+                        <th className="text-center p-4 font-heading font-semibold">Gratuit</th>
                         <th className="text-center p-4 font-heading font-semibold text-primary">
                           <div className="flex items-center justify-center gap-1">
-                            <Crown className="w-4 h-4" /> {t("pricing.comparisonTable.premium")}
+                            <Crown className="w-4 h-4" /> Premium
                           </div>
                         </th>
                       </tr>
@@ -497,10 +495,10 @@ export default function PricingPage() {
           {/* FAQ or Trust signals */}
           <div className="mt-16 text-center">
             <p className="text-sm text-muted-foreground mb-4">
-              {t("pricing.footer.trustSignals")}
+              Paiement sécurisé par Stripe • Annulez à tout moment • Sans engagement
             </p>
             <p className="text-xs text-muted-foreground">
-              {t("pricing.footer.contactPrefix")}{" "}
+              Des questions ? Contactez-nous à{" "}
               <a href="mailto:Infinea.compte@gmail.com" className="text-primary hover:underline">
                 Infinea.compte@gmail.com
               </a>

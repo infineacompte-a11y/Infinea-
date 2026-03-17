@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,8 +28,13 @@ const categoryColors = {
   well_being: "text-emerald-500 bg-emerald-500/10",
 };
 
+const categoryLabels = {
+  learning: "Apprentissage",
+  productivity: "Productivité",
+  well_being: "Bien-être",
+};
+
 export default function SlotCard({ slot, onDismiss, onRefresh }) {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const [countdown, setCountdown] = useState("");
   const [isDismissing, setIsDismissing] = useState(false);
@@ -44,7 +48,7 @@ export default function SlotCard({ slot, onDismiss, onRefresh }) {
       const diff = slotStart - now;
 
       if (diff <= 0) {
-        setCountdown(t("components.slotCard.now"));
+        setCountdown("Maintenant!");
         return;
       }
 
@@ -53,11 +57,11 @@ export default function SlotCard({ slot, onDismiss, onRefresh }) {
 
       if (minutes > 60) {
         const hours = Math.floor(minutes / 60);
-        setCountdown(t("components.slotCard.countdownHours", { hours, minutes: minutes % 60 }));
+        setCountdown(`dans ${hours}h ${minutes % 60}min`);
       } else if (minutes > 0) {
-        setCountdown(t("components.slotCard.countdownMinutes", { minutes, seconds }));
+        setCountdown(`dans ${minutes}min ${seconds}s`);
       } else {
-        setCountdown(t("components.slotCard.countdownSeconds", { seconds }));
+        setCountdown(`dans ${seconds}s`);
       }
     };
 
@@ -65,7 +69,7 @@ export default function SlotCard({ slot, onDismiss, onRefresh }) {
     const interval = setInterval(updateCountdown, 1000);
 
     return () => clearInterval(interval);
-  }, [slot, t]);
+  }, [slot]);
 
   const handleStart = async () => {
     if (!slot?.suggested_action?.action_id) {
@@ -89,7 +93,7 @@ export default function SlotCard({ slot, onDismiss, onRefresh }) {
       const data = await response.json();
       navigate(`/session/${data.session_id}`, { state: { session: data } });
     } catch (error) {
-      toast.error(t("components.slotCard.errorStart"));
+      toast.error("Erreur lors du démarrage");
     }
   };
 
@@ -106,11 +110,11 @@ export default function SlotCard({ slot, onDismiss, onRefresh }) {
 
       if (!response.ok) throw new Error("Erreur");
 
-      toast.success(t("components.slotCard.dismissed"));
+      toast.success("Créneau ignoré");
       if (onDismiss) onDismiss();
       if (onRefresh) onRefresh();
     } catch (error) {
-      toast.error(t("common.error"));
+      toast.error("Erreur");
     } finally {
       setIsDismissing(false);
     }
@@ -150,7 +154,7 @@ export default function SlotCard({ slot, onDismiss, onRefresh }) {
         ) : (
           <div className="mb-4">
             <p className="text-sm text-muted-foreground">
-              {t("components.slotCard.freeSlotDetected", { category: t(`categories.${category}`, { defaultValue: category }) })}
+              Créneau libre détecté • Catégorie suggérée: {categoryLabels[category] || category}
             </p>
           </div>
         )}
@@ -162,7 +166,7 @@ export default function SlotCard({ slot, onDismiss, onRefresh }) {
             data-testid="start-slot-btn"
           >
             <Play className="w-4 h-4 mr-2" />
-            {t("components.slotCard.start")}
+            Commencer
           </Button>
           <Button
             variant="outline"

@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,37 +24,36 @@ import {
 import { toast } from "sonner";
 import { API, authFetch } from "@/App";
 
+const STEPS = [
+  {
+    title: "Ouvrir les paramètres Todoist",
+    icon: Settings,
+    instruction: "Rendez-vous dans les paramètres de votre compte Todoist, section « Intégrations ».",
+    tip: "Connectez-vous d'abord à Todoist si ce n'est pas déjà fait.",
+    action: {
+      label: "Ouvrir Todoist Intégrations",
+      url: "https://app.todoist.com/app/settings/integrations/developer",
+    },
+  },
+  {
+    title: "Copier le token API",
+    icon: Copy,
+    instruction: "Dans la section « Développeur », vous trouverez votre token API. Cliquez sur « Copier » pour le copier dans votre presse-papiers.",
+    tip: "Le token est une longue chaîne de caractères — ne le partagez jamais.",
+  },
+  {
+    title: "Coller le token ici",
+    icon: Link2,
+    instruction: "Collez le token copié dans le champ ci-dessous. InFinea vérifiera automatiquement la connexion.",
+    isInput: true,
+  },
+];
+
 export default function TodoistGuide({ open, onOpenChange, onConnected }) {
-  const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(0);
   const [token, setToken] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
   const [isValidToken, setIsValidToken] = useState(false);
-
-  const STEPS = [
-    {
-      title: t("components.todoistGuide.steps.openSettings.title"),
-      icon: Settings,
-      instruction: t("components.todoistGuide.steps.openSettings.instruction"),
-      tip: t("components.todoistGuide.steps.openSettings.tip"),
-      action: {
-        label: t("components.todoistGuide.steps.openSettings.actionLabel"),
-        url: "https://app.todoist.com/app/settings/integrations/developer",
-      },
-    },
-    {
-      title: t("components.todoistGuide.steps.copyToken.title"),
-      icon: Copy,
-      instruction: t("components.todoistGuide.steps.copyToken.instruction"),
-      tip: t("components.todoistGuide.steps.copyToken.tip"),
-    },
-    {
-      title: t("components.todoistGuide.steps.pasteToken.title"),
-      icon: Link2,
-      instruction: t("components.todoistGuide.steps.pasteToken.instruction"),
-      isInput: true,
-    },
-  ];
 
   const handleTokenChange = (value) => {
     setToken(value);
@@ -75,14 +73,14 @@ export default function TodoistGuide({ open, onOpenChange, onConnected }) {
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.detail || t("components.todoistGuide.connectionError"));
+        throw new Error(err.detail || "Erreur de connexion");
       }
 
-      toast.success(t("components.todoistGuide.connected"));
+      toast.success("Todoist connecté avec succès !");
       onConnected?.();
       handleClose();
     } catch (error) {
-      toast.error(error.message || t("components.todoistGuide.connectFailed"));
+      toast.error(error.message || "Impossible de se connecter. Vérifiez le token et réessayez.");
     } finally {
       setIsConnecting(false);
     }
@@ -107,10 +105,10 @@ export default function TodoistGuide({ open, onOpenChange, onConnected }) {
             <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
               <ListTodo className="w-4 h-4 text-red-500" />
             </div>
-            {t("components.todoistGuide.title")}
+            Connecter Todoist
           </DialogTitle>
           <DialogDescription>
-            {t("components.todoistGuide.description")}
+            Suivez ces étapes pour connecter Todoist à InFinea.
           </DialogDescription>
         </DialogHeader>
 
@@ -137,7 +135,7 @@ export default function TodoistGuide({ open, onOpenChange, onConnected }) {
               <StepIcon className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">{t("common.stepOf", { current: currentStep + 1, total: STEPS.length })}</p>
+              <p className="text-xs text-muted-foreground">Étape {currentStep + 1}/{STEPS.length}</p>
               <h3 className="font-heading font-semibold">{step.title}</h3>
             </div>
           </div>
@@ -165,7 +163,7 @@ export default function TodoistGuide({ open, onOpenChange, onConnected }) {
                 <div className="space-y-2 pt-2">
                   <Input
                     type="password"
-                    placeholder={t("components.todoistGuide.tokenPlaceholder")}
+                    placeholder="votre token API Todoist"
                     value={token}
                     onChange={(e) => handleTokenChange(e.target.value)}
                     className="font-mono text-sm"
@@ -173,13 +171,13 @@ export default function TodoistGuide({ open, onOpenChange, onConnected }) {
                   />
                   {token && !isValidToken && (
                     <p className="text-xs text-red-400">
-                      {t("components.todoistGuide.tokenTooShort")}
+                      Le token semble trop court
                     </p>
                   )}
                   {isValidToken && (
                     <p className="text-xs text-emerald-500 flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
-                      {t("common.validFormat")}
+                      Format valide
                     </p>
                   )}
                 </div>
@@ -197,7 +195,7 @@ export default function TodoistGuide({ open, onOpenChange, onConnected }) {
                 className="gap-1"
               >
                 <ChevronLeft className="w-4 h-4" />
-                {t("common.previous")}
+                Précédent
               </Button>
             )}
             <div className="flex-1" />
@@ -211,12 +209,12 @@ export default function TodoistGuide({ open, onOpenChange, onConnected }) {
                 {isConnecting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    {t("common.connecting")}
+                    Connexion...
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    {t("common.connect")}
+                    Connecter
                   </>
                 )}
               </Button>
@@ -225,7 +223,7 @@ export default function TodoistGuide({ open, onOpenChange, onConnected }) {
                 onClick={() => setCurrentStep((s) => s + 1)}
                 className="gap-1"
               >
-                {t("common.next")}
+                Suivant
                 <ChevronRight className="w-4 h-4" />
               </Button>
             )}

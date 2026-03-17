@@ -1,7 +1,6 @@
 import React from "react";
-import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card";
-import { Crown, Clock, TrendingUp, ChevronRight } from "lucide-react";
+import { Users, Crown, Clock, TrendingUp, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 
 /**
@@ -12,6 +11,11 @@ import { Link } from "react-router-dom";
  *   group — group object from GET /api/groups
  */
 
+const statusColors = {
+  active: "bg-emerald-500/15 text-emerald-400",
+  archived: "bg-white/10 text-white/40",
+};
+
 function formatMinutes(min) {
   if (!min) return "0 min";
   if (min < 60) return `${min} min`;
@@ -21,8 +25,6 @@ function formatMinutes(min) {
 }
 
 export default function GroupCard({ group }) {
-  const { t } = useTranslation();
-
   if (!group) return null;
 
   const members = group.members?.filter((m) => m.status === "active") || [];
@@ -75,7 +77,7 @@ export default function GroupCard({ group }) {
               )}
             </div>
             <span className="text-muted-foreground text-xs">
-              {t("components.groupCard.memberCount", { count: members.length })}
+              {members.length} membre{members.length > 1 ? "s" : ""}
             </span>
           </div>
 
@@ -87,7 +89,7 @@ export default function GroupCard({ group }) {
                 <div className="text-white text-sm font-semibold tabular-nums">
                   {formatMinutes(totalWeekMinutes)}
                 </div>
-                <div className="text-muted-foreground text-[10px]">{t("components.groupCard.thisWeek")}</div>
+                <div className="text-muted-foreground text-[10px]">cette semaine</div>
               </div>
             </div>
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.04]">
@@ -96,7 +98,7 @@ export default function GroupCard({ group }) {
                 <div className="text-white text-sm font-semibold tabular-nums">
                   {totalWeekSessions}
                 </div>
-                <div className="text-muted-foreground text-[10px]">{t("components.groupCard.sessions")}</div>
+                <div className="text-muted-foreground text-[10px]">sessions</div>
               </div>
             </div>
           </div>

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,53 +33,45 @@ import { VoiceTextArea } from "@/components/VoiceInput";
 import { API, authFetch, useAuth } from "@/App";
 import { toast } from "sonner";
 
-const CATEGORY_COLORS = {
-  learning: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  productivity: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-  well_being: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-  creativity: "bg-amber-500/10 text-amber-500 border-amber-500/20",
-  fitness: "bg-rose-500/10 text-rose-500 border-rose-500/20",
-  mindfulness: "bg-sky-500/10 text-sky-500 border-sky-500/20",
-  leadership: "bg-indigo-500/10 text-indigo-500 border-indigo-500/20",
-  finance: "bg-teal-500/10 text-teal-500 border-teal-500/20",
-  relations: "bg-pink-500/10 text-pink-500 border-pink-500/20",
-  mental_health: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
-  entrepreneurship: "bg-orange-500/10 text-orange-500 border-orange-500/20",
-};
-
-const STATUS_COLORS = {
-  active: { color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20", icon: Play },
-  paused: { color: "bg-amber-500/10 text-amber-500 border-amber-500/20", icon: Pause },
-  completed: { color: "bg-blue-500/10 text-blue-500 border-blue-500/20", icon: CheckCircle2 },
-  abandoned: { color: "bg-red-500/10 text-red-500 border-red-500/20", icon: Target },
+const CATEGORY_MAP = {
+  learning: { label: "Apprentissage", color: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
+  productivity: { label: "Productivité", color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" },
+  well_being: { label: "Bien-être", color: "bg-purple-500/10 text-purple-500 border-purple-500/20" },
+  creativity: { label: "Créativité", color: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
+  fitness: { label: "Fitness", color: "bg-rose-500/10 text-rose-500 border-rose-500/20" },
+  mindfulness: { label: "Pleine conscience", color: "bg-sky-500/10 text-sky-500 border-sky-500/20" },
+  leadership: { label: "Leadership", color: "bg-indigo-500/10 text-indigo-500 border-indigo-500/20" },
+  finance: { label: "Finance", color: "bg-teal-500/10 text-teal-500 border-teal-500/20" },
+  relations: { label: "Relations", color: "bg-pink-500/10 text-pink-500 border-pink-500/20" },
+  mental_health: { label: "Santé mentale", color: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20" },
+  entrepreneurship: { label: "Entrepreneuriat", color: "bg-orange-500/10 text-orange-500 border-orange-500/20" },
 };
 
 // Duration presets: 2 weeks to 12 months
 const DURATION_STEPS = [
-  { value: 14 },
-  { value: 30 },
-  { value: 45 },
-  { value: 60 },
-  { value: 75 },
-  { value: 90 },
-  { value: 120 },
-  { value: 150 },
-  { value: 180 },
-  { value: 210 },
-  { value: 240 },
-  { value: 270 },
-  { value: 300 },
-  { value: 330 },
-  { value: 365 },
+  { value: 14, label: "2 sem." },
+  { value: 30, label: "1 mois" },
+  { value: 45, label: "1.5 mois" },
+  { value: 60, label: "2 mois" },
+  { value: 75, label: "2.5 mois" },
+  { value: 90, label: "3 mois" },
+  { value: 120, label: "4 mois" },
+  { value: 150, label: "5 mois" },
+  { value: 180, label: "6 mois" },
+  { value: 210, label: "7 mois" },
+  { value: 240, label: "8 mois" },
+  { value: 270, label: "9 mois" },
+  { value: 300, label: "10 mois" },
+  { value: 330, label: "11 mois" },
+  { value: 365, label: "12 mois" },
 ];
 
-function durationToLabel(days, t) {
-  if (days === 14) return t("objectives.duration.2weeks");
-  if (days < 30) return t("objectives.duration.nDays", { count: days });
+function durationToLabel(days) {
+  const match = DURATION_STEPS.find((s) => s.value === days);
+  if (match) return match.label;
+  if (days < 30) return `${days} jours`;
   const m = Math.round(days / 30);
-  if (days === 45) return t("objectives.duration.nMonths", { count: 1.5 });
-  if (days === 75) return t("objectives.duration.nMonths", { count: 2.5 });
-  return t("objectives.duration.nMonths", { count: m });
+  return `${m} mois`;
 }
 
 function durationSliderToValue(sliderPos) {
@@ -98,9 +89,16 @@ function durationValueToSlider(days) {
   return closest;
 }
 
-function ObjectiveCard({ objective, onClick, t }) {
-  const status = STATUS_COLORS[objective.status] || STATUS_COLORS.active;
-  const categoryColor = CATEGORY_COLORS[objective.category] || CATEGORY_COLORS.learning;
+const STATUS_MAP = {
+  active: { label: "En cours", color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20", icon: Play },
+  paused: { label: "En pause", color: "bg-amber-500/10 text-amber-500 border-amber-500/20", icon: Pause },
+  completed: { label: "Terminé", color: "bg-blue-500/10 text-blue-500 border-blue-500/20", icon: CheckCircle2 },
+  abandoned: { label: "Abandonné", color: "bg-red-500/10 text-red-500 border-red-500/20", icon: Target },
+};
+
+function ObjectiveCard({ objective, onClick }) {
+  const status = STATUS_MAP[objective.status] || STATUS_MAP.active;
+  const category = CATEGORY_MAP[objective.category] || CATEGORY_MAP.learning;
   const StatusIcon = status.icon;
 
   const totalSteps = (objective.curriculum || []).length;
@@ -115,12 +113,12 @@ function ObjectiveCard({ objective, onClick, t }) {
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <Badge variant="outline" className={`text-[10px] ${categoryColor}`}>
-              {t(`categories.${objective.category}`)}
+            <Badge variant="outline" className={`text-[10px] ${category.color}`}>
+              {category.label}
             </Badge>
             <Badge variant="outline" className={`text-[10px] ${status.color}`}>
               <StatusIcon className="w-2.5 h-2.5 mr-1" />
-              {t(`objectives.status.${objective.status}`)}
+              {status.label}
             </Badge>
           </div>
           <h3 className="font-heading font-semibold text-base truncate group-hover:text-primary transition-colors">
@@ -139,7 +137,7 @@ function ObjectiveCard({ objective, onClick, t }) {
       {/* Progress bar */}
       <div className="mb-3">
         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
-          <span>{t("objectives.sessionsCount", { completed: completedSteps, total: totalSteps })}</span>
+          <span>{completedSteps}/{totalSteps} sessions</span>
           <span className="font-medium">{percent}%</span>
         </div>
         <Progress value={percent} className="h-2" />
@@ -149,15 +147,15 @@ function ObjectiveCard({ objective, onClick, t }) {
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
         <div className="flex items-center gap-1">
           <Flame className="w-3 h-3 text-orange-500" />
-          <span>{t("objectives.streakDays", { count: objective.streak_days || 0 })}</span>
+          <span>{objective.streak_days || 0}j streak</span>
         </div>
         <div className="flex items-center gap-1">
           <Clock className="w-3 h-3" />
-          <span>{t("objectives.totalMinutes", { count: objective.total_minutes || 0 })}</span>
+          <span>{objective.total_minutes || 0} min</span>
         </div>
         <div className="flex items-center gap-1">
           <Calendar className="w-3 h-3" />
-          <span>{t("objectives.dayProgress", { current: objective.current_day || 0, total: objective.target_duration_days })}</span>
+          <span>Jour {objective.current_day || 0}/{objective.target_duration_days}</span>
         </div>
       </div>
     </Card>
@@ -166,7 +164,6 @@ function ObjectiveCard({ objective, onClick, t }) {
 
 export default function ObjectivesPage() {
   const navigate = useNavigate();
-  const { t } = useTranslation();
   const { user } = useAuth();
   const [objectives, setObjectives] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -188,11 +185,11 @@ export default function ObjectivesPage() {
         setObjectives(data.objectives || []);
       }
     } catch {
-      toast.error(t("objectives.errors.loadFailed"));
+      toast.error("Erreur de chargement");
     } finally {
       setIsLoading(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     loadObjectives();
@@ -200,7 +197,7 @@ export default function ObjectivesPage() {
 
   const handleCreate = async () => {
     if (!form.title.trim()) {
-      toast.error(t("objectives.errors.titleRequired"));
+      toast.error("Donne un titre à ton objectif");
       return;
     }
     setIsCreating(true);
@@ -212,10 +209,10 @@ export default function ObjectivesPage() {
       });
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.detail || t("common.error"));
+        throw new Error(err.detail || "Erreur");
       }
       const created = await res.json();
-      toast.success(t("objectives.createSuccess"));
+      toast.success("Objectif créé ! Le curriculum se génère...");
       setShowCreate(false);
       setForm({ title: "", description: "", category: "learning", target_duration_days: 30, daily_minutes: 10 });
       navigate(`/objectives/${created.objective_id}`);
@@ -231,11 +228,6 @@ export default function ObjectivesPage() {
   const isPremium = user?.subscription_tier === "premium";
   const canCreate = activeObjectives.length < (isPremium ? 20 : 2);
 
-  const CATEGORY_KEYS = [
-    "learning", "productivity", "well_being", "creativity", "fitness",
-    "mindfulness", "leadership", "finance", "relations", "mental_health", "entrepreneurship",
-  ];
-
   return (
     <div className="min-h-screen bg-background">
       <Sidebar />
@@ -246,10 +238,10 @@ export default function ObjectivesPage() {
             <div>
               <h1 className="font-heading text-2xl font-bold flex items-center gap-2">
                 <Target className="w-6 h-6 text-primary" />
-                {t("objectives.title")}
+                Mes Objectifs
               </h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                {t("objectives.subtitle")}
+                Tes parcours de progression personnalisés
               </p>
             </div>
             <Button
@@ -259,7 +251,7 @@ export default function ObjectivesPage() {
               size="sm"
             >
               <Plus className="w-4 h-4" />
-              {t("objectives.newObjective")}
+              Nouvel objectif
             </Button>
           </div>
 
@@ -273,14 +265,15 @@ export default function ObjectivesPage() {
                 <Target className="w-10 h-10 text-primary" />
               </div>
               <h3 className="font-heading font-semibold text-lg mb-2">
-                {t("objectives.empty.title")}
+                Définis ton premier objectif
               </h3>
               <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto leading-relaxed">
-                {t("objectives.empty.description")}
+                Apprendre une langue, jouer d'un instrument, méditer chaque jour...
+                L'IA crée un parcours progressif adapté à toi.
               </p>
               <Button onClick={() => setShowCreate(true)} className="gap-2">
                 <Sparkles className="w-4 h-4" />
-                {t("objectives.empty.cta")}
+                Créer mon premier parcours
               </Button>
             </Card>
           ) : (
@@ -289,14 +282,13 @@ export default function ObjectivesPage() {
               {activeObjectives.length > 0 && (
                 <div className="space-y-3 mb-6">
                   <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    {t("objectives.activeSection", { count: activeObjectives.length })}
+                    En cours ({activeObjectives.length})
                   </h2>
                   {activeObjectives.map((obj) => (
                     <ObjectiveCard
                       key={obj.objective_id}
                       objective={obj}
                       onClick={() => navigate(`/objectives/${obj.objective_id}`)}
-                      t={t}
                     />
                   ))}
                 </div>
@@ -306,14 +298,13 @@ export default function ObjectivesPage() {
               {otherObjectives.length > 0 && (
                 <div className="space-y-3">
                   <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    {t("objectives.archivedSection", { count: otherObjectives.length })}
+                    Archivés ({otherObjectives.length})
                   </h2>
                   {otherObjectives.map((obj) => (
                     <ObjectiveCard
                       key={obj.objective_id}
                       objective={obj}
                       onClick={() => navigate(`/objectives/${obj.objective_id}`)}
-                      t={t}
                     />
                   ))}
                 </div>
@@ -323,7 +314,7 @@ export default function ObjectivesPage() {
               {!canCreate && !isPremium && (
                 <Card className="p-4 mt-4 border-amber-500/20 bg-amber-500/5 text-center">
                   <p className="text-sm text-amber-600 mb-2">
-                    {t("objectives.limitReached")}
+                    Tu as atteint la limite de 2 objectifs actifs
                   </p>
                   <Button
                     variant="outline"
@@ -332,7 +323,7 @@ export default function ObjectivesPage() {
                     className="border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
                   >
                     <Trophy className="w-3.5 h-3.5 mr-1.5" />
-                    {t("objectives.upgradePremium")}
+                    Passer en Premium
                   </Button>
                 </Card>
               )}
@@ -345,7 +336,7 @@ export default function ObjectivesPage() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-primary" />
-                  {t("objectives.newObjective")}
+                  Nouvel objectif
                 </DialogTitle>
               </DialogHeader>
 
@@ -353,11 +344,11 @@ export default function ObjectivesPage() {
                 {/* Title */}
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">
-                    {t("objectives.form.titleLabel")}
+                    Quel est ton objectif ?
                   </label>
                   <input
                     className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    placeholder={t("objectives.form.titlePlaceholder")}
+                    placeholder="Ex: Apprendre le thaï, Jouer du piano..."
                     value={form.title}
                     onChange={(e) => setForm({ ...form, title: e.target.value })}
                     maxLength={100}
@@ -369,16 +360,16 @@ export default function ObjectivesPage() {
                 <div>
                   <div className="mb-1.5">
                     <label className="text-sm font-medium">
-                      {t("objectives.form.descriptionLabel")} <span className="text-muted-foreground">({t("common.optional")})</span>
+                      Contexte & détails <span className="text-muted-foreground">(optionnel)</span>
                     </label>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {t("objectives.form.descriptionHint")}
+                      Plus tu donnes de détails, meilleur sera ton parcours.
                     </p>
                   </div>
                   <VoiceTextArea
                     value={form.description}
                     onChange={(val) => setForm((f) => ({ ...f, description: val }))}
-                    placeholder={t("objectives.form.descriptionPlaceholder")}
+                    placeholder="Niveau actuel, objectif précis, contraintes, ressources disponibles, ce que tu veux atteindre à la fin du parcours..."
                     rows={4}
                     maxLength={1500}
                   />
@@ -386,9 +377,9 @@ export default function ObjectivesPage() {
 
                 {/* Category — all 11 categories */}
                 <div>
-                  <label className="text-sm font-medium mb-1.5 block">{t("objectives.form.categoryLabel")}</label>
+                  <label className="text-sm font-medium mb-1.5 block">Catégorie</label>
                   <div className="flex flex-wrap gap-1.5">
-                    {CATEGORY_KEYS.map((key) => (
+                    {Object.entries(CATEGORY_MAP).map(([key, cat]) => (
                       <button
                         key={key}
                         onClick={() => setForm({ ...form, category: key })}
@@ -398,7 +389,7 @@ export default function ObjectivesPage() {
                             : "bg-muted/30 border-border hover:border-primary/30"
                         }`}
                       >
-                        {t(`categories.${key}`)}
+                        {cat.label}
                       </button>
                     ))}
                   </div>
@@ -407,8 +398,8 @@ export default function ObjectivesPage() {
                 {/* Minutes per day — smooth slider */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium">{t("objectives.form.minutesPerDay")}</label>
-                    <span className="text-lg font-bold text-primary tabular-nums">{t("objectives.form.minutesValue", { count: form.daily_minutes })}</span>
+                    <label className="text-sm font-medium">Minutes / jour</label>
+                    <span className="text-lg font-bold text-primary tabular-nums">{form.daily_minutes} min</span>
                   </div>
                   <input
                     type="range"
@@ -420,17 +411,17 @@ export default function ObjectivesPage() {
                     className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-background"
                   />
                   <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                    <span>{t("objectives.form.minutesValue", { count: 2 })}</span>
-                    <span>{t("objectives.form.minutesValue", { count: 10 })}</span>
-                    <span>{t("objectives.form.minutesValue", { count: 25 })}</span>
+                    <span>2 min</span>
+                    <span>10 min</span>
+                    <span>25 min</span>
                   </div>
                 </div>
 
                 {/* Duration — smooth slider with snap points */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium">{t("objectives.form.durationLabel")}</label>
-                    <span className="text-lg font-bold text-primary">{durationToLabel(form.target_duration_days, t)}</span>
+                    <label className="text-sm font-medium">Durée du parcours</label>
+                    <span className="text-lg font-bold text-primary">{durationToLabel(form.target_duration_days)}</span>
                   </div>
                   <input
                     type="range"
@@ -442,17 +433,17 @@ export default function ObjectivesPage() {
                     className="w-full h-2 bg-muted rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-background"
                   />
                   <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                    <span>{t("objectives.duration.2weeks")}</span>
-                    <span>{t("objectives.duration.nMonths", { count: 3 })}</span>
-                    <span>{t("objectives.duration.nMonths", { count: 6 })}</span>
-                    <span>{t("objectives.duration.nMonths", { count: 12 })}</span>
+                    <span>2 sem.</span>
+                    <span>3 mois</span>
+                    <span>6 mois</span>
+                    <span>12 mois</span>
                   </div>
                 </div>
               </div>
 
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowCreate(false)}>
-                  {t("common.cancel")}
+                  Annuler
                 </Button>
                 <Button onClick={handleCreate} disabled={!form.title.trim() || isCreating} className="gap-2">
                   {isCreating ? (
@@ -460,7 +451,7 @@ export default function ObjectivesPage() {
                   ) : (
                     <Sparkles className="w-4 h-4" />
                   )}
-                  {t("objectives.form.generateCta")}
+                  Générer mon parcours
                 </Button>
               </DialogFooter>
             </DialogContent>

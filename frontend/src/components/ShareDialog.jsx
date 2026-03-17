@@ -1,5 +1,4 @@
 import React, { useState, useRef, useCallback } from "react";
-import { useTranslation } from "react-i18next";
 import { toPng } from "html-to-image";
 import {
   Dialog,
@@ -31,7 +30,6 @@ import { API, authFetch } from "@/App";
  *   objectiveId — optional, specific objective to highlight
  */
 export default function ShareDialog({ open, onOpenChange, shareType = "weekly_recap", objectiveId = null }) {
-  const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -63,7 +61,7 @@ export default function ShareDialog({ open, onOpenChange, shareType = "weekly_re
         const shareData = await shareRes.json();
         setSnapshot(shareData.snapshot || shareData);
       } catch (err) {
-        toast.error(t("components.shareDialog.errorCreate"));
+        toast.error("Impossible de créer le partage");
         onOpenChange(false);
       } finally {
         setIsLoading(false);
@@ -75,7 +73,7 @@ export default function ShareDialog({ open, onOpenChange, shareType = "weekly_re
       setLinkCopied(false);
       setShareUrl("");
     }
-  }, [onOpenChange, snapshot, shareType, objectiveId, t]);
+  }, [onOpenChange, snapshot, shareType, objectiveId]);
 
   // Export card as PNG image
   const handleExportImage = useCallback(async () => {
@@ -98,8 +96,8 @@ export default function ShareDialog({ open, onOpenChange, shareType = "weekly_re
         const file = new File([blob], "infinea-progression.png", { type: "image/png" });
         if (navigator.canShare({ files: [file] })) {
           await navigator.share({
-            title: t("components.shareDialog.shareTitle"),
-            text: t("components.shareDialog.shareText"),
+            title: "Ma progression InFinea",
+            text: "Investis tes instants perdus",
             files: [file],
           });
           return;
@@ -111,15 +109,15 @@ export default function ShareDialog({ open, onOpenChange, shareType = "weekly_re
       link.download = "infinea-progression.png";
       link.href = dataUrl;
       link.click();
-      toast.success(t("components.shareDialog.imageSaved"));
+      toast.success("Image sauvegardée !");
     } catch (err) {
       if (err.name !== "AbortError") {
-        toast.error(t("components.shareDialog.errorExport"));
+        toast.error("Erreur lors de l'export de l'image");
       }
     } finally {
       setIsExporting(false);
     }
-  }, [t]);
+  }, []);
 
   // Copy share link to clipboard
   const handleCopyLink = useCallback(async () => {
@@ -127,39 +125,39 @@ export default function ShareDialog({ open, onOpenChange, shareType = "weekly_re
     try {
       await navigator.clipboard.writeText(shareUrl);
       setLinkCopied(true);
-      toast.success(t("components.shareDialog.linkCopied"));
+      toast.success("Lien copié !");
       setTimeout(() => setLinkCopied(false), 2500);
     } catch {
-      toast.error(t("components.shareDialog.errorCopy"));
+      toast.error("Impossible de copier le lien");
     }
-  }, [shareUrl, t]);
+  }, [shareUrl]);
 
   // Native share (text + link)
   const handleNativeShare = useCallback(async () => {
     if (!navigator.share) return;
     try {
       await navigator.share({
-        title: t("components.shareDialog.shareTitle"),
-        text: t("components.shareDialog.shareText"),
+        title: "Ma progression InFinea",
+        text: "Investis tes instants perdus",
         url: shareUrl,
       });
     } catch {
       // User cancelled — silent
     }
-  }, [shareUrl, t]);
+  }, [shareUrl]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-[460px] p-0 gap-0 overflow-hidden bg-card border-border">
         <DialogHeader className="px-6 pt-6 pb-0">
-          <DialogTitle className="font-heading text-lg">{t("components.shareDialog.title")}</DialogTitle>
+          <DialogTitle className="font-heading text-lg">Partager ma progression</DialogTitle>
         </DialogHeader>
 
         <div className="px-6 py-5">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-12 gap-3">
               <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              <span className="text-sm text-muted-foreground">{t("components.shareDialog.generating")}</span>
+              <span className="text-sm text-muted-foreground">Génération de la carte...</span>
             </div>
           ) : snapshot ? (
             <>
@@ -182,7 +180,7 @@ export default function ShareDialog({ open, onOpenChange, shareType = "weekly_re
                   ) : (
                     <ImageIcon className="w-4 h-4" />
                   )}
-                  {isExporting ? t("components.shareDialog.exporting") : t("components.shareDialog.saveImage")}
+                  {isExporting ? "Export en cours..." : "Sauvegarder l'image"}
                 </Button>
 
                 <div className="grid grid-cols-2 gap-2.5">
@@ -196,7 +194,7 @@ export default function ShareDialog({ open, onOpenChange, shareType = "weekly_re
                     ) : (
                       <Link2 className="w-4 h-4" />
                     )}
-                    {linkCopied ? t("components.shareDialog.copied") : t("components.shareDialog.copyLink")}
+                    {linkCopied ? "Copié !" : "Copier le lien"}
                   </Button>
 
                   {typeof navigator !== "undefined" && navigator.share && (
@@ -206,7 +204,7 @@ export default function ShareDialog({ open, onOpenChange, shareType = "weekly_re
                       onClick={handleNativeShare}
                     >
                       <Share2 className="w-4 h-4" />
-                      {t("components.shareDialog.share")}
+                      Partager
                     </Button>
                   )}
                 </div>
