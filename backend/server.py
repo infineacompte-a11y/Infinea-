@@ -28,6 +28,9 @@ from routes.notifications import router as notifications_router  # noqa: E402
 from routes.b2b import router as b2b_router  # noqa: E402
 from routes.reflections import router as reflections_router  # noqa: E402
 from routes.seed import router as seed_router  # noqa: E402
+from routes.profiles import router as profiles_router  # noqa: E402
+from routes.social import router as social_router  # noqa: E402
+from routes.feed import router as feed_router  # noqa: E402
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -58,7 +61,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="InFinea API",
-    version="1.1.0",
+    version="1.2.0",
     lifespan=lifespan,
 )
 
@@ -74,6 +77,11 @@ app.include_router(notifications_router)
 app.include_router(b2b_router)
 app.include_router(reflections_router)
 app.include_router(seed_router)
+
+# Phase 1 — Social
+app.include_router(profiles_router)
+app.include_router(social_router)
+app.include_router(feed_router)
 
 
 # ---------- CORS ----------

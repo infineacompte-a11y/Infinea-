@@ -11,6 +11,7 @@ from database import db
 from auth import get_current_user
 from models import SessionStart, SessionComplete
 from routes.badges import check_and_award_badges
+from services.activity_service import emit_session_activity, emit_badge_activity, emit_streak_activity
 
 router = APIRouter(prefix="/api")
 
@@ -129,6 +130,18 @@ async def complete_session(
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
             await db.notifications.insert_one(notification)
+
+        # Emit social activities (non-blocking — failures don't affect session)
+        await emit_session_activity(user["user_id"], {
+            "action_title": session.get("action_title", "Micro-action"),
+            "category": session.get("category", ""),
+            "actual_duration": completion.actual_duration,
+        })
+
+        for badge in new_badges:
+            await emit_badge_activity(user["user_id"], badge)
+
+        await emit_streak_activity(user["user_id"], new_streak)
 
         return {
             "message": "Session completed!",

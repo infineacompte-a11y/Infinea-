@@ -154,3 +154,38 @@ class ReflectionResponse(BaseModel):
     related_session_id: Optional[str]
     related_category: Optional[str]
     created_at: str
+
+
+# ============== SOCIAL MODELS (Phase 1) ==============
+
+
+class ProfileUpdate(BaseModel):
+    """Profile update — all fields optional, update only what's provided."""
+    display_name: Optional[str] = None
+    bio: Optional[str] = Field(None, max_length=280)
+    avatar_url: Optional[str] = None
+
+
+class PrivacySettings(BaseModel):
+    """Granular privacy controls — RGPD-aligned defaults."""
+    profile_visible: bool = True
+    show_stats: bool = True
+    show_badges: bool = True
+    show_reflections: bool = False  # Reflections private by default
+    activity_default_visibility: str = Field(
+        default="followers",
+        pattern="^(public|followers|private)$",
+    )
+
+
+class CommentCreate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=500)
+
+
+class ReactionCreate(BaseModel):
+    """InFinea-themed reactions — aligned with product DNA."""
+    reaction_type: str = Field(
+        ...,
+        pattern="^(bravo|inspire|fire)$",
+        description="bravo=kudos, inspire=this motivates me, fire=on fire",
+    )
