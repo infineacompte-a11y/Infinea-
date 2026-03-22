@@ -32,6 +32,7 @@ from routes.profiles import router as profiles_router  # noqa: E402
 from routes.social import router as social_router  # noqa: E402
 from routes.feed import router as feed_router  # noqa: E402
 from routes.challenges import router as challenges_router  # noqa: E402
+from routes.messages import router as messages_router  # noqa: E402
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -86,6 +87,9 @@ app.include_router(feed_router)
 
 # Phase 2 — Challenges
 app.include_router(challenges_router)
+
+# Phase 3 — Messaging
+app.include_router(messages_router)
 
 
 # ---------- CORS ----------

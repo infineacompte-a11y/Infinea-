@@ -229,3 +229,17 @@ class ChallengeFromTemplate(BaseModel):
 class ChallengeInvite(BaseModel):
     """Invite users to a challenge."""
     user_ids: List[str] = Field(..., min_length=1, max_length=20)
+
+
+# ============== MESSAGING MODELS (Phase 3) ==============
+
+
+class ConversationStart(BaseModel):
+    """Start a conversation from a user's profile."""
+    recipient_id: str
+    message: str = Field(..., min_length=1, max_length=2000)
+
+
+class MessageSend(BaseModel):
+    """Send a message in an existing conversation."""
+    content: str = Field(..., min_length=1, max_length=2000)
