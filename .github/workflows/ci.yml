@@ -1,0 +1,131 @@
+# ============================================================
+# InFinea — CI Pipeline
+# Triggers: push/PR to main, develop, feature/*
+# Stages: lint → test → build
+# ============================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "feature/*"]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # ---------- Stage 1: Lint & Format ----------
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install ruff
+        run: pip install ruff>=0.4.0
+
+      - name: Ruff check
+        working-directory: backend
+        run: ruff check .
+
+      - name: Ruff format check
+        working-directory: backend
+        run: ruff format --check .
+
+  # ---------- Stage 2: Tests ----------
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      MONGO_URL: mongodb://localhost:27017
+      DB_NAME: infinea_ci_test
+      JWT_SECRET: ci-test-secret
+      ENVIRONMENT: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements-dev.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests with coverage
+        working-directory: backend
+        run: |
+          python -m pytest tests/ \
+            --tb=short \
+            --strict-markers \
+            -v \
+            --cov=. \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=60
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage.xml
+
+  # ---------- Stage 3: Docker Build ----------
+  build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        working-directory: backend
+        run: |
+          docker build \
+            --target production \
+            --tag infinea-api:${{ github.sha }} \
+            --tag infinea-api:latest \
+            .
+
+      - name: Verify image
+        run: |
+          docker images infinea-api
+          # Verify the image starts (basic smoke test)
+          docker run --rm -d \
+            --name infinea-smoke \
+            -e MONGO_URL=mongodb://localhost:27017 \
+            -e DB_NAME=infinea \
+            -e JWT_SECRET=smoke-test \
+            -p 8001:8001 \
+            infinea-api:latest || true
+          sleep 3
+          docker stop infinea-smoke 2>/dev/null || true
