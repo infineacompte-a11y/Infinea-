@@ -1,0 +1,89 @@
+# ============================================================
+# InFinea .gitignore — Sécurité maximale
+# ============================================================
+
+# === Secrets & Environment ===
+.env
+.env.*
+.env.local
+.env.production
+.env.staging
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cert
+credentials.json
+service-account*.json
+secrets/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+*.egg-info/
+*.egg
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# === Node.js ===
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# === Build outputs ===
+frontend/build/
+frontend/dist/
+*.map
+
+# === OS files ===
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# === Logs ===
+logs/
+*.log
+
+# === Temporary ===
+tmp/
+temp/
+.tmp/
+*.tmp
+
+# === Docker (future) ===
+docker-compose.override.yml
