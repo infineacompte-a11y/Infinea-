@@ -23,6 +23,7 @@ ACTIVITY_TYPES = {
     "session_completed",
     "badge_earned",
     "streak_milestone",
+    "challenge_completed",
     "reflection_shared",
 }
 

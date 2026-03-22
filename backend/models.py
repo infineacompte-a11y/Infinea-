@@ -189,3 +189,43 @@ class ReactionCreate(BaseModel):
         pattern="^(bravo|inspire|fire)$",
         description="bravo=kudos, inspire=this motivates me, fire=on fire",
     )
+
+
+# ============== CHALLENGE MODELS (Phase 2) ==============
+
+
+class ChallengeCreate(BaseModel):
+    """Create a custom challenge."""
+    title: str = Field(..., min_length=3, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    challenge_type: str = Field(
+        ...,
+        pattern="^(duo|group|community)$",
+    )
+    category: str = Field(
+        default="mixed",
+        pattern="^(learning|productivity|well_being|mixed)$",
+    )
+    goal_type: str = Field(
+        ...,
+        pattern="^(sessions|time|streak)$",
+        description="sessions=count, time=minutes, streak=consecutive days",
+    )
+    goal_value: int = Field(..., gt=0, le=1000)
+    duration_days: int = Field(..., gt=0, le=90)
+    max_participants: Optional[int] = Field(None, gt=1, le=100)
+    privacy: str = Field(
+        default="invite_only",
+        pattern="^(public|invite_only)$",
+    )
+
+
+class ChallengeFromTemplate(BaseModel):
+    """Launch a challenge from a predefined template."""
+    template_id: str
+    invited_user_ids: Optional[List[str]] = []
+
+
+class ChallengeInvite(BaseModel):
+    """Invite users to a challenge."""
+    user_ids: List[str] = Field(..., min_length=1, max_length=20)

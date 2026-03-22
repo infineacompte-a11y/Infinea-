@@ -12,6 +12,7 @@ from auth import get_current_user
 from models import SessionStart, SessionComplete
 from routes.badges import check_and_award_badges
 from services.activity_service import emit_session_activity, emit_badge_activity, emit_streak_activity
+from services.challenge_service import update_challenge_progress
 
 router = APIRouter(prefix="/api")
 
@@ -142,6 +143,12 @@ async def complete_session(
             await emit_badge_activity(user["user_id"], badge)
 
         await emit_streak_activity(user["user_id"], new_streak)
+
+        # Update challenge progress (event-driven — auto-tracks active challenges)
+        await update_challenge_progress(user["user_id"], {
+            "category": session.get("category", ""),
+            "actual_duration": completion.actual_duration,
+        })
 
         return {
             "message": "Session completed!",
