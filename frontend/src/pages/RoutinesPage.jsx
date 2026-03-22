@@ -27,6 +27,7 @@ import {
   GripVertical,
   X,
   Trophy,
+  Crown,
   Flame,
   Play,
   Repeat,
@@ -45,10 +46,10 @@ import { toast } from "sonner";
 
 // ─── Constants ──────────────────────────────────────────
 const TIME_OF_DAY = [
-  { value: "morning", label: "Matin", icon: Sunrise, color: "text-amber-500 bg-amber-500/10 border-amber-500/20" },
-  { value: "afternoon", label: "Après-midi", icon: Sun, color: "text-orange-500 bg-orange-500/10 border-orange-500/20" },
+  { value: "morning", label: "Matin", icon: Sunrise, color: "text-[#E48C75] bg-[#E48C75]/40 border-[#E48C75]/20" },
+  { value: "afternoon", label: "Après-midi", icon: Sun, color: "text-[#E48C75] bg-[#E48C75]/40 border-[#E48C75]/20" },
   { value: "evening", label: "Soir", icon: Moon, color: "text-brand-teal bg-brand-teal/10 border-brand-teal/20" },
-  { value: "anytime", label: "Flexible", icon: Infinity, color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" },
+  { value: "anytime", label: "Flexible", icon: Infinity, color: "text-[#5DB786] bg-[#5DB786]/40 border-[#5DB786]/20" },
 ];
 
 const FREQUENCY_OPTIONS = [
@@ -124,7 +125,7 @@ function WeekHeatmap({ completionLog = [] }) {
       {days.map((day) => (
         <div key={day.key} className="flex flex-col items-center gap-0.5">
           <div className={`w-4 h-4 rounded-sm transition-colors ${
-            day.done ? "bg-emerald-500" : day.isToday ? "bg-muted border border-border" : "bg-muted/50"
+            day.done ? "bg-[#5DB786]" : day.isToday ? "bg-muted border border-border" : "bg-muted/50"
           }`} />
           <span className={`text-[8px] ${day.isToday ? "text-foreground font-bold" : "text-muted-foreground/50"}`}>
             {day.label}
@@ -198,43 +199,43 @@ function ExecutionDialog({ routine, open, onClose, onComplete }) {
           {/* Step progress */}
           <div className="flex items-center gap-1.5 mb-4">
             {items.map((_, i) => (
-              <div key={i} className={`flex-1 h-1.5 rounded-full transition-colors ${
-                i < currentStep ? "bg-emerald-500" : i === currentStep ? "bg-primary" : "bg-muted"
+              <div key={i} className={`flex-1 h-1.5 rounded-full transition-all duration-500 ${
+                i < currentStep ? "bg-[#5DB786]" : i === currentStep ? "bg-primary" : "bg-muted"
               }`} />
             ))}
           </div>
 
           {/* Current step */}
           <div className="text-center mb-6">
-            <Badge variant="outline" className="text-[10px] mb-3">
+            <Badge variant="outline" className="text-[10px] mb-3 rounded-lg">
               Étape {currentStep + 1}/{totalSteps}
             </Badge>
-            <h3 className="font-heading font-semibold text-lg mb-1">{current.title}</h3>
-            <p className="text-xs text-muted-foreground">{current.duration_minutes} min prévues</p>
+            <h3 className="font-sans font-semibold tracking-tight font-semibold text-lg mb-1">{current.title}</h3>
+            <p className="text-xs text-muted-foreground"><span className="tabular-nums">{current.duration_minutes}</span> min prévues</p>
           </div>
 
           {/* Timer */}
           <div className="text-center mb-4">
-            <p className={`text-4xl font-bold tabular-nums ${isOvertime ? "text-orange-500" : "text-foreground"}`}>
+            <p className={`text-4xl font-bold tabular-nums ${isOvertime ? "text-[#E48C75]" : "text-foreground"}`}>
               {formatTime(timer)}
             </p>
-            <Progress value={progress} className={`h-2 mt-3 ${isOvertime ? "[&>div]:bg-orange-500" : ""}`} />
+            <Progress value={progress} className={`h-2 mt-3 rounded-full [&>div]:rounded-full [&>div]:transition-all [&>div]:duration-500 ${isOvertime ? "[&>div]:bg-[#E48C75]" : ""}`} />
           </div>
 
           {/* Controls */}
           <div className="flex items-center justify-center gap-3">
             {!isRunning ? (
-              <Button onClick={() => setIsRunning(true)} className="gap-2 px-8">
+              <Button onClick={() => setIsRunning(true)} className="gap-2 px-8 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 btn-press">
                 <Play className="w-4 h-4" />
                 {timer === 0 ? "Démarrer" : "Reprendre"}
               </Button>
             ) : (
               <>
-                <Button variant="outline" onClick={() => setIsRunning(false)} className="gap-2">
+                <Button variant="outline" onClick={() => setIsRunning(false)} className="gap-2 rounded-xl transition-all duration-200 hover:bg-muted/80">
                   <Timer className="w-4 h-4" />
                   Pause
                 </Button>
-                <Button onClick={nextStep} className="gap-2">
+                <Button onClick={nextStep} className="gap-2 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 btn-press">
                   {currentStep < totalSteps - 1 ? (
                     <><SkipForward className="w-4 h-4" />Suivant</>
                   ) : (
@@ -260,7 +261,7 @@ function ExecutionDialog({ routine, open, onClose, onComplete }) {
 }
 
 // ─── Habit Card ─────────────────────────────────────────
-function HabitCard({ routine, onEdit, onToggle, onComplete, onLaunch }) {
+function HabitCard({ routine, onEdit, onToggle, onComplete, onLaunch, index = 0 }) {
   const tod = timeLabel(routine.time_of_day);
   const TodIcon = tod.icon;
   const itemCount = (routine.items || []).length;
@@ -277,35 +278,35 @@ function HabitCard({ routine, onEdit, onToggle, onComplete, onLaunch }) {
   const weekDone = completionLog.filter((e) => e.date >= weekAgoStr).length;
 
   return (
-    <Card className={`p-5 transition-all ${
-      isDoneToday ? "border-emerald-500/30 bg-emerald-500/3" :
-      routine.is_active ? "hover:border-primary/30" : "opacity-60"
-    }`}>
+    <Card className={`opacity-0 animate-fade-in p-5 group hover:shadow-lg hover:border-[#459492]/30 hover:-translate-y-0.5 active:translate-y-px transition-all duration-200 ${
+      isDoneToday ? "border-[#5DB786]/30 bg-[#5DB786]/3" :
+      routine.is_active ? "" : "opacity-60"
+    }`} style={{ animationDelay: `${index * 50}ms`, animationFillMode: "forwards" }}>
       {/* Header row */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <Badge variant="outline" className={`text-[10px] ${tod.color}`}>
+            <Badge variant="outline" className={`text-[10px] rounded-lg ${tod.color}`}>
               <TodIcon className="w-2.5 h-2.5 mr-1" />
               {tod.label}
             </Badge>
-            <Badge variant="outline" className="text-[10px] bg-muted/50 text-muted-foreground border-border">
+            <Badge variant="outline" className="text-[10px] rounded-lg bg-muted/50 text-muted-foreground border-border">
               <Repeat className="w-2.5 h-2.5 mr-1" />
               {freqLabel(routine.frequency)}
             </Badge>
             {isDoneToday && (
-              <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
+              <Badge variant="outline" className="text-[10px] rounded-lg bg-[#5DB786]/40 text-[#5DB786] border-[#5DB786]/20">
                 <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
                 Fait
               </Badge>
             )}
             {!routine.is_active && (
-              <Badge variant="outline" className="text-[10px] bg-muted/50 text-muted-foreground border-border">
+              <Badge variant="outline" className="text-[10px] rounded-lg bg-muted/50 text-muted-foreground border-border">
                 En pause
               </Badge>
             )}
           </div>
-          <h3 className="font-heading font-semibold text-base">{routine.name}</h3>
+          <h3 className="font-sans font-semibold tracking-tight font-semibold text-base">{routine.name}</h3>
           {routine.description && (
             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{routine.description}</p>
           )}
@@ -317,7 +318,7 @@ function HabitCard({ routine, onEdit, onToggle, onComplete, onLaunch }) {
             className="p-1.5 rounded-lg hover:bg-muted/50 transition-colors"
             title={routine.is_active ? "Mettre en pause" : "Activer"}>
             {routine.is_active
-              ? <ToggleRight className="w-5 h-5 text-emerald-500" />
+              ? <ToggleRight className="w-5 h-5 text-[#5DB786]" />
               : <ToggleLeft className="w-5 h-5 text-muted-foreground" />}
           </button>
           <button onClick={(e) => { e.stopPropagation(); onEdit(); }}
@@ -328,18 +329,18 @@ function HabitCard({ routine, onEdit, onToggle, onComplete, onLaunch }) {
       </div>
 
       {/* Streak + Week heatmap row */}
-      <div className="flex items-center justify-between mb-3 p-2.5 rounded-lg bg-muted/20">
+      <div className="flex items-center justify-between mb-3 p-2.5 rounded-xl bg-muted/20">
         <div className="flex items-center gap-3">
           {streak > 0 && (
             <div className="flex items-center gap-1">
-              <Flame className={`w-4 h-4 ${streak >= 7 ? "text-orange-500" : "text-orange-400"}`} />
+              <Flame className={`w-4 h-4 ${streak >= 7 ? "text-[#E48C75]" : "text-[#E48C75]"}`} />
               <span className="text-sm font-bold tabular-nums">{streak}</span>
               <span className="text-[10px] text-muted-foreground">jours</span>
             </div>
           )}
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Calendar className="w-3 h-3" />
-            <span>{weekDone}/7 cette sem.</span>
+            <span><span className="tabular-nums">{weekDone}</span>/7 cette sem.</span>
           </div>
         </div>
         <WeekHeatmap completionLog={completionLog} />
@@ -349,12 +350,12 @@ function HabitCard({ routine, onEdit, onToggle, onComplete, onLaunch }) {
       {itemCount > 0 && (
         <div className="space-y-1.5 mb-3">
           {(routine.items || []).slice(0, 4).map((item, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs">
+            <div key={i} className="flex items-center gap-2 text-xs hover:bg-muted/30 transition-all duration-200 rounded-xl p-1 -mx-1">
               <span className="w-5 h-5 rounded-md bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold shrink-0">
                 {i + 1}
               </span>
               <span className="truncate flex-1">{item.title}</span>
-              <span className="text-muted-foreground shrink-0">{item.duration_minutes} min</span>
+              <span className="text-muted-foreground shrink-0 tabular-nums">{item.duration_minutes} min</span>
             </div>
           ))}
           {itemCount > 4 && (
@@ -368,23 +369,23 @@ function HabitCard({ routine, onEdit, onToggle, onComplete, onLaunch }) {
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
             <Clock className="w-3 h-3" />
-            <span>{totalMin} min</span>
+            <span className="tabular-nums">{totalMin} min</span>
           </div>
           <div className="flex items-center gap-1">
             <Play className="w-3 h-3" />
-            <span>{itemCount} action{itemCount !== 1 ? "s" : ""}</span>
+            <span className="tabular-nums">{itemCount}</span> action{itemCount !== 1 ? "s" : ""}
           </div>
           {routine.times_completed > 0 && (
             <div className="flex items-center gap-1">
-              <Trophy className="w-3 h-3 text-amber-500" />
-              <span>{routine.times_completed}x</span>
+              <Trophy className="w-3 h-3 text-[#5DB786]" />
+              <span className="tabular-nums">{routine.times_completed}x</span>
             </div>
           )}
         </div>
 
         <div className="flex items-center gap-1.5">
           {!isDoneToday && routine.is_active && (
-            <Button size="sm" variant="default" className="h-7 text-xs gap-1"
+            <Button size="sm" variant="default" className="h-7 text-xs gap-1 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 btn-press"
               onClick={(e) => { e.stopPropagation(); onLaunch(); }}>
               <Play className="w-3 h-3" />
               Lancer
@@ -392,7 +393,7 @@ function HabitCard({ routine, onEdit, onToggle, onComplete, onLaunch }) {
           )}
           {!isDoneToday && routine.is_active && (
             <Button size="sm" variant="outline"
-              className="h-7 text-xs gap-1 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+              className="h-7 text-xs gap-1 rounded-xl border-[#5DB786]/30 text-[#5DB786] hover:bg-[#5DB786]/40 transition-all duration-200 btn-press"
               onClick={(e) => { e.stopPropagation(); onComplete(); }}>
               <CheckCircle2 className="w-3 h-3" />
               Fait
@@ -590,82 +591,92 @@ export default function RoutinesPage() {
   const totalStreak = activeRoutines.reduce((max, r) => Math.max(max, r.streak_current || 0), 0);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen app-bg-mesh">
       <Sidebar />
-      <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
-        <div className="max-w-2xl mx-auto">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4">
+      <main className="lg:ml-64 pt-14 lg:pt-0 pb-8">
+        <div className="section-dark-header px-4 lg:px-8 pt-8 lg:pt-10 pb-8">
+          <div className="max-w-2xl mx-auto flex items-center justify-between">
             <div>
-              <h1 className="font-heading text-2xl font-bold flex items-center gap-2">
-                <CalendarClock className="w-6 h-6 text-primary" />
-                Mes Habitudes
+              <h1 className="text-display text-3xl lg:text-4xl font-semibold text-white opacity-0 animate-fade-in">
+                Habitudes
               </h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Construis des habitudes durables, jour après jour
+              <p className="text-white/60 text-sm mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
+                Construisez vos routines quotidiennes
               </p>
             </div>
             <Button onClick={() => { setEditingRoutine(null); setForm(emptyForm); setNewItem({ title: "", duration_minutes: 5 }); setShowDialog(true); }}
-              disabled={!canCreate} className="gap-1.5" size="sm">
+              disabled={!canCreate} className="gap-1.5 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 btn-press" size="sm">
               <Plus className="w-4 h-4" />
               Nouvelle
             </Button>
           </div>
+        </div>
+        <div className="px-4 lg:px-8">
+        <div className="max-w-2xl mx-auto">
 
           {/* Summary bar (when habits exist) */}
           {!isLoading && activeRoutines.length > 0 && (
-            <Card className="p-3 mb-5 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1.5 text-sm">
-                  <CheckCircle2 className={`w-4 h-4 ${doneToday === activeRoutines.length ? "text-emerald-500" : "text-muted-foreground"}`} />
-                  <span className="font-medium tabular-nums">{doneToday}/{activeRoutines.length}</span>
-                  <span className="text-xs text-muted-foreground">aujourd'hui</span>
-                </div>
-                {totalStreak > 0 && (
+            <div className="opacity-0 animate-fade-in" style={{ animationDelay: "100ms", animationFillMode: "forwards" }}>
+              <Card className="p-3 mb-6 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-4">
                   <div className="flex items-center gap-1.5 text-sm">
-                    <Flame className="w-4 h-4 text-orange-500" />
-                    <span className="font-medium tabular-nums">{totalStreak}</span>
-                    <span className="text-xs text-muted-foreground">meilleur streak</span>
+                    <CheckCircle2 className={`w-4 h-4 ${doneToday === activeRoutines.length ? "text-[#5DB786]" : "text-muted-foreground"}`} />
+                    <span className="font-medium tabular-nums">{doneToday}/{activeRoutines.length}</span>
+                    <span className="text-xs text-muted-foreground">aujourd'hui</span>
                   </div>
+                  {totalStreak > 0 && (
+                    <div className="flex items-center gap-1.5 text-sm">
+                      <Flame className="w-4 h-4 text-[#E48C75]" />
+                      <span className="font-medium tabular-nums">{totalStreak}</span>
+                      <span className="text-xs text-muted-foreground">meilleur streak</span>
+                    </div>
+                  )}
+                </div>
+                {doneToday === activeRoutines.length && activeRoutines.length > 0 && (
+                  <Badge className="text-[10px] rounded-lg bg-[#5DB786]/40 text-[#5DB786] border-[#5DB786]/20">
+                    <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+                    Journée parfaite
+                  </Badge>
                 )}
-              </div>
-              {doneToday === activeRoutines.length && activeRoutines.length > 0 && (
-                <Badge className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
-                  <Sparkles className="w-2.5 h-2.5 mr-0.5" />
-                  Journée parfaite
-                </Badge>
-              )}
-            </Card>
+              </Card>
+            </div>
           )}
 
           {/* Loading */}
           {isLoading ? (
-            <CardsSkeleton count={3} />
-          ) : routines.length === 0 ? (
-            <Card className="p-8 text-center">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mx-auto mb-4 ring-1 ring-primary/10">
-                <CalendarClock className="w-10 h-10 text-primary" />
+            <div className="opacity-0 animate-fade-in" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
+              <div className="flex flex-col items-center justify-center py-16 gap-3">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Chargement...</p>
               </div>
-              <h3 className="font-heading font-semibold text-lg mb-2">
-                Crée ta première habitude
-              </h3>
-              <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto leading-relaxed">
-                Définis des micro-routines quotidiennes avec un suivi de progression et de streak. Routine matinale, pause productive, rituel du soir...
-              </p>
-              <Button onClick={() => { setEditingRoutine(null); setForm(emptyForm); setShowDialog(true); }} className="gap-2">
-                <Plus className="w-4 h-4" />
-                Créer une habitude
-              </Button>
-            </Card>
+            </div>
+          ) : routines.length === 0 ? (
+            <div className="opacity-0 animate-fade-in" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
+              <Card className="p-8 text-center">
+                <div className="bg-gradient-to-br from-[#459492]/20 to-transparent rounded-2xl w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                  <CalendarClock className="w-8 h-8 text-[#459492]" />
+                </div>
+                <h3 className="font-sans font-semibold tracking-tight font-semibold text-lg mb-2">
+                  Crée ta première habitude
+                </h3>
+                <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto leading-relaxed">
+                  Définis des micro-routines quotidiennes avec un suivi de progression et de streak. Routine matinale, pause productive, rituel du soir...
+                </p>
+                <Button onClick={() => { setEditingRoutine(null); setForm(emptyForm); setShowDialog(true); }} className="gap-2 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 btn-press">
+                  <Plus className="w-4 h-4" />
+                  Créer une habitude
+                </Button>
+              </Card>
+            </div>
           ) : (
             <>
               {activeRoutines.length > 0 && (
-                <div className="space-y-3 mb-6">
+                <div className="opacity-0 animate-fade-in space-y-3 mb-6" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
                   <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Actives ({activeRoutines.length})
                   </h2>
-                  {activeRoutines.map((r) => (
-                    <HabitCard key={r.routine_id} routine={r}
+                  {activeRoutines.map((r, index) => (
+                    <HabitCard key={r.routine_id} routine={r} index={index}
                       onEdit={() => openEdit(r)}
                       onToggle={() => handleToggle(r)}
                       onComplete={() => handleComplete(r)}
@@ -676,12 +687,12 @@ export default function RoutinesPage() {
               )}
 
               {pausedRoutines.length > 0 && (
-                <div className="space-y-3">
+                <div className="opacity-0 animate-fade-in space-y-3" style={{ animationDelay: "300ms", animationFillMode: "forwards" }}>
                   <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     En pause ({pausedRoutines.length})
                   </h2>
-                  {pausedRoutines.map((r) => (
-                    <HabitCard key={r.routine_id} routine={r}
+                  {pausedRoutines.map((r, index) => (
+                    <HabitCard key={r.routine_id} routine={r} index={index}
                       onEdit={() => openEdit(r)}
                       onToggle={() => handleToggle(r)}
                       onComplete={() => handleComplete(r)}
@@ -692,15 +703,17 @@ export default function RoutinesPage() {
               )}
 
               {!canCreate && !isPremium && (
-                <Card className="p-4 mt-4 border-amber-500/20 bg-amber-500/5 text-center">
-                  <p className="text-sm text-amber-600 mb-2">Limite de {maxRoutines} habitudes atteinte</p>
-                  <Button variant="outline" size="sm"
-                    className="border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
-                    onClick={() => window.location.href = "/pricing"}>
-                    <Trophy className="w-3.5 h-3.5 mr-1.5" />
-                    Passer en Premium
-                  </Button>
-                </Card>
+                <div className="opacity-0 animate-fade-in" style={{ animationDelay: "400ms", animationFillMode: "forwards" }}>
+                  <Card className="p-4 mt-4 border-[#E48C75]/20 bg-[#E48C75]/5 text-center">
+                    <p className="text-sm text-muted-foreground mb-2">Limite de {maxRoutines} habitudes atteinte</p>
+                    <Button variant="outline" size="sm"
+                      className="border-[#E48C75]/30 text-[#E48C75] hover:bg-[#E48C75]/40 rounded-xl transition-all duration-200 btn-press"
+                      onClick={() => window.location.href = "/pricing"}>
+                      <Crown className="w-3.5 h-3.5 mr-1.5 text-[#E48C75]" />
+                      Passer en Premium
+                    </Button>
+                  </Card>
+                </div>
               )}
             </>
           )}
@@ -723,7 +736,7 @@ export default function RoutinesPage() {
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Nom de l'habitude</label>
                   <input
-                    className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all duration-200"
                     placeholder="Ex: Routine matinale, Pause productive..."
                     value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                     maxLength={100} autoFocus
@@ -753,7 +766,7 @@ export default function RoutinesPage() {
                       return (
                         <button key={tod.value} type="button"
                           onClick={() => setForm({ ...form, time_of_day: tod.value })}
-                          className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl text-xs font-medium border transition-all ${
+                          className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl text-xs font-medium border transition-all duration-200 ${
                             isActive ? "bg-primary text-primary-foreground border-primary scale-105" : "bg-muted/30 border-border hover:border-primary/30"
                           }`}>
                           <Icon className="w-4 h-4" />
@@ -773,7 +786,7 @@ export default function RoutinesPage() {
                       return (
                         <button key={opt.value} type="button"
                           onClick={() => setForm({ ...form, frequency: opt.value, frequency_days: opt.value === "custom" ? form.frequency_days : [] })}
-                          className={`py-2 px-3 rounded-xl text-xs font-medium border transition-all ${
+                          className={`py-2 px-3 rounded-xl text-xs font-medium border transition-all duration-200 ${
                             isActive ? "bg-primary text-primary-foreground border-primary" : "bg-muted/30 border-border hover:border-primary/30"
                           }`}>
                           {opt.label}
@@ -793,7 +806,7 @@ export default function RoutinesPage() {
                               const days = form.frequency_days || [];
                               setForm({ ...form, frequency_days: isSelected ? days.filter((d) => d !== i) : [...days, i] });
                             }}
-                            className={`w-10 h-10 rounded-lg text-xs font-medium border transition-all ${
+                            className={`w-10 h-10 rounded-lg text-xs font-medium border transition-all duration-200 ${
                               isSelected ? "bg-primary text-primary-foreground border-primary" : "bg-muted/30 border-border hover:border-primary/30"
                             }`}>
                             {label}
@@ -807,13 +820,13 @@ export default function RoutinesPage() {
                 {/* Items list */}
                 <div>
                   <label className="text-sm font-medium mb-2 block">
-                    Actions de l'habitude ({form.items.length})
+                    Actions de l'habitude (<span className="tabular-nums">{form.items.length}</span>)
                   </label>
 
                   {form.items.length > 0 && (
                     <div className="space-y-1.5 mb-3">
                       {form.items.map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border border-border/50 group">
+                        <div key={idx} className="flex items-center gap-2 p-2 rounded-xl bg-muted/30 border border-border/50 group hover:bg-muted/50 transition-all duration-200">
                           <div className="flex flex-col gap-0.5 shrink-0">
                             <button type="button" onClick={() => moveItem(idx, -1)}
                               className="text-muted-foreground hover:text-foreground transition-colors p-0.5" disabled={idx === 0}>
@@ -829,23 +842,23 @@ export default function RoutinesPage() {
                             {idx + 1}
                           </span>
                           <span className="flex-1 text-sm truncate">{item.title}</span>
-                          <span className="text-xs text-muted-foreground shrink-0">{item.duration_minutes} min</span>
+                          <span className="text-xs text-muted-foreground shrink-0 tabular-nums">{item.duration_minutes} min</span>
                           <button type="button" onClick={() => removeItem(idx)}
-                            className="p-1 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
+                            className="p-1 rounded hover:bg-[#E48C75]/40 text-muted-foreground hover:text-[#E48C75] transition-colors opacity-0 group-hover:opacity-100">
                             <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       ))}
                       <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground pt-1">
                         <Clock className="w-3 h-3" />
-                        <span>Total : {form.items.reduce((s, it) => s + it.duration_minutes, 0)} min</span>
+                        <span>Total : <span className="tabular-nums">{form.items.reduce((s, it) => s + it.duration_minutes, 0)}</span> min</span>
                       </div>
                     </div>
                   )}
 
                   {/* Add item form */}
                   <div className="flex flex-wrap gap-2">
-                    <input className="flex-1 min-w-0 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    <input className="flex-1 min-w-0 rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all duration-200"
                       placeholder="Nom de l'action..." value={newItem.title}
                       onChange={(e) => setNewItem({ ...newItem, title: e.target.value })}
                       maxLength={100}
@@ -853,7 +866,7 @@ export default function RoutinesPage() {
                     />
                     <div className="flex gap-2">
                       <DurationPicker value={newItem.duration_minutes} onChange={(v) => setNewItem({ ...newItem, duration_minutes: v })} />
-                      <Button type="button" size="sm" variant="outline" onClick={addItem} disabled={!newItem.title.trim()} className="shrink-0">
+                      <Button type="button" size="sm" variant="outline" onClick={addItem} disabled={!newItem.title.trim()} className="shrink-0 rounded-xl transition-all duration-200 hover:bg-muted/80">
                         <Plus className="w-4 h-4" />
                       </Button>
                     </div>
@@ -863,14 +876,14 @@ export default function RoutinesPage() {
 
               <DialogFooter className="flex-col sm:flex-row gap-2">
                 {editingRoutine && (
-                  <Button variant="outline" className="text-red-500 border-red-500/30 hover:bg-red-500/10 sm:mr-auto"
+                  <Button variant="outline" className="text-[#E48C75] border-[#E48C75]/30 hover:bg-[#E48C75]/40 sm:mr-auto rounded-xl transition-all duration-200"
                     onClick={() => { setDeleteConfirm(editingRoutine.routine_id); setShowDialog(false); }}>
                     <Trash2 className="w-4 h-4 mr-1.5" />
                     Supprimer
                   </Button>
                 )}
-                <Button variant="outline" onClick={() => setShowDialog(false)}>Annuler</Button>
-                <Button onClick={handleSave} disabled={!form.name.trim() || form.items.length === 0 || isSaving} className="gap-2">
+                <Button variant="outline" onClick={() => setShowDialog(false)} className="rounded-xl transition-all duration-200 hover:bg-muted/80">Annuler</Button>
+                <Button onClick={handleSave} disabled={!form.name.trim() || form.items.length === 0 || isSaving} className="gap-2 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 btn-press">
                   {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                   {editingRoutine ? "Enregistrer" : "Créer l'habitude"}
                 </Button>
@@ -888,8 +901,8 @@ export default function RoutinesPage() {
                 Cette action est irréversible. L'habitude et tout son historique seront supprimés.
               </p>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Annuler</Button>
-                <Button variant="destructive" onClick={() => handleDelete(deleteConfirm)} className="gap-1.5">
+                <Button variant="outline" onClick={() => setDeleteConfirm(null)} className="rounded-xl transition-all duration-200 hover:bg-muted/80">Annuler</Button>
+                <Button variant="destructive" onClick={() => handleDelete(deleteConfirm)} className="gap-1.5 rounded-xl transition-all duration-200 btn-press">
                   <Trash2 className="w-4 h-4" />
                   Supprimer
                 </Button>
@@ -907,6 +920,7 @@ export default function RoutinesPage() {
               setExecutingRoutine(null);
             }}
           />
+        </div>
         </div>
       </main>
     </div>

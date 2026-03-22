@@ -44,17 +44,31 @@ const categoryIcons = {
 };
 
 const categoryColors = {
-  learning: "text-blue-500 bg-blue-500/10",
-  productivity: "text-amber-500 bg-amber-500/10",
-  well_being: "text-emerald-500 bg-emerald-500/10",
-  creativity: "text-purple-500 bg-purple-500/10",
-  fitness: "text-red-500 bg-red-500/10",
-  mindfulness: "text-cyan-500 bg-cyan-500/10",
-  leadership: "text-brand-teal bg-brand-teal/10",
-  finance: "text-green-500 bg-green-500/10",
-  relations: "text-pink-500 bg-pink-500/10",
-  mental_health: "text-teal-500 bg-teal-500/10",
-  entrepreneurship: "text-orange-500 bg-orange-500/10",
+  learning: "text-[#459492] bg-[#459492]/40",
+  productivity: "text-[#E48C75] bg-[#E48C75]/40",
+  well_being: "text-[#5DB786] bg-[#5DB786]/40",
+  creativity: "text-[#55B3AE] bg-[#55B3AE]/40",
+  fitness: "text-[#E48C75] bg-[#E48C75]/40",
+  mindfulness: "text-[#459492] bg-[#459492]/40",
+  leadership: "text-[#7B8FA1] bg-[#7B8FA1]/20",
+  finance: "text-[#2E9B6A] bg-[#2E9B6A]/20",
+  relations: "text-[#C4806E] bg-[#C4806E]/20",
+  mental_health: "text-[#6EAAA8] bg-[#6EAAA8]/20",
+  entrepreneurship: "text-[#E48C75] bg-[#E48C75]/40",
+};
+
+const categoryBorderColors = {
+  learning: "border-l-[#459492]",
+  productivity: "border-l-[#E48C75]",
+  well_being: "border-l-[#5DB786]",
+  creativity: "border-l-[#55B3AE]",
+  fitness: "border-l-[#E48C75]",
+  mindfulness: "border-l-[#459492]",
+  leadership: "border-l-[#7B8FA1]",
+  finance: "border-l-[#2E9B6A]",
+  relations: "border-l-[#C4806E]",
+  mental_health: "border-l-[#6EAAA8]",
+  entrepreneurship: "border-l-[#E48C75]",
 };
 
 const categoryLabels = {
@@ -73,6 +87,35 @@ const premiumCategoryLabels = {
   mental_health: "Santé mentale",
   entrepreneurship: "Entrepreneuriat",
 };
+
+function SkeletonCard() {
+  return (
+    <div className="animate-pulse rounded-xl bg-card border border-border p-4">
+      <div className="flex items-start gap-4">
+        <div className="w-12 h-12 rounded-xl bg-muted flex-shrink-0" />
+        <div className="flex-1 space-y-3">
+          <div className="h-4 bg-muted rounded-lg w-3/4" />
+          <div className="h-3 bg-muted rounded-lg w-full" />
+          <div className="h-3 bg-muted rounded-lg w-1/2" />
+          <div className="flex gap-3 pt-1">
+            <div className="h-3 bg-muted rounded-lg w-16" />
+            <div className="h-3 bg-muted rounded-lg w-12" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SkeletonGrid() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <SkeletonCard key={i} />
+      ))}
+    </div>
+  );
+}
 
 export default function ActionsLibrary() {
   const { user } = useAuth();
@@ -145,41 +188,53 @@ export default function ActionsLibrary() {
   }, {});
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen app-bg-mesh">
       <Sidebar />
 
       {/* Main Content */}
-      <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
-        <div className="max-w-5xl mx-auto">
-          {/* Header */}
-          <div className="mb-8 flex items-start justify-between">
-            <div>
-              <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="library-title">
-                Bibliothèque d'actions
-              </h1>
-              <p className="text-muted-foreground">
-                Explorez toutes les micro-actions disponibles
-              </p>
+      <main className="lg:ml-64 pt-14 lg:pt-0 pb-8">
+        {/* Dark Header */}
+        <div className="section-dark-header px-4 lg:px-8 pt-8 lg:pt-10 pb-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-start justify-between">
+              <div>
+                <h1 className="text-display text-3xl lg:text-4xl font-semibold text-white opacity-0 animate-fade-in" data-testid="library-title">
+                  Bibliothèque
+                </h1>
+                <p className="text-white/60 text-sm mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
+                  Explorez plus de 700 micro-actions
+                </p>
+              </div>
+              <Button
+                onClick={() => setShowCreateModal(true)}
+                className="btn-premium rounded-xl shrink-0 text-white border-0 opacity-0 animate-fade-in"
+                style={{ animationDelay: "100ms" }}
+                data-testid="create-action-btn"
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                Créer une action
+              </Button>
             </div>
-            <Button
-              onClick={() => setShowCreateModal(true)}
-              className="rounded-xl shrink-0"
-              data-testid="create-action-btn"
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              Créer une action
-            </Button>
           </div>
+        </div>
 
-          {/* Category Tabs */}
+        <div className="px-4 lg:px-8">
+          <div className="max-w-6xl mx-auto space-y-6 pt-6">
+          {/* Category Tabs — entrance animation with delay */}
           <Tabs value={activeCategory} onValueChange={setActiveCategory} className="mb-8">
-            <TabsList className="bg-card border border-border p-1 h-auto flex-wrap">
-              <TabsTrigger value="all" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg px-4 py-2">
+            <TabsList
+              className="bg-card border border-border p-1 h-auto flex-wrap opacity-0 animate-fade-in"
+              style={{ animationDelay: "100ms", animationFillMode: "forwards" }}
+            >
+              <TabsTrigger
+                value="all"
+                className="data-[state=active]:tab-active-premium rounded-lg px-4 py-2 transition-[background,box-shadow] duration-200 hover:bg-muted/60"
+              >
                 Toutes
               </TabsTrigger>
               <TabsTrigger
                 value="my_actions"
-                className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg px-4 py-2 gap-1"
+                className="data-[state=active]:tab-active-premium rounded-lg px-4 py-2 gap-1 transition-[background,box-shadow] duration-200 hover:bg-muted/60"
                 data-testid="tab-my-actions"
               >
                 <User className="w-3.5 h-3.5" />
@@ -192,7 +247,7 @@ export default function ActionsLibrary() {
                 <TabsTrigger
                   key={key}
                   value={key}
-                  className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg px-4 py-2"
+                  className="data-[state=active]:tab-active-premium rounded-lg px-4 py-2 transition-[background,box-shadow] duration-200 hover:bg-muted/60"
                   data-testid={`tab-${key}`}
                 >
                   {label}
@@ -204,13 +259,13 @@ export default function ActionsLibrary() {
                   <TabsTrigger
                     key={key}
                     value={key}
-                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg px-4 py-2 gap-1"
+                    className="data-[state=active]:tab-active-premium rounded-lg px-4 py-2 gap-1 transition-[background,box-shadow] duration-200 hover:bg-muted/60"
                     data-testid={`tab-${key}`}
                   >
                     {isPremium ? (
                       <Lock className="w-3 h-3" />
                     ) : (
-                      <Crown className="w-3 h-3 text-amber-500" />
+                      <Crown className="w-5 h-5 text-[#E48C75]" />
                     )}
                     {label}
                   </TabsTrigger>
@@ -221,23 +276,22 @@ export default function ActionsLibrary() {
 
           {/* Actions Display */}
           {isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
+            /* Skeleton loading — replaces spinner */
+            <SkeletonGrid />
           ) : isMyActions ? (
             /* Mes actions — grouped by category */
             customActions.length === 0 ? (
               <div className="text-center py-20 animate-fade-in">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <Plus className="w-8 h-8 text-primary" />
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#459492]/20 to-transparent flex items-center justify-center mx-auto mb-4">
+                  <Plus className="w-8 h-8 text-primary animate-pulse" />
                 </div>
-                <h3 className="font-heading text-xl mb-2">Aucune action personnalisée</h3>
+                <h3 className="font-sans font-semibold tracking-tight text-xl mb-2">Aucune action personnalisée</h3>
                 <p className="text-muted-foreground mb-6">
                   Créez votre première action avec l'IA, elle apparaîtra ici.
                 </p>
                 <Button
                   onClick={() => setShowCreateModal(true)}
-                  className="rounded-xl"
+                  className="btn-premium rounded-xl text-white border-0"
                 >
                   <Sparkles className="w-4 h-4 mr-2" />
                   Créer une action
@@ -254,23 +308,24 @@ export default function ActionsLibrary() {
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${categoryColors[cat] || "bg-muted"}`}>
                           <CatIcon className="w-4 h-4" />
                         </div>
-                        <h2 className="font-heading font-semibold text-lg">{catLabel}</h2>
+                        <h2 className="font-sans font-semibold tracking-tight font-semibold text-lg">{catLabel}</h2>
                         <Badge variant="secondary" className="text-xs">{catActions.length}</Badge>
                       </div>
-                      <div className="grid md:grid-cols-2 gap-4">
-                        {catActions.map((action) => {
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {catActions.map((action, i) => {
                           const Icon = categoryIcons[action.category] || Sparkles;
                           return (
                             <Card
                               key={action.action_id}
-                              className="action-card cursor-pointer"
+                              className={`group action-card cursor-pointer border-l-[3px] ${categoryBorderColors[action.category] || "border-l-border"} hover:shadow-lg hover:border-[#459492]/30 hover:-translate-y-0.5 active:translate-y-px transition-all duration-200 opacity-0 animate-fade-in`}
+                              style={{ animationDelay: `${i * 50}ms`, animationFillMode: "forwards" }}
                               onClick={() => startSession(action.action_id)}
                               data-testid={`action-${action.action_id}`}
                             >
                               <CardContent className="p-4">
                                 <div className="flex items-start justify-between gap-4">
                                   <div className="flex items-start gap-4">
-                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${categoryColors[action.category]}`}>
+                                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center group-hover:shadow-md transition-shadow duration-200 ${categoryColors[action.category]}`}>
                                       <Icon className="w-6 h-6" />
                                     </div>
                                     <div>
@@ -288,7 +343,7 @@ export default function ActionsLibrary() {
                                       </div>
                                     </div>
                                   </div>
-                                  <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                                  <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0 group-hover:translate-x-1 transition-transform duration-200" />
                                 </div>
                               </CardContent>
                             </Card>
@@ -302,22 +357,27 @@ export default function ActionsLibrary() {
             )
           ) : (
             /* Standard grid — all or filtered by category */
-            <div className="grid md:grid-cols-2 gap-4" data-testid="actions-grid">
-              {filteredActions.map((action) => {
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="actions-grid">
+              {filteredActions.map((action, i) => {
                 const Icon = categoryIcons[action.category] || Sparkles;
                 const isPremiumLocked = action.is_premium && user?.subscription_tier !== "premium";
 
                 return (
                   <Card
                     key={action.action_id}
-                    className={`action-card cursor-pointer ${isPremiumLocked ? "opacity-80" : ""}`}
+                    className={`group action-card cursor-pointer border-l-[3px] ${categoryBorderColors[action.category] || "border-l-border"} hover:shadow-md hover:border-border/80 hover:-translate-y-0.5 active:translate-y-px transition-all duration-300 ease-out opacity-0 animate-fade-in ${isPremiumLocked ? "opacity-75" : ""}`}
+                    style={{ animationDelay: `${i * 50}ms`, animationFillMode: "forwards" }}
                     onClick={() => startSession(action.action_id)}
                     data-testid={`action-${action.action_id}`}
                   >
-                    <CardContent className="p-4">
+                    <CardContent className="p-4 relative">
+                      {/* Premium locked overlay hint */}
+                      {isPremiumLocked && (
+                        <div className="absolute inset-0 rounded-xl bg-background/30 pointer-events-none z-10" />
+                      )}
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex items-start gap-4">
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${categoryColors[action.category]}`}>
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center group-hover:shadow-md transition-shadow duration-200 ${categoryColors[action.category]}`}>
                             <Icon className="w-6 h-6" />
                           </div>
                           <div>
@@ -329,9 +389,12 @@ export default function ActionsLibrary() {
                                 </Badge>
                               )}
                               {action.is_premium && (
-                                <Badge variant="secondary" className="text-xs flex items-center gap-1">
-                                  {isPremiumLocked && <Lock className="w-3 h-3" />}
-                                  Premium
+                                <Badge
+                                  variant="secondary"
+                                  className={`text-xs flex items-center gap-1 ${isPremiumLocked ? "premium-badge text-white border-0" : ""}`}
+                                >
+                                  {isPremiumLocked && <Lock className="w-3 h-3 relative z-10" />}
+                                  <span className="relative z-10">Premium</span>
                                 </Badge>
                               )}
                             </div>
@@ -341,9 +404,15 @@ export default function ActionsLibrary() {
                               <span>•</span>
                               <span className="capitalize">{action.energy_level}</span>
                             </div>
+                            {/* Premium locked hover message */}
+                            {isPremiumLocked && (
+                              <p className="text-xs text-[#E48C75] mt-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                Passez Premium pour débloquer
+                              </p>
+                            )}
                           </div>
                         </div>
-                        <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                        <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0 group-hover:translate-x-1 transition-transform duration-200" />
                       </div>
                     </CardContent>
                   </Card>
@@ -353,12 +422,15 @@ export default function ActionsLibrary() {
           )}
 
           {filteredActions.length === 0 && !isLoading && !isMyActions && (
-            <div className="text-center py-20">
-              <Sparkles className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="font-heading text-xl mb-2">Aucune action trouvée</h3>
+            <div className="text-center py-20 animate-fade-in">
+              <div className="bg-gradient-to-br from-[#459492]/20 to-transparent rounded-2xl p-4 w-fit mx-auto mb-4">
+                <Sparkles className="w-12 h-12 text-muted-foreground animate-pulse" />
+              </div>
+              <h3 className="font-sans font-semibold tracking-tight text-xl mb-2">Aucune action trouvée</h3>
               <p className="text-muted-foreground">Essayez une autre catégorie</p>
             </div>
           )}
+          </div>
         </div>
       </main>
 

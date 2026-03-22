@@ -120,11 +120,16 @@ export default function GroupDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen app-bg-mesh">
         <Sidebar />
         <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
-          <div className="flex justify-center py-20">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <div className="max-w-3xl mx-auto">
+            <div className="flex justify-center py-20">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Chargement...</p>
+              </div>
+            </div>
           </div>
         </main>
       </div>
@@ -143,183 +148,196 @@ export default function GroupDetailPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen app-bg-mesh">
       <Sidebar />
       <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
         <div className="max-w-3xl mx-auto">
           {/* Back + header */}
-          <div className="mb-6">
-            <Link
-              to="/groups"
-              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground text-sm mb-4 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Mes Groupes
-            </Link>
+          <div className="opacity-0 animate-fade-in" style={{ animationDelay: "100ms", animationFillMode: "forwards" }}>
+            <div className="mb-6">
+              <Link
+                to="/groups"
+                className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground text-sm mb-4 transition-colors group"
+              >
+                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform duration-200" />
+                Mes Groupes
+              </Link>
 
-            <div className="flex items-start justify-between">
-              <div>
-                <h1 className="text-2xl font-heading font-bold text-foreground">
-                  {group.name}
-                </h1>
-                {group.description && (
-                  <p className="text-muted-foreground text-sm mt-1">{group.description}</p>
-                )}
-                <p className="text-muted-foreground text-xs mt-2">
-                  {members.length} membre{members.length > 1 ? "s" : ""} · Créé le{" "}
-                  {new Date(group.created_at).toLocaleDateString("fr-FR", {
-                    day: "numeric",
-                    month: "long",
-                  })}
-                </p>
-              </div>
+              <div className="flex items-start justify-between">
+                <div>
+                  <h1 className="text-2xl font-sans font-semibold tracking-tight font-bold text-foreground">
+                    {group.name}
+                  </h1>
+                  {group.description && (
+                    <p className="text-muted-foreground text-sm mt-1">{group.description}</p>
+                  )}
+                  <p className="text-muted-foreground text-xs mt-2">
+                    <span className="tabular-nums">{members.length}</span> membre{members.length > 1 ? "s" : ""} · Créé le{" "}
+                    {new Date(group.created_at).toLocaleDateString("fr-FR", {
+                      day: "numeric",
+                      month: "long",
+                    })}
+                  </p>
+                </div>
 
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setInviteOpen(true)}
-                  className="gap-1.5"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  <span className="hidden sm:inline">Inviter</span>
-                </Button>
-                {isOwner ? (
-                  <Button variant="ghost" size="sm" onClick={handleDelete}>
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
-                ) : (
+                <div className="flex items-center gap-2">
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    onClick={handleLeave}
-                    disabled={isLeaving}
+                    onClick={() => setInviteOpen(true)}
+                    className="gap-1.5 rounded-xl transition-all duration-200 btn-press"
                   >
-                    <LogOut className="w-4 h-4 text-muted-foreground" />
+                    <UserPlus className="w-4 h-4" />
+                    <span className="hidden sm:inline">Inviter</span>
                   </Button>
-                )}
+                  {isOwner ? (
+                    <Button variant="ghost" size="sm" onClick={handleDelete} className="rounded-xl transition-all duration-200 btn-press">
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleLeave}
+                      disabled={isLeaving}
+                      className="rounded-xl transition-all duration-200 btn-press"
+                    >
+                      <LogOut className="w-4 h-4 text-muted-foreground" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Leaderboard */}
-          <div className="mb-6">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Classement cette semaine
-            </h2>
-            <div className="space-y-2">
-              {leaderboard.map((member, i) => (
-                <Card
-                  key={member.user_id}
-                  className={`border-border ${
-                    member.user_id === currentUserId
-                      ? "bg-primary/5 border-primary/20"
-                      : "bg-card"
-                  }`}
-                >
-                  <CardContent className="p-4 flex items-center gap-4">
-                    {/* Rank */}
-                    <div
-                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                        i === 0
-                          ? "bg-amber-500/20 text-amber-400"
-                          : i === 1
-                            ? "bg-gray-400/20 text-gray-300"
-                            : i === 2
-                              ? "bg-orange-600/20 text-orange-400"
-                              : "bg-white/5 text-white/40"
+          <div className="opacity-0 animate-fade-in" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
+            <div className="mb-6">
+              <h2 className="text-sm font-sans font-semibold tracking-tight font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                Classement cette semaine
+              </h2>
+              <div className="space-y-2">
+                {leaderboard.map((member, i) => (
+                  <div
+                    key={member.user_id}
+                    className="opacity-0 animate-fade-in"
+                    style={{ animationDelay: `${300 + i * 60}ms`, animationFillMode: "forwards" }}
+                  >
+                    <Card
+                      className={`border-border transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${
+                        member.user_id === currentUserId
+                          ? "bg-[#459492]/5 border-[#459492]/20"
+                          : "bg-card hover:border-[#459492]/30"
                       }`}
                     >
-                      {i + 1}
-                    </div>
+                      <CardContent className="p-4 flex items-center gap-4">
+                        {/* Rank */}
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 tabular-nums ${
+                            i === 0
+                              ? "bg-[#E48C75]/40 text-[#E48C75]"
+                              : i === 1
+                                ? "bg-[#9A9A9A]/20 text-muted-foreground"
+                                : i === 2
+                                  ? "bg-[#E48C75]/40 text-[#E48C75]"
+                                  : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {i + 1}
+                        </div>
 
-                    {/* Avatar */}
-                    <div
-                      className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
-                      style={{ background: `hsl(${(i * 67 + 200) % 360}, 60%, 45%)` }}
-                    >
-                      {member.role === "owner" ? (
-                        <Crown className="w-4 h-4 text-white" />
-                      ) : (
-                        <span className="text-white">
-                          {(member.name || "?")[0].toUpperCase()}
-                        </span>
-                      )}
-                    </div>
+                        {/* Avatar */}
+                        <div
+                          className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ring-2 ring-background"
+                          style={{ background: ["#275255", "#459492", "#55B3AE", "#5DB786", "#E48C75"][i % 5] }}
+                        >
+                          {member.role === "owner" ? (
+                            <Crown className="w-4 h-4 text-white" />
+                          ) : (
+                            <span className="text-white">
+                              {(member.name || "?")[0].toUpperCase()}
+                            </span>
+                          )}
+                        </div>
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-foreground text-sm font-medium truncate flex items-center gap-1.5">
-                        {member.name || "Membre"}
-                        {member.role === "owner" && (
-                          <Crown className="w-3 h-3 text-amber-400" />
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 text-muted-foreground text-xs mt-0.5">
-                        {member.stats?.streak_days > 0 && (
-                          <span className="flex items-center gap-1">
-                            <Flame className="w-3 h-3 text-orange-400" />
-                            {member.stats.streak_days}j
-                          </span>
-                        )}
-                        <span className="flex items-center gap-1">
-                          <TrendingUp className="w-3 h-3" />
-                          {member.stats?.week_sessions || 0} sessions
-                        </span>
-                      </div>
-                    </div>
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-foreground text-sm font-medium truncate flex items-center gap-1.5">
+                            {member.name || "Membre"}
+                            {member.role === "owner" && (
+                              <Crown className="w-5 h-5 text-[#459492]" />
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-muted-foreground text-xs mt-0.5">
+                            {member.stats?.streak_days > 0 && (
+                              <span className="flex items-center gap-1">
+                                <Flame className="w-3 h-3 text-[#E48C75]" />
+                                <span className="tabular-nums">{member.stats.streak_days}j</span>
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <TrendingUp className="w-3 h-3" />
+                              <span className="tabular-nums">{member.stats?.week_sessions || 0}</span> sessions
+                            </span>
+                          </div>
+                        </div>
 
-                    {/* Week time */}
-                    <div className="text-right shrink-0">
-                      <div className="text-foreground text-sm font-bold tabular-nums">
-                        {formatMinutes(member.stats?.week_minutes || 0)}
-                      </div>
-                      <div className="text-muted-foreground text-[10px]">cette semaine</div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                        {/* Week time */}
+                        <div className="text-right shrink-0">
+                          <div className="text-foreground text-sm font-bold tabular-nums">
+                            {formatMinutes(member.stats?.week_minutes || 0)}
+                          </div>
+                          <div className="text-muted-foreground text-[10px]">cette semaine</div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* Activity feed */}
           {feed.length > 0 && (
-            <div>
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Activity className="w-4 h-4" />
-                Activité récente
-              </h2>
-              <div className="space-y-1.5">
-                {feed.map((entry, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-card border border-border"
-                  >
+            <div className="opacity-0 animate-fade-in" style={{ animationDelay: "400ms", animationFillMode: "forwards" }}>
+              <div>
+                <h2 className="text-sm font-sans font-semibold tracking-tight font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Activity className="w-4 h-4" />
+                  Activité récente
+                </h2>
+                <div className="space-y-1.5">
+                  {feed.map((entry, i) => (
                     <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
-                      style={{
-                        background: `hsl(${(entry.user_name?.charCodeAt(0) * 37 || 200) % 360}, 60%, 45%)`,
-                      }}
+                      key={i}
+                      className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-card border border-border hover:border-[#459492]/20 hover:bg-muted/30 transition-all duration-200 opacity-0 animate-fade-in"
+                      style={{ animationDelay: `${500 + i * 50}ms`, animationFillMode: "forwards" }}
                     >
-                      <span className="text-white">
-                        {(entry.user_name || "?")[0].toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-foreground text-sm">
-                        <span className="font-medium">{entry.user_name || "Membre"}</span>
-                        {" — "}
-                        <span className="text-muted-foreground">
-                          {entry.action_title || "session complétée"}
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ring-2 ring-background"
+                        style={{
+                          background: ["#275255", "#459492", "#55B3AE", "#5DB786", "#E48C75"][(entry.user_name?.charCodeAt(0) || 0) % 5],
+                        }}
+                      >
+                        <span className="text-white">
+                          {(entry.user_name || "?")[0].toUpperCase()}
                         </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-foreground text-sm">
+                          <span className="font-medium">{entry.user_name || "Membre"}</span>
+                          {" — "}
+                          <span className="text-muted-foreground">
+                            {entry.action_title || "session complétée"}
+                          </span>
+                        </span>
+                      </div>
+                      <span className="text-muted-foreground text-xs shrink-0">
+                        {timeAgo(entry.completed_at)}
                       </span>
                     </div>
-                    <span className="text-muted-foreground text-xs shrink-0">
-                      {timeAgo(entry.completed_at)}
-                    </span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           )}

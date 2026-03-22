@@ -83,7 +83,7 @@ export default function SessionDebrief({ sessionId, duration, notes, onStartActi
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-heading font-semibold text-sm">Debrief IA</h3>
+                <h3 className="font-sans font-semibold tracking-tight font-semibold text-sm">Debrief IA</h3>
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-medium text-primary">
                   <Sparkles className="w-2.5 h-2.5" />
                   Analyse
@@ -100,7 +100,7 @@ export default function SessionDebrief({ sessionId, duration, notes, onStartActi
           {/* Encouragement */}
           {debrief.encouragement && (
             <div className="flex items-center gap-2 mb-4 px-1">
-              <Heart className="w-3 h-3 text-rose-400 shrink-0" />
+              <Heart className="w-3 h-3 text-[#E48C75] shrink-0" />
               <p className="text-xs text-muted-foreground italic">{debrief.encouragement}</p>
             </div>
           )}
@@ -120,7 +120,7 @@ export default function SessionDebrief({ sessionId, duration, notes, onStartActi
               {nextActionId && onStartAction && (
                 <Button
                   size="sm"
-                  className="mt-3 w-full gap-2"
+                  className="mt-3 w-full gap-2 shadow-md hover:shadow-lg transition-all duration-200 btn-press"
                   onClick={() => onStartAction(nextActionId)}
                 >
                   <Sparkles className="w-3.5 h-3.5" />

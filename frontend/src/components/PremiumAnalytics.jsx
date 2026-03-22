@@ -71,12 +71,12 @@ export default function PremiumAnalytics() {
 
   if (!isPremium) {
     return (
-      <Card className="border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-orange-500/5">
+      <Card className="border-[#E48C75]/30 bg-gradient-to-br from-[#E48C75]/5 to-[#E48C75]/5">
         <CardContent className="p-6 text-center">
-          <div className="w-14 h-14 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
-            <Lock className="w-7 h-7 text-amber-500" />
+          <div className="w-14 h-14 rounded-full bg-[#E48C75]/40 flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-7 h-7 text-[#E48C75]" />
           </div>
-          <h3 className="font-heading text-lg font-semibold mb-2">
+          <h3 className="font-sans font-semibold tracking-tight text-lg font-semibold mb-2">
             Analytics Avancées
           </h3>
           <p className="text-sm text-muted-foreground mb-4">
@@ -84,7 +84,7 @@ export default function PremiumAnalytics() {
             et des insights personnalisés avec Premium.
           </p>
           <Link to="/pricing">
-            <Button variant="outline" className="border-amber-500/30 text-amber-500 hover:bg-amber-500/10">
+            <Button variant="outline" className="border-[#E48C75]/30 text-[#E48C75] hover:bg-[#E48C75]/40">
               <Crown className="w-4 h-4 mr-2" />
               Découvrir Premium
             </Button>
@@ -111,11 +111,11 @@ export default function PremiumAnalytics() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center">
-          <Crown className="w-5 h-5 text-amber-500" />
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#E48C75]/20 to-[#E48C75]/20 flex items-center justify-center">
+          <Crown className="w-5 h-5 text-[#459492]" />
         </div>
         <div>
-          <h2 className="font-heading text-xl font-semibold">Analytics Premium</h2>
+          <h2 className="font-sans font-semibold tracking-tight text-xl font-semibold">Analytics Premium</h2>
           <p className="text-sm text-muted-foreground">Insights avancés sur vos habitudes</p>
         </div>
       </div>
@@ -130,7 +130,7 @@ export default function PremiumAnalytics() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Meilleur moment</p>
-                <p className="font-heading font-bold">
+                <p className="font-sans font-semibold tracking-tight font-bold">
                   {timeLabels[analytics.best_time_of_day] || analytics.best_time_of_day || "—"}
                 </p>
               </div>
@@ -141,12 +141,12 @@ export default function PremiumAnalytics() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-emerald-500" />
+              <div className="w-10 h-10 rounded-xl bg-[#5DB786]/40 flex items-center justify-center">
+                <Calendar className="w-5 h-5 text-[#5DB786]" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Jour le + productif</p>
-                <p className="font-heading font-bold">
+                <p className="font-sans font-semibold tracking-tight font-bold">
                   {dayLabels[analytics.most_productive_day] || analytics.most_productive_day || "—"}
                 </p>
               </div>
@@ -158,12 +158,12 @@ export default function PremiumAnalytics() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                  <Target className="w-5 h-5 text-amber-500" />
+                <div className="w-10 h-10 rounded-xl bg-[#E48C75]/40 flex items-center justify-center">
+                  <Target className="w-5 h-5 text-[#E48C75]" />
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Prochain palier</p>
-                  <p className="font-heading font-bold">{analytics.milestones.next}</p>
+                  <p className="font-sans font-semibold tracking-tight font-bold">{analytics.milestones.next}</p>
                   {analytics.milestones.eta_days && (
                     <p className="text-xs text-muted-foreground">
                       ~{analytics.milestones.eta_days}j restants
@@ -180,8 +180,8 @@ export default function PremiumAnalytics() {
       {analytics.daily_activity?.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="font-heading text-lg flex items-center gap-2">
-              <Flame className="w-5 h-5 text-amber-500" />
+            <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
+              <Flame className="w-5 h-5 text-[#E48C75]" />
               Activité des 30 derniers jours
             </CardTitle>
           </CardHeader>
@@ -227,8 +227,8 @@ export default function PremiumAnalytics() {
       {analytics.streak_history?.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="font-heading text-lg flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-emerald-500" />
+            <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-[#5DB786]" />
               Historique des streaks
             </CardTitle>
           </CardHeader>
@@ -237,10 +237,10 @@ export default function PremiumAnalytics() {
               {analytics.streak_history.slice(0, 5).map((streak, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between p-3 rounded-lg bg-white/5"
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/30"
                 >
                   <div className="flex items-center gap-3">
-                    <Flame className={`w-5 h-5 ${i === 0 ? "text-amber-500" : "text-muted-foreground"}`} />
+                    <Flame className={`w-5 h-5 ${i === 0 ? "text-[#E48C75]" : "text-muted-foreground"}`} />
                     <div>
                       <p className="font-medium">{streak.days} jours</p>
                       <p className="text-xs text-muted-foreground">
@@ -250,7 +250,7 @@ export default function PremiumAnalytics() {
                     </div>
                   </div>
                   {i === 0 && (
-                    <Badge className="bg-amber-500/20 text-amber-500 text-xs">Meilleur</Badge>
+                    <Badge className="bg-[#E48C75]/40 text-[#E48C75] text-xs">Meilleur</Badge>
                   )}
                 </div>
               ))}
