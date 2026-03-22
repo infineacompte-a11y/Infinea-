@@ -81,7 +81,7 @@ export default function InviteGroupDialog({ open, onOpenChange, groupId, groupNa
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-md bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="font-heading flex items-center gap-2">
+          <DialogTitle className="font-sans font-semibold tracking-tight flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-primary" />
             Inviter dans {groupName}
           </DialogTitle>

@@ -117,12 +117,12 @@ const AVAILABLE_INTEGRATIONS = [
 ];
 
 const colorClasses = {
-  blue: { bg: "bg-blue-500/10", text: "text-blue-500", border: "border-blue-500/30" },
-  gray: { bg: "bg-zinc-500/10", text: "text-zinc-400", border: "border-zinc-500/30" },
-  red: { bg: "bg-red-500/10", text: "text-red-500", border: "border-red-500/30" },
-  purple: { bg: "bg-purple-500/10", text: "text-purple-500", border: "border-purple-500/30" },
-  green: { bg: "bg-emerald-500/10", text: "text-emerald-500", border: "border-emerald-500/30" },
-  orange: { bg: "bg-orange-500/10", text: "text-orange-500", border: "border-orange-500/30" },
+  blue: { bg: "bg-[#459492]/40", text: "text-[#459492]", border: "border-[#459492]/30" },
+  gray: { bg: "bg-[#9A9A9A]/10", text: "text-muted-foreground", border: "border-[#9A9A9A]/30" },
+  red: { bg: "bg-[#E48C75]/40", text: "text-[#E48C75]", border: "border-[#E48C75]/30" },
+  purple: { bg: "bg-brand-secondary/10", text: "text-brand-secondary", border: "border-brand-secondary/30" },
+  green: { bg: "bg-[#5DB786]/40", text: "text-[#5DB786]", border: "border-[#5DB786]/30" },
+  orange: { bg: "bg-[#E48C75]/40", text: "text-[#E48C75]", border: "border-[#E48C75]/30" },
 };
 
 // Icon and color maps for backend-driven rendering
@@ -510,62 +510,77 @@ export default function IntegrationsPage() {
     });
 
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen app-bg-mesh">
         <Sidebar />
-        <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
-          <div className="max-w-4xl mx-auto">
-            {/* Header */}
-            <div className="mb-8">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Plug className="w-6 h-6 text-primary" />
-                </div>
-                <div>
-                  <h1 className="font-heading text-3xl font-semibold" data-testid="integrations-title">
-                    Hub d'Intégrations
-                  </h1>
-                  <p className="text-muted-foreground">
-                    Connectez vos outils pour des suggestions plus intelligentes
-                  </p>
-                </div>
-              </div>
-              {/* Connection summary */}
-              <div className="flex items-center gap-3 mt-4">
-                <Badge variant="secondary" className="text-xs">
+        <main className="lg:ml-64 pt-14 lg:pt-0 pb-8">
+          {/* Dark teal header */}
+          <div className="section-dark-header px-4 lg:px-8 pt-8 lg:pt-10 pb-8">
+            <div className="max-w-4xl mx-auto">
+              <h1 className="text-display text-3xl lg:text-4xl font-semibold text-white opacity-0 animate-fade-in" data-testid="integrations-title">
+                Intégrations
+              </h1>
+              <p className="text-white/60 text-sm mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
+                Connectez vos outils préférés
+              </p>
+              <div className="flex items-center gap-3 mt-3 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
+                <Badge variant="secondary" className="text-xs tabular-nums bg-white/10 text-white/80 border-white/20">
                   {connectedCount}/{totalCount} connectés
                 </Badge>
               </div>
             </div>
+          </div>
+          <div className="px-4 lg:px-8">
+            <div className="max-w-4xl mx-auto">
 
             {isLoading ? (
-              <div className="flex items-center justify-center py-20">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <div className="space-y-6">
+                {[...Array(2)].map((_, gi) => (
+                  <div key={gi}>
+                    <div className="h-4 w-24 rounded bg-muted animate-pulse mb-4" />
+                    <div className="grid gap-4">
+                      {[...Array(2)].map((_, i) => (
+                        <div key={i} className="rounded-xl border border-border bg-card p-4 animate-pulse">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-muted shrink-0" />
+                            <div className="flex-1 space-y-2">
+                              <div className="h-4 w-32 rounded bg-muted" />
+                              <div className="h-3 w-64 rounded bg-muted" />
+                            </div>
+                            <div className="h-8 w-24 rounded-xl bg-muted" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="space-y-8">
                 {/* Free tier limit banner */}
                 {isLimitReached && (
-                  <Card className="border-amber-500/30 bg-amber-500/5">
-                    <CardContent className="p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Lock className="w-5 h-5 text-amber-500" />
-                        <p className="text-sm">
-                          Plan gratuit : 1 intégration max. Passez à Premium pour connecter tous vos outils.
-                        </p>
-                      </div>
-                      <Link to="/pricing">
-                        <Button size="sm" variant="outline" className="shrink-0">
-                          Voir Premium
-                        </Button>
-                      </Link>
-                    </CardContent>
-                  </Card>
+                  <div className="opacity-0 animate-fade-in" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
+                    <Card className="border-[#E48C75]/30 bg-[#E48C75]/5 rounded-xl">
+                      <CardContent className="p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Lock className="w-5 h-5 text-[#E48C75]" />
+                          <p className="text-sm">
+                            Plan gratuit : 1 intégration max. Passez à Premium pour connecter tous vos outils.
+                          </p>
+                        </div>
+                        <Link to="/pricing">
+                          <Button size="sm" variant="outline" className="shrink-0 rounded-xl transition-all duration-200 btn-press">
+                            Voir Premium
+                          </Button>
+                        </Link>
+                      </CardContent>
+                    </Card>
+                  </div>
                 )}
 
                 {/* Integration cards by category */}
-                {Object.entries(categories).map(([category, services]) => (
-                  <div key={category}>
-                    <h2 className="text-sm font-medium text-muted-foreground mb-4 capitalize">
+                {Object.entries(categories).map(([category, services], catIdx) => (
+                  <div key={category} className="opacity-0 animate-fade-in" style={{ animationDelay: `${(catIdx + 1) * 100 + 200}ms`, animationFillMode: "forwards" }}>
+                    <h2 className="text-sm font-sans font-semibold tracking-tight font-medium text-muted-foreground mb-4 capitalize">
                       {category}
                     </h2>
                     <div className="grid gap-4">
@@ -601,107 +616,110 @@ export default function IntegrationsPage() {
 
                 {/* Slot Detection Settings */}
                 {slotSettings && (unifiedStatus.google_calendar?.connected || unifiedStatus.ical?.connected) && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="font-heading text-lg flex items-center gap-2">
-                        <Clock className="w-5 h-5" />
-                        Détection des créneaux
-                      </CardTitle>
-                      <CardDescription>
-                        Configurez comment InFinea détecte vos moments libres
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label>Activer la détection automatique</Label>
-                          <p className="text-xs text-muted-foreground">
-                            Analyse votre calendrier pour trouver des créneaux libres
-                          </p>
+                  <div className="opacity-0 animate-fade-in" style={{ animationDelay: "600ms", animationFillMode: "forwards" }}>
+                    <Card className="rounded-xl">
+                      <CardHeader>
+                        <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
+                          <Clock className="w-5 h-5" />
+                          Détection des créneaux
+                        </CardTitle>
+                        <CardDescription>
+                          Configurez comment InFinea détecte vos moments libres
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label>Activer la détection automatique</Label>
+                            <p className="text-xs text-muted-foreground">
+                              Analyse votre calendrier pour trouver des créneaux libres
+                            </p>
+                          </div>
+                          <Switch
+                            checked={slotSettings.slot_detection_enabled}
+                            onCheckedChange={(v) =>
+                              handleUpdateSettings({ ...slotSettings, slot_detection_enabled: v })
+                            }
+                          />
                         </div>
-                        <Switch
-                          checked={slotSettings.slot_detection_enabled}
-                          onCheckedChange={(v) =>
-                            handleUpdateSettings({ ...slotSettings, slot_detection_enabled: v })
-                          }
-                        />
-                      </div>
-                      {slotSettings.slot_detection_enabled && (
-                        <>
-                          <div>
-                            <Label className="mb-3 block">
-                              Durée des créneaux : {slotSettings.min_slot_duration} - {slotSettings.max_slot_duration} min
-                            </Label>
-                            <div className="flex items-center gap-4">
+                        {slotSettings.slot_detection_enabled && (
+                          <>
+                            <div>
+                              <Label className="mb-3 block tabular-nums">
+                                Durée des créneaux : {slotSettings.min_slot_duration} - {slotSettings.max_slot_duration} min
+                              </Label>
+                              <div className="flex items-center gap-4">
+                                <Input
+                                  type="number"
+                                  value={slotSettings.min_slot_duration}
+                                  onChange={(e) =>
+                                    handleUpdateSettings({
+                                      ...slotSettings,
+                                      min_slot_duration: parseInt(e.target.value) || 5,
+                                    })
+                                  }
+                                  className="w-20" min={2} max={15}
+                                />
+                                <span className="text-muted-foreground">à</span>
+                                <Input
+                                  type="number"
+                                  value={slotSettings.max_slot_duration}
+                                  onChange={(e) =>
+                                    handleUpdateSettings({
+                                      ...slotSettings,
+                                      max_slot_duration: parseInt(e.target.value) || 20,
+                                    })
+                                  }
+                                  className="w-20" min={5} max={30}
+                                />
+                                <span className="text-muted-foreground">minutes</span>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <Label>Début de la fenêtre</Label>
+                                <Input
+                                  type="time"
+                                  value={slotSettings.detection_window_start}
+                                  onChange={(e) =>
+                                    handleUpdateSettings({ ...slotSettings, detection_window_start: e.target.value })
+                                  }
+                                />
+                              </div>
+                              <div>
+                                <Label>Fin de la fenêtre</Label>
+                                <Input
+                                  type="time"
+                                  value={slotSettings.detection_window_end}
+                                  onChange={(e) =>
+                                    handleUpdateSettings({ ...slotSettings, detection_window_end: e.target.value })
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <Label>Minutes d'avance pour la notification</Label>
                               <Input
                                 type="number"
-                                value={slotSettings.min_slot_duration}
+                                value={slotSettings.advance_notification_minutes}
                                 onChange={(e) =>
                                   handleUpdateSettings({
                                     ...slotSettings,
-                                    min_slot_duration: parseInt(e.target.value) || 5,
+                                    advance_notification_minutes: parseInt(e.target.value) || 5,
                                   })
                                 }
-                                className="w-20" min={2} max={15}
-                              />
-                              <span className="text-muted-foreground">à</span>
-                              <Input
-                                type="number"
-                                value={slotSettings.max_slot_duration}
-                                onChange={(e) =>
-                                  handleUpdateSettings({
-                                    ...slotSettings,
-                                    max_slot_duration: parseInt(e.target.value) || 20,
-                                  })
-                                }
-                                className="w-20" min={5} max={30}
-                              />
-                              <span className="text-muted-foreground">minutes</span>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label>Début de la fenêtre</Label>
-                              <Input
-                                type="time"
-                                value={slotSettings.detection_window_start}
-                                onChange={(e) =>
-                                  handleUpdateSettings({ ...slotSettings, detection_window_start: e.target.value })
-                                }
+                                className="w-24 mt-2" min={1} max={30}
                               />
                             </div>
-                            <div>
-                              <Label>Fin de la fenêtre</Label>
-                              <Input
-                                type="time"
-                                value={slotSettings.detection_window_end}
-                                onChange={(e) =>
-                                  handleUpdateSettings({ ...slotSettings, detection_window_end: e.target.value })
-                                }
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <Label>Minutes d'avance pour la notification</Label>
-                            <Input
-                              type="number"
-                              value={slotSettings.advance_notification_minutes}
-                              onChange={(e) =>
-                                handleUpdateSettings({
-                                  ...slotSettings,
-                                  advance_notification_minutes: parseInt(e.target.value) || 5,
-                                })
-                              }
-                              className="w-24 mt-2" min={1} max={30}
-                            />
-                          </div>
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
                 )}
               </div>
             )}
+            </div>
           </div>
         </main>
 
@@ -721,7 +739,7 @@ export default function IntegrationsPage() {
             <div className="py-4">
               {selectedIntegration && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-[#F8FAFB] border border-[#E2E6EA]">
                     <div>
                       <p className="text-sm text-muted-foreground">Connecté le</p>
                       <p className="font-medium">
@@ -735,6 +753,7 @@ export default function IntegrationsPage() {
                       size="sm"
                       onClick={() => handleSync(selectedIntegration.service)}
                       disabled={isSyncing}
+                      className="rounded-xl transition-all duration-200 btn-press"
                     >
                       {isSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
                       Synchroniser
@@ -744,12 +763,13 @@ export default function IntegrationsPage() {
               )}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setSelectedIntegration(null)}>
+              <Button variant="outline" onClick={() => setSelectedIntegration(null)} className="rounded-xl">
                 Fermer
               </Button>
               <Button
                 variant="destructive"
                 onClick={() => handleDisconnect(selectedIntegration?.service)}
+                className="rounded-xl"
               >
                 <Unplug className="w-4 h-4 mr-2" />
                 Déconnecter
@@ -784,8 +804,8 @@ export default function IntegrationsPage() {
               />
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => { setUrlDialogService(null); setUrlValue(""); }}>Annuler</Button>
-              <Button onClick={handleConnectUrl} disabled={isConnectingUrl || !urlValue.trim()}>
+              <Button variant="outline" onClick={() => { setUrlDialogService(null); setUrlValue(""); }} className="rounded-xl">Annuler</Button>
+              <Button onClick={handleConnectUrl} disabled={isConnectingUrl || !urlValue.trim()} className="rounded-xl shadow-md hover:shadow-lg transition-all duration-200 btn-press">
                 {isConnectingUrl ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Link2 className="w-4 h-4 mr-2" />}
                 Connecter
               </Button>
@@ -822,8 +842,8 @@ export default function IntegrationsPage() {
               </p>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => { setTokenDialogService(null); setTokenValue(""); }}>Annuler</Button>
-              <Button onClick={handleConnectToken} disabled={isConnectingToken || !tokenValue.trim()}>
+              <Button variant="outline" onClick={() => { setTokenDialogService(null); setTokenValue(""); }} className="rounded-xl">Annuler</Button>
+              <Button onClick={handleConnectToken} disabled={isConnectingToken || !tokenValue.trim()} className="rounded-xl shadow-md hover:shadow-lg transition-all duration-200 btn-press">
                 {isConnectingToken ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plug className="w-4 h-4 mr-2" />}
                 Connecter
               </Button>
@@ -871,32 +891,44 @@ export default function IntegrationsPage() {
 
   // ==================== LEGACY UI (flag off) ====================
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen app-bg-mesh">
       <Sidebar />
-
-      {/* Main Content */}
-      <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                <Plug className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <h1 className="font-heading text-3xl font-semibold" data-testid="integrations-title">
-                  Hub d'Intégrations
-                </h1>
-                <p className="text-muted-foreground">
-                  Connectez vos outils pour des suggestions plus intelligentes
-                </p>
-              </div>
-            </div>
+      <main className="lg:ml-64 pt-14 lg:pt-0 pb-8">
+        {/* Dark teal header */}
+        <div className="section-dark-header px-4 lg:px-8 pt-8 lg:pt-10 pb-8">
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-display text-3xl lg:text-4xl font-semibold text-white opacity-0 animate-fade-in" data-testid="integrations-title">
+              Intégrations
+            </h1>
+            <p className="text-white/60 text-sm mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
+              Connectez vos outils préférés
+            </p>
           </div>
+        </div>
+        <div className="px-4 lg:px-8">
+          <div className="max-w-4xl mx-auto">
 
           {isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <div className="space-y-6">
+              {[...Array(2)].map((_, gi) => (
+                <div key={gi}>
+                  <div className="h-4 w-24 rounded bg-muted animate-pulse mb-4" />
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {[...Array(2)].map((_, i) => (
+                      <div key={i} className="rounded-xl border border-border bg-card p-4 animate-pulse">
+                        <div className="flex items-start gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-muted shrink-0" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 w-28 rounded bg-muted" />
+                            <div className="h-3 w-full rounded bg-muted" />
+                            <div className="h-8 w-24 rounded-xl bg-muted mt-2" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="space-y-8">
@@ -906,21 +938,23 @@ export default function IntegrationsPage() {
                   (a) => integrations[a.id]?.connected
                 ).length;
                 return connectedCount >= 1 ? (
-                  <Card className="border-amber-500/30 bg-amber-500/5">
-                    <CardContent className="p-4 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Lock className="w-5 h-5 text-amber-500" />
-                        <p className="text-sm">
-                          Plan gratuit : 1 intégration max. Passez à Premium pour connecter tous vos outils.
-                        </p>
-                      </div>
-                      <Link to="/pricing">
-                        <Button size="sm" variant="outline" className="shrink-0">
-                          Voir Premium
-                        </Button>
-                      </Link>
-                    </CardContent>
-                  </Card>
+                  <div className="opacity-0 animate-fade-in" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
+                    <Card className="border-[#E48C75]/30 bg-[#E48C75]/5 rounded-xl">
+                      <CardContent className="p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Lock className="w-5 h-5 text-[#E48C75]" />
+                          <p className="text-sm">
+                            Plan gratuit : 1 intégration max. Passez à Premium pour connecter tous vos outils.
+                          </p>
+                        </div>
+                        <Link to="/pricing">
+                          <Button size="sm" variant="outline" className="shrink-0 rounded-xl transition-all duration-200 btn-press">
+                            Voir Premium
+                          </Button>
+                        </Link>
+                      </CardContent>
+                    </Card>
+                  </div>
                 ) : null;
               })()}
 
@@ -932,19 +966,23 @@ export default function IntegrationsPage() {
                 if (connectedServices.length === 0) return null;
 
                 return (
-                  <div>
-                    <h2 className="text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  <div className="opacity-0 animate-fade-in" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
+                    <h2 className="text-sm font-sans font-semibold tracking-tight font-medium text-muted-foreground mb-4 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-[#5DB786]" />
                       Connectés ({connectedServices.length})
                     </h2>
                     <div className="grid gap-4">
-                      {connectedServices.map((config) => {
+                      {connectedServices.map((config, idx) => {
                         const info = integrations[config.id];
                         const Icon = config.icon;
                         const colors = colorClasses[config.color];
 
                         return (
-                          <Card key={config.id} className={`${colors.border} border`}>
+                          <Card
+                            key={config.id}
+                            className={`opacity-0 animate-fade-in group ${colors.border} border bg-[#5DB786]/5 rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200`}
+                            style={{ animationDelay: `${idx * 50 + 250}ms`, animationFillMode: "forwards" }}
+                          >
                             <CardContent className="p-4">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-4">
@@ -953,8 +991,8 @@ export default function IntegrationsPage() {
                                   </div>
                                   <div>
                                     <div className="flex items-center gap-2 mb-1">
-                                      <h3 className="font-heading font-semibold">{config.name}</h3>
-                                      <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/30">
+                                      <h3 className="font-sans font-semibold tracking-tight font-semibold">{config.name}</h3>
+                                      <Badge className="bg-[#5DB786]/40 text-[#5DB786] border-[#5DB786]/30">
                                         <CheckCircle2 className="w-3 h-3 mr-1" />
                                         Connecté
                                       </Badge>
@@ -972,6 +1010,7 @@ export default function IntegrationsPage() {
                                     onClick={() => handleSync(config.id)}
                                     disabled={isSyncing}
                                     data-testid="sync-btn"
+                                    className="rounded-xl transition-all duration-200 btn-press"
                                   >
                                     {isSyncing ? (
                                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -983,6 +1022,7 @@ export default function IntegrationsPage() {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => setSelectedIntegration({ service: config.id, ...info })}
+                                    className="rounded-xl transition-all duration-200 btn-press"
                                   >
                                     <Settings className="w-4 h-4" />
                                   </Button>
@@ -1005,7 +1045,7 @@ export default function IntegrationsPage() {
                 const isFreeUser = user?.subscription_tier !== "premium";
                 const isLimitReached = isFreeUser && connectedCount >= 1;
 
-                return Object.entries(groupedIntegrations).map(([category, ints]) => {
+                return Object.entries(groupedIntegrations).map(([category, ints], catIdx) => {
                   const availableInts = ints.filter(
                     (int) => !integrations[int.id]?.connected
                   );
@@ -1013,12 +1053,12 @@ export default function IntegrationsPage() {
                   if (availableInts.length === 0) return null;
 
                   return (
-                    <div key={category}>
-                      <h2 className="text-sm font-medium text-muted-foreground mb-4 capitalize">
+                    <div key={category} className="opacity-0 animate-fade-in" style={{ animationDelay: `${(catIdx + 2) * 100 + 200}ms`, animationFillMode: "forwards" }}>
+                      <h2 className="text-sm font-sans font-semibold tracking-tight font-medium text-muted-foreground mb-4 capitalize">
                         {category}
                       </h2>
                       <div className="grid md:grid-cols-2 gap-4">
-                        {availableInts.map((int) => {
+                        {availableInts.map((int, idx) => {
                           const Icon = int.icon;
                           const colors = colorClasses[int.color];
                           const isAvailable = int.status === "available" && isIntegrationAvailable(int.provider);
@@ -1026,9 +1066,10 @@ export default function IntegrationsPage() {
                           return (
                             <Card
                               key={int.id}
-                              className={`transition-all ${
-                                int.status === "coming_soon" || isLimitReached ? "opacity-60" : "hover:border-primary/50"
+                              className={`opacity-0 animate-fade-in group rounded-xl transition-all duration-200 ${
+                                int.status === "coming_soon" || isLimitReached ? "opacity-60" : "hover:border-[#459492]/30 hover:shadow-lg hover:-translate-y-0.5"
                               }`}
+                              style={{ animationDelay: `${idx * 50}ms`, animationFillMode: "forwards" }}
                               data-testid={`integration-${int.id}`}
                             >
                               <CardContent className="p-4">
@@ -1038,14 +1079,14 @@ export default function IntegrationsPage() {
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
-                                      <h3 className="font-heading font-semibold">{int.name}</h3>
+                                      <h3 className="font-sans font-semibold tracking-tight font-semibold">{int.name}</h3>
                                       {int.status === "coming_soon" && (
                                         <Badge variant="secondary" className="text-xs">
                                           Bientôt
                                         </Badge>
                                       )}
                                       {int.status === "premium" && (
-                                        <Badge className="bg-amber-500/20 text-amber-500 text-xs">
+                                        <Badge className="bg-[#E48C75]/40 text-[#E48C75] text-xs">
                                           Premium
                                         </Badge>
                                       )}
@@ -1055,7 +1096,7 @@ export default function IntegrationsPage() {
                                     </p>
                                     {isLimitReached ? (
                                       <Link to="/pricing">
-                                        <Button size="sm" variant="outline" className="text-amber-500 border-amber-500/30">
+                                        <Button size="sm" variant="outline" className="text-[#E48C75] border-[#E48C75]/30 rounded-xl transition-all duration-200 btn-press">
                                           <Lock className="w-4 h-4 mr-2" />
                                           Premium requis
                                         </Button>
@@ -1070,18 +1111,19 @@ export default function IntegrationsPage() {
                                             else handleConnect(int.provider);
                                           }}
                                           data-testid={`connect-${int.id}-btn`}
+                                          className="rounded-xl shadow-md hover:shadow-lg transition-all duration-200 btn-press"
                                         >
                                           Connecter
-                                          <ChevronRight className="w-4 h-4 ml-1" />
+                                          <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform duration-200" />
                                         </Button>
                                       ) : (
-                                        <div className="flex items-center gap-2 text-amber-500 text-sm">
+                                        <div className="flex items-center gap-2 text-[#E48C75] text-sm">
                                           <AlertCircle className="w-4 h-4" />
                                           <span>Non configuré sur ce serveur</span>
                                         </div>
                                       )
                                     ) : (
-                                      <Button size="sm" variant="secondary" disabled>
+                                      <Button size="sm" variant="secondary" disabled className="rounded-xl">
                                         <Lock className="w-4 h-4 mr-2" />
                                         Bientôt disponible
                                       </Button>
@@ -1100,123 +1142,126 @@ export default function IntegrationsPage() {
 
               {/* Slot Detection Settings */}
               {slotSettings && (integrations.google_calendar?.connected || integrations.ical?.connected) && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="font-heading text-lg flex items-center gap-2">
-                      <Clock className="w-5 h-5" />
-                      Détection des créneaux
-                    </CardTitle>
-                    <CardDescription>
-                      Configurez comment InFinea détecte vos moments libres
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Activer la détection automatique</Label>
-                        <p className="text-xs text-muted-foreground">
-                          Analyse votre calendrier pour trouver des créneaux libres
-                        </p>
-                      </div>
-                      <Switch
-                        checked={slotSettings.slot_detection_enabled}
-                        onCheckedChange={(v) =>
-                          handleUpdateSettings({ ...slotSettings, slot_detection_enabled: v })
-                        }
-                        data-testid="toggle-detection"
-                      />
-                    </div>
-
-                    {slotSettings.slot_detection_enabled && (
-                      <>
+                <div className="opacity-0 animate-fade-in" style={{ animationDelay: "600ms", animationFillMode: "forwards" }}>
+                  <Card className="rounded-xl">
+                    <CardHeader>
+                      <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
+                        <Clock className="w-5 h-5" />
+                        Détection des créneaux
+                      </CardTitle>
+                      <CardDescription>
+                        Configurez comment InFinea détecte vos moments libres
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="flex items-center justify-between">
                         <div>
-                          <Label className="mb-3 block">
-                            Durée des créneaux : {slotSettings.min_slot_duration} - {slotSettings.max_slot_duration} min
-                          </Label>
-                          <div className="flex items-center gap-4">
+                          <Label>Activer la détection automatique</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Analyse votre calendrier pour trouver des créneaux libres
+                          </p>
+                        </div>
+                        <Switch
+                          checked={slotSettings.slot_detection_enabled}
+                          onCheckedChange={(v) =>
+                            handleUpdateSettings({ ...slotSettings, slot_detection_enabled: v })
+                          }
+                          data-testid="toggle-detection"
+                        />
+                      </div>
+
+                      {slotSettings.slot_detection_enabled && (
+                        <>
+                          <div>
+                            <Label className="mb-3 block tabular-nums">
+                              Durée des créneaux : {slotSettings.min_slot_duration} - {slotSettings.max_slot_duration} min
+                            </Label>
+                            <div className="flex items-center gap-4">
+                              <Input
+                                type="number"
+                                value={slotSettings.min_slot_duration}
+                                onChange={(e) =>
+                                  handleUpdateSettings({
+                                    ...slotSettings,
+                                    min_slot_duration: parseInt(e.target.value) || 5,
+                                  })
+                                }
+                                className="w-20"
+                                min={2}
+                                max={15}
+                              />
+                              <span className="text-muted-foreground">à</span>
+                              <Input
+                                type="number"
+                                value={slotSettings.max_slot_duration}
+                                onChange={(e) =>
+                                  handleUpdateSettings({
+                                    ...slotSettings,
+                                    max_slot_duration: parseInt(e.target.value) || 20,
+                                  })
+                                }
+                                className="w-20"
+                                min={5}
+                                max={30}
+                              />
+                              <span className="text-muted-foreground">minutes</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label>Début de la fenêtre</Label>
+                              <Input
+                                type="time"
+                                value={slotSettings.detection_window_start}
+                                onChange={(e) =>
+                                  handleUpdateSettings({
+                                    ...slotSettings,
+                                    detection_window_start: e.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                            <div>
+                              <Label>Fin de la fenêtre</Label>
+                              <Input
+                                type="time"
+                                value={slotSettings.detection_window_end}
+                                onChange={(e) =>
+                                  handleUpdateSettings({
+                                    ...slotSettings,
+                                    detection_window_end: e.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <Label>Minutes d'avance pour la notification</Label>
                             <Input
                               type="number"
-                              value={slotSettings.min_slot_duration}
+                              value={slotSettings.advance_notification_minutes}
                               onChange={(e) =>
                                 handleUpdateSettings({
                                   ...slotSettings,
-                                  min_slot_duration: parseInt(e.target.value) || 5,
+                                  advance_notification_minutes: parseInt(e.target.value) || 5,
                                 })
                               }
-                              className="w-20"
-                              min={2}
-                              max={15}
-                            />
-                            <span className="text-muted-foreground">à</span>
-                            <Input
-                              type="number"
-                              value={slotSettings.max_slot_duration}
-                              onChange={(e) =>
-                                handleUpdateSettings({
-                                  ...slotSettings,
-                                  max_slot_duration: parseInt(e.target.value) || 20,
-                                })
-                              }
-                              className="w-20"
-                              min={5}
+                              className="w-24 mt-2"
+                              min={1}
                               max={30}
                             />
-                            <span className="text-muted-foreground">minutes</span>
                           </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label>Début de la fenêtre</Label>
-                            <Input
-                              type="time"
-                              value={slotSettings.detection_window_start}
-                              onChange={(e) =>
-                                handleUpdateSettings({
-                                  ...slotSettings,
-                                  detection_window_start: e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                          <div>
-                            <Label>Fin de la fenêtre</Label>
-                            <Input
-                              type="time"
-                              value={slotSettings.detection_window_end}
-                              onChange={(e) =>
-                                handleUpdateSettings({
-                                  ...slotSettings,
-                                  detection_window_end: e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <Label>Minutes d'avance pour la notification</Label>
-                          <Input
-                            type="number"
-                            value={slotSettings.advance_notification_minutes}
-                            onChange={(e) =>
-                              handleUpdateSettings({
-                                ...slotSettings,
-                                advance_notification_minutes: parseInt(e.target.value) || 5,
-                              })
-                            }
-                            className="w-24 mt-2"
-                            min={1}
-                            max={30}
-                          />
-                        </div>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
               )}
             </div>
           )}
+          </div>
         </div>
       </main>
 
@@ -1232,7 +1277,7 @@ export default function IntegrationsPage() {
           <div className="py-4">
             {selectedIntegration && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 rounded-xl bg-white/5">
+                <div className="flex items-center justify-between p-4 rounded-xl bg-[#F8FAFB] border border-[#E2E6EA]">
                   <div>
                     <p className="text-sm text-muted-foreground">Connecté le</p>
                     <p className="font-medium">
@@ -1246,6 +1291,7 @@ export default function IntegrationsPage() {
                     size="sm"
                     onClick={() => handleSync(selectedIntegration.service)}
                     disabled={isSyncing}
+                    className="rounded-xl transition-all duration-200 btn-press"
                   >
                     {isSyncing ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -1259,12 +1305,13 @@ export default function IntegrationsPage() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedIntegration(null)}>
+            <Button variant="outline" onClick={() => setSelectedIntegration(null)} className="rounded-xl">
               Fermer
             </Button>
             <Button
               variant="destructive"
               onClick={() => handleDisconnect(selectedIntegration?.service)}
+              className="rounded-xl"
             >
               <Unplug className="w-4 h-4 mr-2" />
               Déconnecter
@@ -1307,12 +1354,13 @@ export default function IntegrationsPage() {
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setUrlDialogService(null); setUrlValue(""); }}>
+            <Button variant="outline" onClick={() => { setUrlDialogService(null); setUrlValue(""); }} className="rounded-xl">
               Annuler
             </Button>
             <Button
               onClick={handleConnectUrl}
               disabled={isConnectingUrl || !urlValue.trim()}
+              className="rounded-xl shadow-md hover:shadow-lg transition-all duration-200 btn-press"
             >
               {isConnectingUrl ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -1359,12 +1407,13 @@ export default function IntegrationsPage() {
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setTokenDialogService(null); setTokenValue(""); }}>
+            <Button variant="outline" onClick={() => { setTokenDialogService(null); setTokenValue(""); }} className="rounded-xl">
               Annuler
             </Button>
             <Button
               onClick={handleConnectToken}
               disabled={isConnectingToken || !tokenValue.trim()}
+              className="rounded-xl shadow-md hover:shadow-lg transition-all duration-200 btn-press"
             >
               {isConnectingToken ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />

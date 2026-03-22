@@ -156,7 +156,7 @@ export default function VoiceNoteButton({ onTranscript, disabled = false }) {
           disabled={disabled}
           className={`rounded-xl gap-2 transition-all ${
             isListening
-              ? "bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/25"
+              ? "bg-[#E48C75] hover:bg-[#E48C75]/80 text-white shadow-lg shadow-[#E48C75]/25"
               : "hover:border-primary/50"
           }`}
           data-testid="voice-note-btn"

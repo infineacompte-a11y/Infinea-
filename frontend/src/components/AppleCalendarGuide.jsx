@@ -115,8 +115,8 @@ export default function AppleCalendarGuide({ open, onOpenChange, onConnected }) 
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
-              <Link2 className="w-4 h-4 text-orange-500" />
+            <div className="w-8 h-8 rounded-lg bg-[#E48C75]/40 flex items-center justify-center">
+              <Link2 className="w-4 h-4 text-[#E48C75]" />
             </div>
             Connecter Apple Calendar
           </DialogTitle>
@@ -132,7 +132,7 @@ export default function AppleCalendarGuide({ open, onOpenChange, onConnected }) 
               key={i}
               className={`h-1.5 flex-1 rounded-full transition-colors ${
                 i < currentStep
-                  ? "bg-emerald-500"
+                  ? "bg-[#5DB786]"
                   : i === currentStep
                   ? "bg-primary"
                   : "bg-muted"
@@ -149,7 +149,7 @@ export default function AppleCalendarGuide({ open, onOpenChange, onConnected }) 
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Étape {currentStep + 1}/{STEPS.length}</p>
-              <h3 className="font-heading font-semibold">{step.title}</h3>
+              <h3 className="font-sans font-semibold tracking-tight font-semibold">{step.title}</h3>
             </div>
           </div>
 
@@ -183,12 +183,12 @@ export default function AppleCalendarGuide({ open, onOpenChange, onConnected }) 
                     data-testid="ical-guide-url-input"
                   />
                   {url && !isValidUrl && (
-                    <p className="text-xs text-red-400">
+                    <p className="text-xs text-[#E48C75]">
                       L'URL doit commencer par webcal://, https:// ou http://
                     </p>
                   )}
                   {isValidUrl && (
-                    <p className="text-xs text-emerald-500 flex items-center gap-1">
+                    <p className="text-xs text-[#5DB786] flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
                       Format valide
                     </p>

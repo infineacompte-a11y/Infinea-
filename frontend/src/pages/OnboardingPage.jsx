@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Timer,
   ChevronRight,
   ChevronLeft,
   Target,
@@ -22,6 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
+import InFineaLogo from "@/components/InFineaLogo";
 
 const STEPS = [
   { id: "goals", title: "Vos objectifs", subtitle: "Qu'aimeriez-vous améliorer ?" },
@@ -50,17 +50,17 @@ const ENERGY_LEVELS = [
 ];
 
 const INTERESTS = [
-  { id: "learning", label: "Apprentissage", color: "text-blue-500 bg-blue-500/10" },
-  { id: "productivity", label: "Productivité", color: "text-amber-500 bg-amber-500/10" },
-  { id: "well_being", label: "Bien-être", color: "text-emerald-500 bg-emerald-500/10" },
-  { id: "creativity", label: "Créativité", color: "text-purple-500 bg-purple-500/10" },
-  { id: "fitness", label: "Forme physique", color: "text-red-500 bg-red-500/10" },
-  { id: "mindfulness", label: "Pleine conscience", color: "text-cyan-500 bg-cyan-500/10" },
-  { id: "leadership", label: "Leadership", color: "text-indigo-500 bg-indigo-500/10" },
-  { id: "finance", label: "Finance", color: "text-green-500 bg-green-500/10" },
-  { id: "relations", label: "Relations", color: "text-pink-500 bg-pink-500/10" },
-  { id: "mental_health", label: "Santé mentale", color: "text-teal-500 bg-teal-500/10" },
-  { id: "entrepreneurship", label: "Entrepreneuriat", color: "text-orange-500 bg-orange-500/10" },
+  { id: "learning", label: "Apprentissage", color: "text-[#459492] bg-[#459492]/40" },
+  { id: "productivity", label: "Productivité", color: "text-[#E48C75] bg-[#E48C75]/40" },
+  { id: "well_being", label: "Bien-être", color: "text-[#5DB786] bg-[#5DB786]/40" },
+  { id: "creativity", label: "Créativité", color: "text-[#55B3AE] bg-[#55B3AE]/40" },
+  { id: "fitness", label: "Forme physique", color: "text-[#E48C75] bg-[#E48C75]/40" },
+  { id: "mindfulness", label: "Pleine conscience", color: "text-[#459492] bg-[#459492]/40" },
+  { id: "leadership", label: "Leadership", color: "text-[#7B8FA1] bg-[#7B8FA1]/10" },
+  { id: "finance", label: "Finance", color: "text-[#2E9B6A] bg-[#2E9B6A]/10" },
+  { id: "relations", label: "Relations", color: "text-[#C4806E] bg-[#C4806E]/10" },
+  { id: "mental_health", label: "Santé mentale", color: "text-[#6EAAA8] bg-[#6EAAA8]/10" },
+  { id: "entrepreneurship", label: "Entrepreneuriat", color: "text-[#E48C75] bg-[#E48C75]/40" },
 ];
 
 export default function OnboardingPage() {
@@ -142,20 +142,23 @@ export default function OnboardingPage() {
   // Welcome screen after onboarding complete
   if (welcomeMessage) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-[#F8FAFB] via-white to-[#F0F7F7] flex items-center justify-center p-4">
         <div className="max-w-md w-full text-center animate-fade-in">
-          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-            <Sparkles className="w-10 h-10 text-primary" />
+          <div className="w-20 h-20 rounded-full bg-[#459492]/40 flex items-center justify-center mx-auto mb-6">
+            <Sparkles className="w-10 h-10 text-[#459492]" />
           </div>
-          <h1 className="font-heading text-3xl font-bold mb-4">
+          <h1 className="font-sans font-semibold tracking-tight text-3xl font-bold text-[#141E24] mb-4">
             Bienvenue, {user?.name?.split(" ")[0] || "Utilisateur"} !
           </h1>
-          <Card className="mb-8 text-left">
+          <Card className="mb-8 text-left rounded-2xl shadow-xl bg-white border border-[#E2E6EA]/50">
             <CardContent className="p-6">
-              <p className="text-sm leading-relaxed">{welcomeMessage}</p>
+              <p className="text-sm leading-relaxed text-[#141E24]">{welcomeMessage}</p>
             </CardContent>
           </Card>
-          <Button onClick={handleFinish} className="w-full h-12 rounded-xl">
+          <Button
+            onClick={handleFinish}
+            className="w-full h-12 rounded-xl shadow-md bg-gradient-to-r from-[#459492] to-[#55B3AE] text-white hover:shadow-lg hover:brightness-105 transition-all duration-200 btn-press"
+          >
             Commencer mes micro-actions
             <ChevronRight className="w-5 h-5 ml-2" />
           </Button>
@@ -165,66 +168,69 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen app-bg-mesh flex flex-col">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 glass">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md shadow-sm border-b border-[#E2E6EA]">
         <div className="flex items-center justify-between px-4 h-16">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Timer className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="font-heading text-lg font-semibold">InFinea</span>
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")}>
+          <InFineaLogo size={32} withText animate />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/dashboard")}
+            className="rounded-xl text-[#667085] hover:text-[#459492] hover:bg-[#F0F7F7] transition-all duration-200"
+          >
             Passer
           </Button>
         </div>
       </header>
 
       {/* Progress Bar */}
-      <div className="fixed top-16 left-0 right-0 z-40 h-1 bg-border">
+      <div className="fixed top-16 left-0 right-0 z-40 h-1.5 bg-[#E2E6EA] overflow-hidden">
         <div
-          className="h-full bg-primary transition-all duration-300"
+          className="h-full bg-gradient-to-r from-[#459492] to-[#55B3AE] rounded-full transition-all duration-500 ease-out"
           style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
         />
       </div>
 
       {/* Main Content */}
       <main className="flex-1 flex items-center justify-center p-4 pt-24 pb-32">
-        <div className="max-w-lg w-full animate-fade-in">
+        <div className="max-w-lg w-full animate-fade-in" key={currentStep}>
           {/* Step Header */}
-          <div className="text-center mb-8">
-            <Badge variant="secondary" className="mb-4">
+          <div className="text-center mb-8 opacity-0 animate-fade-in" style={{ animationDelay: "0ms", animationFillMode: "forwards" }}>
+            <Badge className="mb-4 bg-[#F0F7F7] text-[#459492] border-[#459492]/20 hover:bg-[#F0F7F7] font-medium">
               {currentStep + 1} / {STEPS.length}
             </Badge>
-            <h1 className="font-heading text-2xl font-bold mb-2">
+            <h1 className="font-sans font-semibold tracking-tight text-2xl font-bold text-[#141E24] mb-2">
               {STEPS[currentStep].title}
             </h1>
-            <p className="text-muted-foreground">{STEPS[currentStep].subtitle}</p>
+            <p className="text-[#667085]">{STEPS[currentStep].subtitle}</p>
           </div>
 
           {/* Step Content */}
           {STEPS[currentStep].id === "goals" && (
             <div className="grid gap-3">
-              {GOALS.map((goal) => {
+              {GOALS.map((goal, index) => {
                 const Icon = goal.icon;
                 const selected = profile.goals.includes(goal.id);
                 return (
                   <Card
                     key={goal.id}
-                    className={`cursor-pointer transition-all ${
-                      selected ? "border-primary bg-primary/5" : "hover:border-primary/50"
+                    className={`cursor-pointer transition-all duration-200 opacity-0 animate-fade-in rounded-xl btn-press ${
+                      selected
+                        ? "bg-[#F0F7F7] border-[#459492] shadow-md ring-1 ring-[#459492]/20 scale-[1.01]"
+                        : "bg-white border-[#E2E6EA] shadow-sm hover:border-[#459492]/30 hover:shadow-md hover:scale-[1.01]"
                     }`}
+                    style={{ animationDelay: `${100 + index * 50}ms`, animationFillMode: "forwards" }}
                     onClick={() => toggleArrayItem("goals", goal.id)}
                   >
                     <CardContent className="p-4 flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        selected ? "bg-primary text-primary-foreground" : "bg-muted"
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
+                        selected ? "bg-[#459492] text-white" : "bg-[#F0F7F7] text-[#459492]"
                       }`}>
                         <Icon className="w-5 h-5" />
                       </div>
-                      <span className="flex-1 font-medium">{goal.label}</span>
-                      {selected && <Check className="w-5 h-5 text-primary" />}
+                      <span className="flex-1 font-medium text-[#141E24]">{goal.label}</span>
+                      {selected && <Check className="w-5 h-5 text-[#459492]" />}
                     </CardContent>
                   </Card>
                 );
@@ -234,28 +240,31 @@ export default function OnboardingPage() {
 
           {STEPS[currentStep].id === "availability" && (
             <div className="grid gap-3">
-              {TIME_SLOTS.map((slot) => {
+              {TIME_SLOTS.map((slot, index) => {
                 const Icon = slot.icon;
                 const selected = profile.preferred_times.includes(slot.id);
                 return (
                   <Card
                     key={slot.id}
-                    className={`cursor-pointer transition-all ${
-                      selected ? "border-primary bg-primary/5" : "hover:border-primary/50"
+                    className={`cursor-pointer transition-all duration-200 opacity-0 animate-fade-in rounded-xl btn-press ${
+                      selected
+                        ? "bg-[#F0F7F7] border-[#459492] shadow-md ring-1 ring-[#459492]/20 scale-[1.01]"
+                        : "bg-white border-[#E2E6EA] shadow-sm hover:border-[#459492]/30 hover:shadow-md hover:scale-[1.01]"
                     }`}
+                    style={{ animationDelay: `${100 + index * 50}ms`, animationFillMode: "forwards" }}
                     onClick={() => toggleArrayItem("preferred_times", slot.id)}
                   >
                     <CardContent className="p-4 flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        selected ? "bg-primary text-primary-foreground" : "bg-muted"
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
+                        selected ? "bg-[#459492] text-white" : "bg-[#F0F7F7] text-[#459492]"
                       }`}>
                         <Icon className="w-5 h-5" />
                       </div>
                       <div className="flex-1">
-                        <p className="font-medium">{slot.label}</p>
-                        <p className="text-sm text-muted-foreground">{slot.sublabel}</p>
+                        <p className="font-medium text-[#141E24]">{slot.label}</p>
+                        <p className="text-sm text-[#667085]">{slot.sublabel}</p>
                       </div>
-                      {selected && <Check className="w-5 h-5 text-primary" />}
+                      {selected && <Check className="w-5 h-5 text-[#459492]" />}
                     </CardContent>
                   </Card>
                 );
@@ -265,28 +274,31 @@ export default function OnboardingPage() {
 
           {STEPS[currentStep].id === "energy" && (
             <div className="grid gap-3">
-              {ENERGY_LEVELS.map((level) => {
+              {ENERGY_LEVELS.map((level, index) => {
                 const Icon = level.icon;
                 const selected = profile.energy_level === level.id;
                 return (
                   <Card
                     key={level.id}
-                    className={`cursor-pointer transition-all ${
-                      selected ? "border-primary bg-primary/5" : "hover:border-primary/50"
+                    className={`cursor-pointer transition-all duration-200 opacity-0 animate-fade-in rounded-xl btn-press ${
+                      selected
+                        ? "bg-[#F0F7F7] border-[#459492] shadow-md ring-1 ring-[#459492]/20 scale-[1.01]"
+                        : "bg-white border-[#E2E6EA] shadow-sm hover:border-[#459492]/30 hover:shadow-md hover:scale-[1.01]"
                     }`}
+                    style={{ animationDelay: `${100 + index * 50}ms`, animationFillMode: "forwards" }}
                     onClick={() => setProfile((p) => ({ ...p, energy_level: level.id }))}
                   >
                     <CardContent className="p-4 flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        selected ? "bg-primary text-primary-foreground" : "bg-muted"
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
+                        selected ? "bg-[#459492] text-white" : "bg-[#F0F7F7] text-[#459492]"
                       }`}>
                         <Icon className="w-5 h-5" />
                       </div>
                       <div className="flex-1">
-                        <p className="font-medium">{level.label}</p>
-                        <p className="text-sm text-muted-foreground">{level.description}</p>
+                        <p className="font-medium text-[#141E24]">{level.label}</p>
+                        <p className="text-sm text-[#667085]">{level.description}</p>
                       </div>
-                      {selected && <Check className="w-5 h-5 text-primary" />}
+                      {selected && <Check className="w-5 h-5 text-[#459492]" />}
                     </CardContent>
                   </Card>
                 );
@@ -296,21 +308,24 @@ export default function OnboardingPage() {
 
           {STEPS[currentStep].id === "interests" && (
             <div className="grid grid-cols-2 gap-3">
-              {INTERESTS.map((interest) => {
+              {INTERESTS.map((interest, index) => {
                 const selected = profile.interests.includes(interest.id);
                 return (
                   <Card
                     key={interest.id}
-                    className={`cursor-pointer transition-all ${
-                      selected ? "border-primary bg-primary/5" : "hover:border-primary/50"
+                    className={`cursor-pointer transition-all duration-200 opacity-0 animate-fade-in rounded-xl btn-press ${
+                      selected
+                        ? "bg-[#F0F7F7] border-[#459492] shadow-md ring-1 ring-[#459492]/20 scale-[1.01]"
+                        : "bg-white border-[#E2E6EA] shadow-sm hover:border-[#459492]/30 hover:shadow-md hover:scale-[1.01]"
                     }`}
+                    style={{ animationDelay: `${100 + index * 50}ms`, animationFillMode: "forwards" }}
                     onClick={() => toggleArrayItem("interests", interest.id)}
                   >
                     <CardContent className="p-4 text-center">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mx-auto mb-2 ${interest.color}`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mx-auto mb-2 transition-all duration-200 ${interest.color}`}>
                         {selected ? <Check className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
                       </div>
-                      <p className="text-sm font-medium">{interest.label}</p>
+                      <p className="text-sm font-medium text-[#141E24]">{interest.label}</p>
                     </CardContent>
                   </Card>
                 );
@@ -321,17 +336,21 @@ export default function OnboardingPage() {
       </main>
 
       {/* Footer Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 glass p-4">
+      <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-[#E2E6EA] p-4">
         <div className="max-w-lg mx-auto flex gap-3">
           {currentStep > 0 && (
-            <Button variant="outline" onClick={handleBack} className="h-12 rounded-xl px-6">
+            <Button
+              variant="outline"
+              onClick={handleBack}
+              className="h-12 rounded-xl px-6 bg-white border-[#E2E6EA] text-[#141E24] hover:bg-[#F8FAFB] shadow-sm hover:shadow-md transition-all duration-200 btn-press"
+            >
               <ChevronLeft className="w-5 h-5 mr-1" />
               Retour
             </Button>
           )}
           <Button
             onClick={handleNext}
-            className="flex-1 h-12 rounded-xl"
+            className="flex-1 h-12 rounded-xl shadow-md bg-gradient-to-r from-[#459492] to-[#55B3AE] text-white hover:shadow-lg hover:brightness-105 transition-all duration-200 btn-press"
             disabled={!canAdvance() || isSubmitting}
           >
             {isSubmitting ? (

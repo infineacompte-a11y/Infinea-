@@ -73,7 +73,7 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
       ref={ref}
       className={`${cardWidth} rounded-2xl overflow-hidden select-none`}
       style={{
-        background: "linear-gradient(145deg, #0a0a1a 0%, #111128 40%, #0f0f23 100%)",
+        background: "linear-gradient(145deg, #0a0a0a 0%, #121212 40%, #1A1A1A 100%)",
         fontFamily: "'DM Sans', 'Outfit', system-ui, sans-serif",
       }}
     >
@@ -81,7 +81,7 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
         {/* ── Header: branding + author ── */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[hsl(239,84%,67%)] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#459492] to-[#55B3AE] flex items-center justify-center">
               <Zap className="w-4 h-4 text-white" />
             </div>
             <div>
@@ -90,9 +90,9 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
             </div>
           </div>
           {streak_days > 0 && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/15">
-              <Flame className="w-3.5 h-3.5 text-orange-400" />
-              <span className="text-orange-300 text-xs font-bold tabular-nums">{streak_days}j</span>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#E48C75]/15">
+              <Flame className="w-3.5 h-3.5 text-[#E48C75]" />
+              <span className="text-[#E48C75] text-xs font-bold tabular-nums">{streak_days}j</span>
             </div>
           )}
         </div>
@@ -108,21 +108,21 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
         {/* ── Key stats row ── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
           <div className="text-center p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
-            <Clock className="w-4 h-4 text-blue-400 mx-auto mb-1.5" />
+            <Clock className="w-4 h-4 text-[#459492] mx-auto mb-1.5" />
             <div className="text-white text-xl font-bold tabular-nums leading-none">
               {formatMinutes(total_time_invested || 0)}
             </div>
             <div className="text-white/40 text-[10px] mt-1">investies</div>
           </div>
           <div className="text-center p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
-            <TrendingUp className="w-4 h-4 text-emerald-400 mx-auto mb-1.5" />
+            <TrendingUp className="w-4 h-4 text-[#5DB786] mx-auto mb-1.5" />
             <div className="text-white text-xl font-bold tabular-nums leading-none">
               {total_sessions || 0}
             </div>
             <div className="text-white/40 text-[10px] mt-1">sessions</div>
           </div>
           <div className="text-center p-3 rounded-xl bg-white/[0.04] border border-white/[0.06]">
-            <Award className="w-4 h-4 text-amber-400 mx-auto mb-1.5" />
+            <Award className="w-4 h-4 text-[#E48C75] mx-auto mb-1.5" />
             <div className="text-white text-xl font-bold tabular-nums leading-none">
               {badges_count || 0}
             </div>
@@ -147,15 +147,15 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
                     style={{
                       height: `${Math.max(day.minutes > 0 ? 4 : 2, (day.minutes / maxMin) * 32)}px`,
                       background: day.isToday
-                        ? "hsl(239, 84%, 67%)"
+                        ? "#459492"
                         : day.minutes > 0
-                          ? "rgba(99, 102, 241, 0.4)"
+                          ? "rgba(69, 148, 146, 0.4)"
                           : "rgba(255, 255, 255, 0.06)",
                     }}
                   />
                   <span
                     className="text-[8px] tabular-nums"
-                    style={{ color: day.isToday ? "hsl(239, 84%, 67%)" : "rgba(255,255,255,0.3)" }}
+                    style={{ color: day.isToday ? "#459492" : "rgba(255,255,255,0.3)" }}
                   >
                     {day.label}
                   </span>
@@ -169,7 +169,7 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
         {featuredObj && (
           <div className="mb-5 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
             <div className="flex items-center gap-2 mb-2">
-              <Target className="w-3.5 h-3.5 text-[hsl(239,84%,67%)]" />
+              <Target className="w-3.5 h-3.5 text-[#459492]" />
               <span className="text-white/50 text-[10px] uppercase tracking-widest">Objectif en cours</span>
             </div>
             <div className="text-white text-sm font-semibold mb-2 truncate">{featuredObj.title}</div>
@@ -180,7 +180,7 @@ const ShareCard = forwardRef(function ShareCard({ snapshot, shareType = "weekly_
                     className="h-full rounded-full transition-all"
                     style={{
                       width: `${featuredObj.progress_percent}%`,
-                      background: "linear-gradient(90deg, hsl(239, 84%, 67%), hsl(280, 80%, 60%))",
+                      background: "linear-gradient(90deg, #459492, #55B3AE)",
                     }}
                   />
                 </div>

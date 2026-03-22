@@ -18,36 +18,36 @@ import {
 const statusConfig = {
   connected: {
     label: "Connecte",
-    color: "bg-emerald-500",
-    badgeClass: "bg-emerald-500/20 text-emerald-500 border-emerald-500/30",
+    color: "bg-[#5DB786]",
+    badgeClass: "bg-[#5DB786]/40 text-[#5DB786] border-[#5DB786]/30",
     Icon: CheckCircle2,
   },
   error: {
     label: "Erreur",
-    color: "bg-red-500",
-    badgeClass: "bg-red-500/20 text-red-500 border-red-500/30",
+    color: "bg-[#E48C75]",
+    badgeClass: "bg-[#E48C75]/40 text-[#E48C75] border-[#E48C75]/30",
     Icon: AlertCircle,
   },
   disconnected: {
     label: "Non connecte",
-    color: "bg-zinc-500",
-    badgeClass: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
+    color: "bg-muted-foreground",
+    badgeClass: "bg-muted-foreground/20 text-muted-foreground border-muted-foreground/30",
     Icon: WifiOff,
   },
   syncing: {
     label: "Sync...",
-    color: "bg-blue-500",
-    badgeClass: "bg-blue-500/20 text-blue-500 border-blue-500/30",
+    color: "bg-[#459492]",
+    badgeClass: "bg-[#459492]/40 text-[#459492] border-[#459492]/30",
     Icon: Loader2,
   },
 };
 
 const colorClasses = {
-  blue: { bg: "bg-blue-500/10", text: "text-blue-500", border: "border-blue-500/30" },
-  gray: { bg: "bg-zinc-500/10", text: "text-zinc-400", border: "border-zinc-500/30" },
-  red: { bg: "bg-red-500/10", text: "text-red-500", border: "border-red-500/30" },
-  purple: { bg: "bg-purple-500/10", text: "text-purple-500", border: "border-purple-500/30" },
-  orange: { bg: "bg-orange-500/10", text: "text-orange-500", border: "border-orange-500/30" },
+  blue: { bg: "bg-[#459492]/40", text: "text-[#459492]", border: "border-[#459492]/30" },
+  gray: { bg: "bg-muted-foreground/10", text: "text-muted-foreground", border: "border-muted-foreground/30" },
+  red: { bg: "bg-[#E48C75]/40", text: "text-[#E48C75]", border: "border-[#E48C75]/30" },
+  purple: { bg: "bg-brand-secondary/10", text: "text-brand-secondary", border: "border-brand-secondary/30" },
+  orange: { bg: "bg-[#E48C75]/40", text: "text-[#E48C75]", border: "border-[#E48C75]/30" },
 };
 
 export default function IntegrationCard({
@@ -77,7 +77,7 @@ export default function IntegrationCard({
 
   return (
     <Card
-      className={`transition-all ${isConnected ? colors.border + " border" : "hover:border-primary/50 cursor-pointer"}`}
+      className={`transition-all shadow-sm ${isConnected ? colors.border + " border" : "border border-[#E2E6EA] hover:border-primary/50 hover:shadow-md cursor-pointer"}`}
       data-testid={`integration-card-${service}`}
       onClick={!isConnected && !isLimitReached ? () => onConnect?.(service) : undefined}
     >
@@ -90,7 +90,7 @@ export default function IntegrationCard({
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-heading font-semibold text-sm sm:text-base">{name}</h3>
+              <h3 className="font-sans font-semibold tracking-tight font-semibold text-sm sm:text-base">{name}</h3>
               <Badge className={`text-[10px] sm:text-xs ${statusInfo.badgeClass}`}>
                 <StatusIcon className={`w-3 h-3 mr-1 ${currentStatus === "syncing" ? "animate-spin" : ""}`} />
                 {statusInfo.label}
@@ -110,7 +110,7 @@ export default function IntegrationCard({
             </Button>
           )}
           {!isConnected && isLimitReached && (
-            <Button size="sm" variant="outline" className="text-amber-500 border-amber-500/30 shrink-0" disabled>
+            <Button size="sm" variant="outline" className="text-[#E48C75] border-[#E48C75]/30 shrink-0" disabled>
               <Lock className="w-4 h-4 sm:mr-1" />
               <span className="hidden sm:inline">Premium</span>
             </Button>
@@ -131,7 +131,7 @@ export default function IntegrationCard({
                 )}
               </p>
               {lastError && (
-                <p className="text-xs text-red-400 flex items-center gap-1">
+                <p className="text-xs text-[#E48C75] flex items-center gap-1">
                   <AlertCircle className="w-3 h-3 shrink-0" />
                   <span className="truncate">{lastError}</span>
                 </p>

@@ -20,51 +20,51 @@ const COACH_MODES = {
   post_completion: {
     icon: Trophy,
     badge: "Bravo !",
-    badgeColor: "bg-emerald-500/10 text-emerald-500",
-    glowFrom: "from-emerald-500/30",
-    iconBg: "from-emerald-500/20 to-emerald-500/5",
-    iconRing: "ring-emerald-500/10",
-    iconColor: "text-emerald-500",
+    badgeColor: "bg-[#5DB786]/40 text-[#5DB786]",
+    glowFrom: "from-[#5DB786]/30",
+    iconBg: "from-[#5DB786]/20 to-[#5DB786]/5",
+    iconRing: "ring-[#5DB786]/10",
+    iconColor: "text-[#5DB786]",
     subtitle: "Après ta session",
   },
   post_abandon: {
     icon: HandHeart,
     badge: "On continue",
-    badgeColor: "bg-amber-500/10 text-amber-500",
-    glowFrom: "from-amber-500/30",
-    iconBg: "from-amber-500/20 to-amber-500/5",
-    iconRing: "ring-amber-500/10",
-    iconColor: "text-amber-500",
+    badgeColor: "bg-[#E48C75]/40 text-[#E48C75]",
+    glowFrom: "from-[#E48C75]/30",
+    iconBg: "from-[#E48C75]/20 to-[#E48C75]/5",
+    iconRing: "ring-[#E48C75]/10",
+    iconColor: "text-[#E48C75]",
     subtitle: "Pas de pression",
   },
   streak_milestone: {
     icon: Flame,
     badge: "Milestone !",
-    badgeColor: "bg-orange-500/10 text-orange-500",
-    glowFrom: "from-orange-500/30",
-    iconBg: "from-orange-500/20 to-orange-500/5",
-    iconRing: "ring-orange-500/10",
-    iconColor: "text-orange-500",
+    badgeColor: "bg-[#E48C75]/40 text-[#E48C75]",
+    glowFrom: "from-[#E48C75]/30",
+    iconBg: "from-[#E48C75]/20 to-[#E48C75]/5",
+    iconRing: "ring-[#E48C75]/10",
+    iconColor: "text-[#E48C75]",
     subtitle: "Exploit débloqué",
   },
   comeback: {
     icon: Sunrise,
     badge: "Bon retour",
-    badgeColor: "bg-sky-500/10 text-sky-500",
-    glowFrom: "from-sky-500/30",
-    iconBg: "from-sky-500/20 to-sky-500/5",
-    iconRing: "ring-sky-500/10",
-    iconColor: "text-sky-500",
+    badgeColor: "bg-[#55B3AE]/40 text-[#55B3AE]",
+    glowFrom: "from-[#55B3AE]/30",
+    iconBg: "from-[#55B3AE]/20 to-[#55B3AE]/5",
+    iconRing: "ring-[#55B3AE]/10",
+    iconColor: "text-[#55B3AE]",
     subtitle: "Content de te revoir",
   },
   first_visit: {
     icon: Heart,
     badge: "Bienvenue",
-    badgeColor: "bg-rose-500/10 text-rose-500",
-    glowFrom: "from-rose-500/30",
-    iconBg: "from-rose-500/20 to-rose-500/5",
-    iconRing: "ring-rose-500/10",
-    iconColor: "text-rose-500",
+    badgeColor: "bg-[#E48C75]/40 text-[#E48C75]",
+    glowFrom: "from-[#E48C75]/30",
+    iconBg: "from-[#E48C75]/20 to-[#E48C75]/5",
+    iconRing: "ring-[#E48C75]/10",
+    iconColor: "text-[#E48C75]",
     subtitle: "Ta première micro-action",
   },
   default: {
@@ -148,7 +148,7 @@ export default function AICoachCard({ onStartAction }) {
       {/* Gradient background glow — color changes by mode */}
       <div className={`absolute -inset-px rounded-2xl bg-gradient-to-br ${mode.glowFrom} via-primary/10 to-transparent opacity-60 group-hover:opacity-100 transition-opacity duration-500`} />
 
-      <Card className="relative border-primary/20 bg-card/80 backdrop-blur-sm rounded-2xl overflow-hidden">
+      <Card className="relative border-primary/20 bg-card/80 backdrop-blur-sm rounded-2xl overflow-hidden hover:shadow-lg transition-all duration-300">
         <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-primary/5 to-transparent rounded-bl-full" />
 
         <CardContent className="relative p-6">
@@ -160,7 +160,7 @@ export default function AICoachCard({ onStartAction }) {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-heading font-semibold text-sm">Coach IA</h3>
+                  <h3 className="font-sans font-semibold tracking-tight font-semibold text-sm">Coach IA</h3>
                   <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${mode.badgeColor}`}>
                     <Sparkles className="w-2.5 h-2.5" />
                     {mode.badge}
@@ -210,7 +210,7 @@ export default function AICoachCard({ onStartAction }) {
                 {actionId && onStartAction && (
                   <Button
                     size="sm"
-                    className="mt-3 w-full gap-2"
+                    className="mt-3 w-full gap-2 shadow-md hover:shadow-lg transition-all duration-200 btn-press"
                     onClick={() => onStartAction(actionId)}
                   >
                     <Sparkles className="w-3.5 h-3.5" />

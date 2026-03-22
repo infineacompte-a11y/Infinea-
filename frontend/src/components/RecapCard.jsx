@@ -24,9 +24,9 @@ const HIGHLIGHT_ICONS = {
 };
 
 const HIGHLIGHT_COLORS = {
-  streak: "text-orange-500 bg-orange-500/10",
-  productive: "text-emerald-500 bg-emerald-500/10",
-  milestone: "text-blue-500 bg-blue-500/10",
+  streak: "text-[#E48C75] bg-[#E48C75]/40",
+  productive: "text-[#5DB786] bg-[#5DB786]/40",
+  milestone: "text-[#459492] bg-[#459492]/40",
   focus: "text-primary bg-primary/10",
 };
 
@@ -52,7 +52,7 @@ export default function RecapCard() {
 
   if (isLoading) {
     return (
-      <Card className="p-6 mb-6">
+      <Card className="p-6 mb-6 shadow-sm shadow-[#459492]/5 border border-[#E2E6EA] rounded-2xl">
         <div className="flex items-center justify-center py-4">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
@@ -82,32 +82,36 @@ export default function RecapCard() {
   const maxMin = Math.max(...weekDays.map((d) => d.minutes), 1);
 
   return (
-    <Card className="p-5 mb-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-heading font-semibold text-base flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-primary" />
-          Mon récap
-        </h2>
-        <Badge variant="outline" className="text-[10px]">
-          <Flame className="w-2.5 h-2.5 mr-0.5 text-orange-500" />
-          {streak}j streak
-        </Badge>
+    <Card className="mb-6 shadow-sm shadow-[#459492]/5 border border-[#E2E6EA] rounded-2xl overflow-hidden">
+      {/* Premium gradient header */}
+      <div className="px-5 pt-5 pb-4 bg-gradient-to-r from-[#459492]/[0.04] via-[#55B3AE]/[0.02] to-transparent">
+        <div className="flex items-center justify-between">
+          <h2 className="font-sans font-semibold tracking-tight font-semibold text-base flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-[#459492]" />
+            Mon récap
+          </h2>
+          <Badge variant="outline" className="text-[10px] border-[#E48C75]/30 bg-[#E48C75]/5">
+            <Flame className="w-2.5 h-2.5 mr-0.5 text-[#E48C75]" />
+            {streak}j streak
+          </Badge>
+        </div>
       </div>
+
+      <div className="px-5 pb-5">
 
       {/* Today stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-        <div className="text-center p-2.5 rounded-lg bg-muted/30">
-          <CheckCircle2 className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
+        <div className="text-center p-2.5 rounded-xl bg-gradient-to-b from-[#5DB786]/[0.06] to-[#5DB786]/[0.02] border border-[#5DB786]/10">
+          <CheckCircle2 className="w-4 h-4 text-[#5DB786] mx-auto mb-1" />
           <div className="text-lg font-bold tabular-nums">{today.sessions}</div>
           <div className="text-[10px] text-muted-foreground">Sessions</div>
         </div>
-        <div className="text-center p-2.5 rounded-lg bg-muted/30">
-          <Clock className="w-4 h-4 text-blue-500 mx-auto mb-1" />
+        <div className="text-center p-2.5 rounded-xl bg-gradient-to-b from-[#459492]/[0.06] to-[#459492]/[0.02] border border-[#459492]/10">
+          <Clock className="w-4 h-4 text-[#459492] mx-auto mb-1" />
           <div className="text-lg font-bold tabular-nums">{today.minutes}</div>
           <div className="text-[10px] text-muted-foreground">Minutes</div>
         </div>
-        <div className="text-center p-2.5 rounded-lg bg-muted/30">
+        <div className="text-center p-2.5 rounded-xl bg-gradient-to-b from-[#275255]/[0.04] to-transparent border border-[#275255]/[0.06]">
           <CalendarClock className="w-4 h-4 text-primary mx-auto mb-1" />
           <div className="text-lg font-bold tabular-nums">{today.routines_done}/{today.routines_total}</div>
           <div className="text-[10px] text-muted-foreground">Routines</div>
@@ -115,21 +119,21 @@ export default function RecapCard() {
       </div>
 
       {/* Week mini bar chart */}
-      <div className="mb-4">
+      <div className="mb-4 p-3 rounded-xl bg-[#F8FAFB] border border-[#E2E6EA]/60" style={{ backgroundImage: 'radial-gradient(circle, #E2E6EA 0.5px, transparent 0.5px)', backgroundSize: '12px 12px' }}>
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium text-muted-foreground">Cette semaine</span>
           <span className="text-xs text-muted-foreground">{week.minutes} min · {week.sessions} sessions</span>
         </div>
-        <div className="flex items-end gap-1 h-12">
+        <div className="flex items-end gap-1.5 h-12">
           {weekDays.map((day, i) => (
             <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
               <div
-                className={`w-full rounded-t transition-all ${
-                  day.isToday ? "bg-primary" : day.minutes > 0 ? "bg-primary/40" : "bg-muted/50"
+                className={`w-full rounded-md transition-all ${
+                  day.isToday ? "bg-[#459492] shadow-sm shadow-[#459492]/30" : day.minutes > 0 ? "bg-[#459492]/35" : "bg-[#E2E6EA]/60"
                 }`}
                 style={{ height: `${Math.max(day.minutes > 0 ? 4 : 2, (day.minutes / maxMin) * 40)}px` }}
               />
-              <span className={`text-[9px] ${day.isToday ? "text-primary font-bold" : "text-muted-foreground/60"}`}>
+              <span className={`text-[9px] ${day.isToday ? "text-[#459492] font-bold" : "text-muted-foreground/60"}`}>
                 {day.label}
               </span>
             </div>
@@ -143,7 +147,7 @@ export default function RecapCard() {
           {objectives.slice(0, 3).map((obj) => (
             <div
               key={obj.objective_id}
-              className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/30 cursor-pointer transition-colors"
+              className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#459492]/[0.04] cursor-pointer btn-press transition-all duration-200"
               onClick={() => navigate(`/objectives/${obj.objective_id}`)}
             >
               <Target className="w-4 h-4 text-primary shrink-0" />
@@ -177,6 +181,7 @@ export default function RecapCard() {
           })}
         </div>
       )}
+      </div>
     </Card>
   );
 }

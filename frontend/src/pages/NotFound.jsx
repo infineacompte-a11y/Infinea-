@@ -1,24 +1,48 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Timer, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import InFineaLogo from "@/components/InFineaLogo";
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
-      <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6">
-        <Timer className="w-8 h-8 text-primary" />
+    <div className="min-h-screen app-bg-mesh flex flex-col items-center justify-center px-4 animate-fade-in">
+      {/* Animated brand logo */}
+      <div className="mb-8">
+        <InFineaLogo size={64} animate />
       </div>
-      <h1 className="font-heading text-6xl font-bold text-foreground mb-2">404</h1>
-      <p className="text-lg text-muted-foreground mb-8">
-        Cette page n'existe pas ou a été déplacée.
+
+      {/* 404 number with brand teal accent */}
+      <h1 className="font-sans font-semibold tracking-tight text-8xl sm:text-9xl font-bold tracking-tighter mb-2">
+        <span className="text-[#459492]">4</span>
+        <span className="text-[#141E24]/20">0</span>
+        <span className="text-[#459492]">4</span>
+      </h1>
+
+      {/* Message */}
+      <p className="font-sans font-semibold tracking-tight text-xl text-[#141E24] mb-2">
+        Page introuvable
       </p>
+      <p className="text-[#667085] text-sm mb-10 text-center max-w-sm leading-relaxed">
+        Cette page n'existe pas ou a été déplacée.
+        Pas de temps perdu, retourne transformer tes instants.
+      </p>
+
+      {/* CTA */}
       <Link to="/">
-        <Button>
-          <ArrowLeft className="w-4 h-4 mr-2" />
+        <Button
+          size="lg"
+          className="gap-2 rounded-xl h-12 px-8 transition-all hover:shadow-lg hover:shadow-[#459492]/10"
+        >
+          <ArrowLeft className="w-4 h-4" />
           Retour à l'accueil
         </Button>
       </Link>
+
+      {/* Subtle brand footer */}
+      <p className="text-[#667085]/40 text-xs mt-16">
+        InFinea — Chaque instant compte
+      </p>
     </div>
   );
 }

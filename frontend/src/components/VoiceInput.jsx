@@ -191,7 +191,7 @@ export default function VoiceInput({
         title={isListening ? "Arrêter la dictée" : "Dicter"}
         className={`relative shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 ${
           isListening
-            ? "bg-red-500 text-white shadow-lg shadow-red-500/30 scale-110"
+            ? "bg-[#E48C75] text-white shadow-lg shadow-[#E48C75]/30 scale-110"
             : "bg-muted/50 text-muted-foreground hover:bg-primary/10 hover:text-primary border border-border/50"
         } ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"} ${className}`}
       >
@@ -202,8 +202,8 @@ export default function VoiceInput({
         )}
         {isListening && (
           <>
-            <span className="absolute inset-0 rounded-xl bg-red-500/20 animate-ping" />
-            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-400 animate-pulse" />
+            <span className="absolute inset-0 rounded-xl bg-[#E48C75]/40 animate-ping" />
+            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#E48C75] animate-pulse" />
           </>
         )}
       </button>
@@ -218,7 +218,7 @@ export default function VoiceInput({
       disabled={disabled}
       className={`shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
         isListening
-          ? "bg-red-500 text-white shadow-lg shadow-red-500/30 scale-[1.02]"
+          ? "bg-[#E48C75] text-white shadow-lg shadow-[#E48C75]/30 scale-[1.02]"
           : "bg-muted/50 text-muted-foreground hover:bg-primary/10 hover:text-primary border border-border/50"
       } ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-pointer"} ${className}`}
     >
@@ -230,10 +230,10 @@ export default function VoiceInput({
       {isListening ? (
         <span className="flex items-center gap-1.5">
           <span className="flex items-center gap-0.5">
-            <span className="w-1 h-3 bg-white/80 rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
+            <span className="w-1 h-3 bg-black/50 rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
             <span className="w-1 h-4 bg-white/90 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
             <span className="w-1 h-2 bg-white/70 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
-            <span className="w-1 h-3.5 bg-white/85 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
+            <span className="w-1 h-3.5 bg-black/55 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
           </span>
           Écoute...
         </span>
@@ -267,14 +267,14 @@ export function VoiceTextArea({
     <div className={`relative ${className}`}>
       {/* Listening indicator bar */}
       {listening && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/5 border border-red-500/15 border-b-0 rounded-t-lg">
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#E48C75]/5 border border-[#E48C75]/15 border-b-0 rounded-t-lg">
           <div className="flex items-center gap-0.5">
-            <span className="w-0.5 h-2 bg-red-500/60 rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
-            <span className="w-0.5 h-3 bg-red-500/80 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
-            <span className="w-0.5 h-1.5 bg-red-500/50 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
-            <span className="w-0.5 h-2.5 bg-red-500/70 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
+            <span className="w-0.5 h-2 bg-[#E48C75]/60 rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
+            <span className="w-0.5 h-3 bg-[#E48C75]/80 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
+            <span className="w-0.5 h-1.5 bg-[#E48C75]/50 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
+            <span className="w-0.5 h-2.5 bg-[#E48C75]/70 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
           </div>
-          <span className="text-[11px] text-red-500/80 font-medium">Écoute en cours — parle naturellement...</span>
+          <span className="text-[11px] text-[#E48C75]/80 font-medium">Écoute en cours — parle naturellement...</span>
         </div>
       )}
 
@@ -282,7 +282,7 @@ export function VoiceTextArea({
       <textarea
         className={`w-full rounded-lg border bg-muted/30 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none transition-all duration-200 ${
           listening
-            ? "border-red-500/30 ring-1 ring-red-500/10 rounded-t-none rounded-b-none"
+            ? "border-[#E48C75]/30 ring-1 ring-[#E48C75]/10 rounded-t-none rounded-b-none"
             : "border-border rounded-b-none"
         } ${textareaClassName}`}
         placeholder={placeholder}
@@ -295,12 +295,12 @@ export function VoiceTextArea({
 
       {/* Toolbar below textarea with mic button */}
       <div className={`flex items-center justify-between px-2 py-1.5 border border-t-0 rounded-b-lg transition-colors ${
-        listening ? "border-red-500/30 bg-red-500/3" : "border-border bg-muted/20"
+        listening ? "border-[#E48C75]/30 bg-[#E48C75]/3" : "border-border bg-muted/20"
       }`}>
         <div className="flex items-center gap-1.5">
           {maxLength && (
             <span className={`text-[10px] ${
-              value.length > maxLength * 0.8 ? "text-amber-500" : "text-muted-foreground/40"
+              value.length > maxLength * 0.8 ? "text-[#E48C75]" : "text-muted-foreground/40"
             }`}>
               {value.length}/{maxLength}
             </span>
@@ -308,7 +308,7 @@ export function VoiceTextArea({
         </div>
         <div className="flex items-center gap-1.5">
           {listening && (
-            <span className="text-[10px] text-red-500/60 font-medium mr-1">Dicte ton texte...</span>
+            <span className="text-[10px] text-[#E48C75]/60 font-medium mr-1">Dicte ton texte...</span>
           )}
           <VoiceInput
             variant="icon"

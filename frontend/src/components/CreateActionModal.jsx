@@ -87,7 +87,7 @@ export default function CreateActionModal({ open, onOpenChange, onActionCreated 
             />
             <Button
               onClick={handleGenerate}
-              className="w-full h-11 rounded-xl"
+              className="w-full h-11 rounded-xl shadow-md hover:shadow-lg transition-all duration-200 btn-press"
               disabled={isGenerating || !description.trim()}
             >
               {isGenerating ? (
@@ -108,7 +108,7 @@ export default function CreateActionModal({ open, onOpenChange, onActionCreated 
             <Card className="border-primary/20 bg-primary/5">
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-heading font-semibold">{generatedAction.title}</h3>
+                  <h3 className="font-sans font-semibold tracking-tight font-semibold">{generatedAction.title}</h3>
                   <Badge variant="secondary" className="text-xs">
                     {categoryLabels[generatedAction.category] || generatedAction.category}
                   </Badge>

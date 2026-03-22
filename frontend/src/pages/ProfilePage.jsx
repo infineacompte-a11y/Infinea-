@@ -37,40 +37,45 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen app-bg-mesh">
       <Sidebar />
 
       {/* Main Content */}
-      <main className="lg:ml-64 pt-20 lg:pt-8 px-4 lg:px-8 pb-8">
-        <div className="max-w-3xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="font-heading text-3xl font-semibold mb-2" data-testid="profile-title">
-              Mon profil
+      <main className="lg:ml-64 pt-14 lg:pt-0 pb-8">
+        {/* Dark Header */}
+        <div className="section-dark-header px-4 lg:px-8 pt-8 lg:pt-10 pb-8">
+          <div className="max-w-5xl mx-auto">
+            <h1 className="text-display text-3xl lg:text-4xl font-semibold text-white opacity-0 animate-fade-in" data-testid="profile-title">
+              Profil
             </h1>
-            <p className="text-muted-foreground">
-              Gérez vos informations et votre abonnement
+            <p className="text-white/60 text-sm mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
+              Gérez votre compte et vos préférences
             </p>
           </div>
+        </div>
 
+        <div className="px-4 lg:px-8">
+        <div className="max-w-3xl mx-auto">
           {/* Profile Card */}
-          <Card className="mb-6">
+          <Card className="mb-6 hover:border-[#459492]/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 opacity-0 animate-fade-in" style={{ animationFillMode: "forwards" }}>
             <CardContent className="p-6">
               <div className="flex items-center gap-6">
-                <Avatar className="w-20 h-20">
-                  <AvatarImage src={user?.picture} alt={user?.name} />
-                  <AvatarFallback className="bg-primary/10 text-primary text-2xl">
-                    {getInitials(user?.name)}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="avatar-gradient-ring relative flex items-center justify-center">
+                  <Avatar className="w-20 h-20 ring-offset-2 ring-offset-background">
+                    <AvatarImage src={user?.picture} alt={user?.name} />
+                    <AvatarFallback className="bg-primary/10 text-primary text-2xl">
+                      {getInitials(user?.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
-                    <h2 className="font-heading text-2xl font-semibold" data-testid="profile-name">
+                    <h2 className="font-sans font-semibold tracking-tight text-2xl font-semibold" data-testid="profile-name">
                       {user?.name || "Utilisateur"}
                     </h2>
                     {user?.subscription_tier === "premium" && (
-                      <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
-                        <Crown className="w-3 h-3 mr-1" />
+                      <Badge className="bg-gradient-to-r from-[#E48C75] to-[#459492] text-white border-0">
+                        <Crown className="w-3 h-3 mr-1 text-white" />
                         Premium
                       </Badge>
                     )}
@@ -85,15 +90,15 @@ export default function ProfilePage() {
           </Card>
 
           {/* Subscription Card */}
-          <Card className="mb-6">
+          <Card className="mb-6 hover:border-[#459492]/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 opacity-0 animate-fade-in" style={{ animationDelay: "100ms", animationFillMode: "forwards" }}>
             <CardHeader>
-              <CardTitle className="font-heading text-lg flex items-center gap-2">
+              <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
                 <CreditCard className="w-5 h-5" />
                 Abonnement
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 mb-4">
+              <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-br from-[#459492]/20 to-transparent border border-border/50 mb-4">
                 <div>
                   <p className="font-medium mb-1">
                     {user?.subscription_tier === "premium" ? "Plan Premium" : "Plan Gratuit"}
@@ -104,7 +109,10 @@ export default function ProfilePage() {
                       : "Fonctionnalités de base"}
                   </p>
                 </div>
-                <Badge variant={user?.subscription_tier === "premium" ? "default" : "secondary"}>
+                <Badge
+                  variant={user?.subscription_tier === "premium" ? "default" : "secondary"}
+                  className={user?.subscription_tier === "premium" ? "bg-[#5DB786]/40 text-[#5DB786] border-0" : ""}
+                >
                   {user?.subscription_tier === "premium" ? "Actif" : "Gratuit"}
                 </Badge>
               </div>
@@ -112,7 +120,7 @@ export default function ProfilePage() {
               {user?.subscription_tier === "premium" ? (
                 <Button
                   variant="outline"
-                  className="w-full rounded-xl"
+                  className="w-full rounded-xl shadow-md"
                   onClick={async () => {
                     try {
                       const res = await authFetch(`${API}/premium/portal`, { method: "POST" });
@@ -132,7 +140,7 @@ export default function ProfilePage() {
                 </Button>
               ) : (
                 <Link to="/pricing">
-                  <Button className="w-full rounded-xl" data-testid="upgrade-btn">
+                  <Button className="btn-premium-shimmer w-full rounded-xl shadow-md hover:shadow-lg transition-shadow" data-testid="upgrade-btn">
                     <Crown className="w-5 h-5 mr-2" />
                     Passer à Premium
                     <ChevronRight className="w-5 h-5 ml-2" />
@@ -143,57 +151,58 @@ export default function ProfilePage() {
           </Card>
 
           {/* Stats Summary */}
-          <Card className="mb-6">
+          <Card className="mb-6 hover:border-[#459492]/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 opacity-0 animate-fade-in" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
             <CardHeader>
-              <CardTitle className="font-heading text-lg">Résumé</CardTitle>
+              <CardTitle className="font-sans font-semibold tracking-tight text-lg">Résumé</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-white/5">
-                  <p className="text-2xl font-heading font-bold text-primary">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <div className="stat-card-teal p-3 sm:p-4 rounded-xl bg-gradient-to-br from-[#459492]/20 to-transparent border border-border/50 hover:-translate-y-0.5 transition-all duration-300">
+                  <p className="text-2xl font-sans font-semibold tracking-tight font-bold text-primary tabular-nums">
                     {user?.total_time_invested || 0}
                   </p>
-                  <p className="text-sm text-muted-foreground">minutes investies</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">minutes investies</p>
                 </div>
-                <div className="p-4 rounded-xl bg-white/5">
-                  <p className="text-2xl font-heading font-bold text-amber-500">
+                <div className="stat-card-coral p-3 sm:p-4 rounded-xl bg-gradient-to-br from-[#E48C75]/20 to-transparent border border-border/50 hover:-translate-y-0.5 transition-all duration-300">
+                  <p className="text-2xl font-sans font-semibold tracking-tight font-bold text-[#E48C75] tabular-nums">
                     {user?.streak_days || 0}
                   </p>
-                  <p className="text-sm text-muted-foreground">jours de streak</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">jours de streak</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           {/* Actions */}
-          <Card>
+          <Card className="hover:border-[#459492]/20 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 opacity-0 animate-fade-in" style={{ animationDelay: "300ms", animationFillMode: "forwards" }}>
             <CardHeader>
-              <CardTitle className="font-heading text-lg">Actions</CardTitle>
+              <CardTitle className="font-sans font-semibold tracking-tight text-lg">Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <Link to="/progress">
-                <button className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <BarChart3 className="w-5 h-5 text-muted-foreground" />
-                    <span>Voir mes statistiques</span>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
-                </button>
+                <Button
+                  variant="ghost"
+                  className="group w-full justify-start gap-3 h-12 rounded-xl"
+                >
+                  <BarChart3 className="w-5 h-5 text-muted-foreground" />
+                  <span className="flex-1 text-left">Voir mes statistiques</span>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+                </Button>
               </Link>
-              
-              <button
+
+              <Button
+                variant="ghost"
                 onClick={handleLogout}
-                className="w-full flex items-center justify-between p-4 rounded-xl hover:bg-white/5 transition-colors text-destructive"
+                className="group w-full justify-start gap-3 h-12 rounded-xl text-destructive hover:bg-destructive/10"
                 data-testid="profile-logout-btn"
               >
-                <div className="flex items-center gap-3">
-                  <LogOut className="w-5 h-5" />
-                  <span>Se déconnecter</span>
-                </div>
-                <ChevronRight className="w-5 h-5" />
-              </button>
+                <LogOut className="w-5 h-5" />
+                <span className="flex-1 text-left">Se déconnecter</span>
+                <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </Button>
             </CardContent>
           </Card>
+        </div>
         </div>
       </main>
     </div>
