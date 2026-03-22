@@ -25,10 +25,13 @@ async def create_checkout(
     user: dict = Depends(get_current_user),
 ):
     """Create Stripe checkout session for Premium subscription"""
-    from emergentintegrations.payments.stripe.checkout import (
-        StripeCheckout,
-        CheckoutSessionRequest,
-    )
+    try:
+        from emergentintegrations.payments.stripe.checkout import (
+            StripeCheckout,
+            CheckoutSessionRequest,
+        )
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Payment service not available")
 
     stripe_key = os.environ.get("STRIPE_API_KEY")
     if not stripe_key:
@@ -81,7 +84,10 @@ async def get_payment_status(
     user: dict = Depends(get_current_user),
 ):
     """Check payment status and upgrade user if successful"""
-    from emergentintegrations.payments.stripe.checkout import StripeCheckout
+    try:
+        from emergentintegrations.payments.stripe.checkout import StripeCheckout
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Payment service not available")
 
     stripe_key = os.environ.get("STRIPE_API_KEY")
     if not stripe_key:
@@ -138,7 +144,10 @@ async def get_payment_status(
 @router.post("/webhook/stripe")
 async def stripe_webhook(request: Request):
     """Handle Stripe webhooks"""
-    from emergentintegrations.payments.stripe.checkout import StripeCheckout
+    try:
+        from emergentintegrations.payments.stripe.checkout import StripeCheckout
+    except ImportError:
+        return {"status": "error", "message": "Payment service not available"}
 
     stripe_key = os.environ.get("STRIPE_API_KEY")
     if not stripe_key:

@@ -32,8 +32,5 @@ google-auth==2.47.0
 google-auth-httplib2==0.3.0
 google-auth-oauthlib==1.2.4
 
-# InFinea custom integrations (LLM + Stripe)
-emergentintegrations==0.1.0
-
 # Timezone data
 tzdata>=2024.2

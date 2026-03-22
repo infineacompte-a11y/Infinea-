@@ -97,7 +97,10 @@ async def delete_reflection(
 @router.get("/reflections/summary")
 async def get_reflections_summary(user: dict = Depends(get_current_user)):
     """Generate AI-powered weekly summary of reflections"""
-    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+    except ImportError:
+        raise HTTPException(status_code=503, detail="AI service not available")
 
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
