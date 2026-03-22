@@ -28,9 +28,9 @@ const categoryIcons = {
 };
 
 const categoryColors = {
-  learning: "text-blue-500 bg-blue-500/10",
-  productivity: "text-amber-500 bg-amber-500/10",
-  well_being: "text-emerald-500 bg-emerald-500/10",
+  learning: "text-[#459492] bg-[#459492]/40",
+  productivity: "text-[#E48C75] bg-[#E48C75]/40",
+  well_being: "text-[#5DB786] bg-[#5DB786]/40",
 };
 
 const categoryLabels = {
@@ -108,7 +108,7 @@ export default function SmartPredictionCard() {
 
   if (isLoading) {
     return (
-      <Card className="mb-8 border-brand-teal/20 bg-gradient-to-br from-brand-teal/5 to-brand-green/5">
+      <Card className="mb-8 border-brand-teal/20 bg-gradient-to-br from-brand-teal/5 to-brand-secondary/5 shadow-sm">
         <CardContent className="p-5 flex items-center gap-3">
           <Loader2 className="w-5 h-5 animate-spin text-brand-teal" />
           <span className="text-sm text-muted-foreground">Analyse de votre agenda...</span>
@@ -126,14 +126,14 @@ export default function SmartPredictionCard() {
   // No integrations connected — show CTA
   if (!hasIntegrations) {
     return (
-      <Card className="mb-8 border-dashed border-muted-foreground/30" data-testid="smart-predict-empty">
+      <Card className="mb-8 border-dashed border-muted-foreground/30 shadow-sm" data-testid="smart-predict-empty">
         <CardContent className="p-5">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0">
               <Plug className="w-5 h-5 text-muted-foreground" />
             </div>
             <div className="flex-1">
-              <h3 className="font-heading font-semibold text-sm mb-1">Prédictions intelligentes</h3>
+              <h3 className="font-sans font-semibold tracking-tight font-semibold text-sm mb-1">Prédictions intelligentes</h3>
               <p className="text-sm text-muted-foreground mb-3">
                 Connectez votre calendrier pour que l'IA prédise vos prochains moments disponibles.
               </p>
@@ -153,7 +153,7 @@ export default function SmartPredictionCard() {
   // No predictions but integrations exist — waiting for sync
   if (!hasPredictions) {
     return (
-      <Card className="mb-8 border-brand-teal/20 bg-gradient-to-br from-brand-teal/5 to-brand-green/5" data-testid="smart-predict-waiting">
+      <Card className="mb-8 border-brand-teal/20 bg-gradient-to-br from-brand-teal/5 to-brand-secondary/5 shadow-sm" data-testid="smart-predict-waiting">
         <CardContent className="p-5">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-xl bg-brand-teal/10 flex items-center justify-center shrink-0">
@@ -161,7 +161,7 @@ export default function SmartPredictionCard() {
             </div>
             <div className="flex-1">
               <div className="flex items-center justify-between mb-1">
-                <h3 className="font-heading font-semibold text-sm">Prédictions intelligentes</h3>
+                <h3 className="font-sans font-semibold tracking-tight font-semibold text-sm">Prédictions intelligentes</h3>
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={fetchPredictions}>
                   <RefreshCw className="w-3.5 h-3.5" />
                 </Button>
@@ -186,7 +186,7 @@ export default function SmartPredictionCard() {
 
   // Main card: predictions available
   return (
-    <Card className="mb-8 border-brand-teal/20 bg-gradient-to-br from-brand-teal/5 to-brand-green/5" data-testid="smart-predict-card">
+    <Card className="mb-8 border-brand-teal/20 bg-gradient-to-br from-brand-teal/5 to-brand-secondary/5 shadow-sm" data-testid="smart-predict-card">
       <CardContent className="p-5">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
@@ -195,7 +195,7 @@ export default function SmartPredictionCard() {
               <Brain className="w-5 h-5 text-brand-teal" />
             </div>
             <div>
-              <h3 className="font-heading font-semibold text-sm">Prédictions intelligentes</h3>
+              <h3 className="font-sans font-semibold tracking-tight font-semibold text-sm">Prédictions intelligentes</h3>
               <p className="text-xs text-muted-foreground">
                 {context.total_slots_today} {"créneau"}{context.total_slots_today > 1 ? "x" : ""} &bull; {context.total_free_minutes} min disponibles
               </p>

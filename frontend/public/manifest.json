@@ -4,8 +4,8 @@
   "description": "Transformez vos temps morts en micro-victoires. 2 à 15 minutes suffisent.",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#0A0A0A",
-  "theme_color": "#6366f1",
+  "background_color": "#F8FAFB",
+  "theme_color": "#275255",
   "orientation": "portrait-primary",
   "icons": [
     {

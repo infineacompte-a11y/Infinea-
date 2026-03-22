@@ -36,7 +36,10 @@ import CoachFAB from "@/components/CoachFAB";
 import MicroInstantBanner from "@/components/MicroInstantBanner";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
+// In production on Vercel, REACT_APP_BACKEND_URL can be "" (empty) to use
+// same-origin /api/* calls which are proxied to the backend via vercel.json rewrites.
+// This avoids CORS issues entirely.
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL ?? "http://localhost:8000";
 export const API = `${BACKEND_URL}/api`;
 
 // Helper fetch with automatic token refresh on 401.
@@ -297,6 +300,15 @@ const ProtectedRoute = ({ children }) => {
   );
 };
 
+// Scroll to top on route change — prevents stale scroll position
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 // App Router
 function AppRouter() {
   const location = useLocation();
@@ -516,6 +528,9 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <div className="app-noise-overlay" aria-hidden="true" />
+        <div className="app-orbs-overlay" aria-hidden="true" />
+        <ScrollToTop />
         <MicroInstantBanner />
         <AppRouter />
         <Toaster position="top-right" richColors />
