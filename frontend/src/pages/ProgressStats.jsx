@@ -39,13 +39,13 @@ import PremiumAnalytics from "@/components/PremiumAnalytics";
 import ShareDialog from "@/components/ShareDialog";
 
 const categoryColors = {
-  learning: "#3b82f6",
-  productivity: "#f59e0b",
-  well_being: "#10b981",
-  creativity: "#a855f7",
+  learning: "#459492",
+  productivity: "#E48C75",
+  well_being: "#5DB786",
+  creativity: "#55B3AE",
   fitness: "#ef4444",
-  mindfulness: "#06b6d4",
-  leadership: "#6366f1",
+  mindfulness: "#7DD3D0",
+  leadership: "#275255",
   finance: "#22c55e",
   relations: "#ec4899",
   mental_health: "#14b8a6",
@@ -91,7 +91,7 @@ export default function ProgressStats() {
     ? Object.entries(stats.sessions_by_category || {}).map(([key, value]) => ({
         name: categoryLabels[key] || key,
         value,
-        color: categoryColors[key] || "#6366f1",
+        color: categoryColors[key] || "#459492",
       }))
     : [];
 
@@ -99,7 +99,7 @@ export default function ProgressStats() {
     ? Object.entries(stats.time_by_category || {}).map(([key, value]) => ({
         name: categoryLabels[key] || key,
         minutes: value,
-        fill: categoryColors[key] || "#6366f1",
+        fill: categoryColors[key] || "#459492",
       }))
     : [];
 
@@ -218,13 +218,13 @@ export default function ProgressStats() {
                     {barData.length > 0 ? (
                       <ResponsiveContainer width="100%" height={250}>
                         <BarChart data={barData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                          <XAxis dataKey="name" tick={{ fill: "#a1a1aa", fontSize: 12 }} />
-                          <YAxis tick={{ fill: "#a1a1aa", fontSize: 12 }} />
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(172, 25%, 85%)" />
+                          <XAxis dataKey="name" tick={{ fill: "#5E717E", fontSize: 12 }} />
+                          <YAxis tick={{ fill: "#5E717E", fontSize: 12 }} />
                           <Tooltip
                             contentStyle={{
-                              backgroundColor: "#121212",
-                              border: "1px solid #27272a",
+                              backgroundColor: "white",
+                              border: "1px solid hsl(172, 25%, 85%)",
                               borderRadius: "8px",
                             }}
                           />
@@ -263,8 +263,8 @@ export default function ProgressStats() {
                           </Pie>
                           <Tooltip
                             contentStyle={{
-                              backgroundColor: "#121212",
-                              border: "1px solid #27272a",
+                              backgroundColor: "white",
+                              border: "1px solid hsl(172, 25%, 85%)",
                               borderRadius: "8px",
                             }}
                           />
@@ -319,7 +319,7 @@ export default function ProgressStats() {
                                   creativity: <Palette className="w-5 h-5 text-purple-500" />,
                                   fitness: <Dumbbell className="w-5 h-5 text-red-500" />,
                                   mindfulness: <Leaf className="w-5 h-5 text-cyan-500" />,
-                                  leadership: <Users className="w-5 h-5 text-indigo-500" />,
+                                  leadership: <Users className="w-5 h-5 text-brand-teal" />,
                                   finance: <TrendingUp className="w-5 h-5 text-green-500" />,
                                   relations: <MessageCircle className="w-5 h-5 text-pink-500" />,
                                   mental_health: <Brain className="w-5 h-5 text-teal-500" />,

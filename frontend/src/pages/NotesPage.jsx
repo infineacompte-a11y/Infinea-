@@ -59,7 +59,7 @@ const categoryColors = {
   creativity: "text-purple-500 bg-purple-500/10",
   fitness: "text-red-500 bg-red-500/10",
   mindfulness: "text-cyan-500 bg-cyan-500/10",
-  leadership: "text-indigo-500 bg-indigo-500/10",
+  leadership: "text-brand-teal bg-brand-teal/10",
   finance: "text-green-500 bg-green-500/10",
   relations: "text-pink-500 bg-pink-500/10",
   mental_health: "text-teal-500 bg-teal-500/10",
@@ -493,7 +493,7 @@ export default function NotesPage() {
                       {analysis.analysis.connections && (
                         <Card className="p-4">
                           <div className="flex items-start gap-3">
-                            <Sparkles className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
+                            <Sparkles className="w-4 h-4 text-brand-teal mt-0.5 shrink-0" />
                             <p className="text-sm text-foreground/70 leading-relaxed">{analysis.analysis.connections}</p>
                           </div>
                         </Card>
@@ -502,7 +502,7 @@ export default function NotesPage() {
                       {analysis.analysis.focus_suggestion && (
                         <Card className="p-3">
                           <div className="flex items-center gap-3">
-                            <Target className="w-4 h-4 text-indigo-500" />
+                            <Target className="w-4 h-4 text-brand-teal" />
                             <span className="text-sm text-muted-foreground">Focus suggéré :</span>
                             <Badge variant="secondary">{analysis.analysis.focus_suggestion}</Badge>
                           </div>

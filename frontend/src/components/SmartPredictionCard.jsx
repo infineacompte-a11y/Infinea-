@@ -108,9 +108,9 @@ export default function SmartPredictionCard() {
 
   if (isLoading) {
     return (
-      <Card className="mb-8 border-indigo-500/20 bg-gradient-to-br from-indigo-500/5 to-purple-500/5">
+      <Card className="mb-8 border-brand-teal/20 bg-gradient-to-br from-brand-teal/5 to-brand-green/5">
         <CardContent className="p-5 flex items-center gap-3">
-          <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+          <Loader2 className="w-5 h-5 animate-spin text-brand-teal" />
           <span className="text-sm text-muted-foreground">Analyse de votre agenda...</span>
         </CardContent>
       </Card>
@@ -153,11 +153,11 @@ export default function SmartPredictionCard() {
   // No predictions but integrations exist — waiting for sync
   if (!hasPredictions) {
     return (
-      <Card className="mb-8 border-indigo-500/20 bg-gradient-to-br from-indigo-500/5 to-purple-500/5" data-testid="smart-predict-waiting">
+      <Card className="mb-8 border-brand-teal/20 bg-gradient-to-br from-brand-teal/5 to-brand-green/5" data-testid="smart-predict-waiting">
         <CardContent className="p-5">
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0">
-              <Brain className="w-5 h-5 text-indigo-500" />
+            <div className="w-10 h-10 rounded-xl bg-brand-teal/10 flex items-center justify-center shrink-0">
+              <Brain className="w-5 h-5 text-brand-teal" />
             </div>
             <div className="flex-1">
               <div className="flex items-center justify-between mb-1">
@@ -186,13 +186,13 @@ export default function SmartPredictionCard() {
 
   // Main card: predictions available
   return (
-    <Card className="mb-8 border-indigo-500/20 bg-gradient-to-br from-indigo-500/5 to-purple-500/5" data-testid="smart-predict-card">
+    <Card className="mb-8 border-brand-teal/20 bg-gradient-to-br from-brand-teal/5 to-brand-green/5" data-testid="smart-predict-card">
       <CardContent className="p-5">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center">
-              <Brain className="w-5 h-5 text-indigo-500" />
+            <div className="w-10 h-10 rounded-xl bg-brand-teal/10 flex items-center justify-center">
+              <Brain className="w-5 h-5 text-brand-teal" />
             </div>
             <div>
               <h3 className="font-heading font-semibold text-sm">Prédictions intelligentes</h3>
@@ -216,11 +216,11 @@ export default function SmartPredictionCard() {
 
         {/* Next prediction (highlighted) */}
         {next_prediction && (
-          <div className="p-3 rounded-xl bg-background/60 border border-indigo-500/20 mb-3">
+          <div className="p-3 rounded-xl bg-background/60 border border-brand-teal/20 mb-3">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-indigo-500" />
-                <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
+                <Clock className="w-4 h-4 text-brand-teal" />
+                <span className="text-sm font-medium text-brand-primary dark:text-brand-secondary">
                   {"Prochain moment : "}{formatCountdown(next_prediction.start_time)}
                 </span>
               </div>
@@ -245,7 +245,7 @@ export default function SmartPredictionCard() {
                     <p className="text-xs text-muted-foreground">
                       {categoryLabels[next_prediction.suggested_action.category] || "Action"}
                       {next_prediction.suggested_action.score && (
-                        <span className="ml-2 text-indigo-500">
+                        <span className="ml-2 text-brand-teal">
                           Score: {Math.round(next_prediction.suggested_action.score * 100)}%
                         </span>
                       )}
@@ -317,7 +317,7 @@ export default function SmartPredictionCard() {
         {/* Proactive insight */}
         {proactive && (
           <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-2 text-xs text-muted-foreground">
-            <Zap className="w-3.5 h-3.5 text-indigo-400" />
+            <Zap className="w-3.5 h-3.5 text-brand-secondary" />
             <span>
               {"Votre rythme actuel : sessions de ~"}{proactive.preferred_duration}{" min, "}
               {proactive.inferred_energy === "high" ? "énergie haute" :

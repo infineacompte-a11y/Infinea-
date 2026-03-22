@@ -34,7 +34,7 @@ import { toast } from "sonner";
 const TIME_SECTIONS = [
   { key: "morning", label: "Matin", icon: Sunrise, color: "text-amber-500", bgColor: "bg-amber-500/10" },
   { key: "afternoon", label: "Après-midi", icon: Sun, color: "text-orange-500", bgColor: "bg-orange-500/10" },
-  { key: "evening", label: "Soir", icon: Moon, color: "text-indigo-500", bgColor: "bg-indigo-500/10" },
+  { key: "evening", label: "Soir", icon: Moon, color: "text-brand-teal", bgColor: "bg-brand-teal/10" },
 ];
 
 function getCurrentTimeOfDay() {

@@ -50,7 +50,7 @@ const categoryColors = {
   creativity: "text-purple-500 bg-purple-500/10",
   fitness: "text-red-500 bg-red-500/10",
   mindfulness: "text-cyan-500 bg-cyan-500/10",
-  leadership: "text-indigo-500 bg-indigo-500/10",
+  leadership: "text-brand-teal bg-brand-teal/10",
   finance: "text-green-500 bg-green-500/10",
   relations: "text-pink-500 bg-pink-500/10",
   mental_health: "text-teal-500 bg-teal-500/10",

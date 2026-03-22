@@ -40,7 +40,7 @@ const CATEGORY_MAP = {
   creativity: { label: "Créativité", color: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
   fitness: { label: "Fitness", color: "bg-rose-500/10 text-rose-500 border-rose-500/20" },
   mindfulness: { label: "Pleine conscience", color: "bg-sky-500/10 text-sky-500 border-sky-500/20" },
-  leadership: { label: "Leadership", color: "bg-indigo-500/10 text-indigo-500 border-indigo-500/20" },
+  leadership: { label: "Leadership", color: "bg-brand-teal/10 text-brand-teal border-brand-teal/20" },
   finance: { label: "Finance", color: "bg-teal-500/10 text-teal-500 border-teal-500/20" },
   relations: { label: "Relations", color: "bg-pink-500/10 text-pink-500 border-pink-500/20" },
   mental_health: { label: "Santé mentale", color: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20" },

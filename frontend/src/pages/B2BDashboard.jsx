@@ -186,7 +186,7 @@ export default function B2BDashboard() {
         name: categoryLabels[key] || key,
         value: value.sessions,
         time: value.time,
-        color: categoryColors[key] || "#6366f1",
+        color: categoryColors[key] || "#459492",
       }))
     : [];
 
@@ -440,28 +440,28 @@ export default function B2BDashboard() {
                       <AreaChart data={dashboard.daily_activity}>
                         <defs>
                           <linearGradient id="colorSessions" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                            <stop offset="5%" stopColor="#459492" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#459492" stopOpacity={0}/>
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(172, 25%, 85%)" />
                         <XAxis
                           dataKey="_id"
-                          tick={{ fill: "#a1a1aa", fontSize: 10 }}
+                          tick={{ fill: "#5E717E", fontSize: 10 }}
                           tickFormatter={(v) => v.slice(5)}
                         />
-                        <YAxis tick={{ fill: "#a1a1aa", fontSize: 12 }} />
+                        <YAxis tick={{ fill: "#5E717E", fontSize: 12 }} />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: "#121212",
-                            border: "1px solid #27272a",
+                            backgroundColor: "white",
+                            border: "1px solid hsl(172, 25%, 85%)",
                             borderRadius: "8px",
                           }}
                         />
                         <Area
                           type="monotone"
                           dataKey="sessions"
-                          stroke="#6366f1"
+                          stroke="#459492"
                           strokeWidth={2}
                           fill="url(#colorSessions)"
                         />
@@ -500,8 +500,8 @@ export default function B2BDashboard() {
                           </Pie>
                           <Tooltip
                             contentStyle={{
-                              backgroundColor: "#121212",
-                              border: "1px solid #27272a",
+                              backgroundColor: "white",
+                              border: "1px solid hsl(172, 25%, 85%)",
                               borderRadius: "8px",
                             }}
                           />
