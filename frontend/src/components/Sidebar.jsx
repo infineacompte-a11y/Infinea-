@@ -10,6 +10,7 @@ import {
   Brain,
   FileText,
   Award,
+  Trophy,
   BarChart3,
   Bell,
   Building2,
@@ -79,6 +80,7 @@ const navGroups = [
     items: [
       { to: "/progress", label: "Progression", icon: BarChart3 },
       { to: "/badges", label: "Badges", icon: Award },
+      { to: "/challenges", label: "Défis", icon: Trophy },
       { to: "/journal", label: "Journal", icon: Brain },
       { to: "/notes", label: "Notes", icon: FileText },
     ],
