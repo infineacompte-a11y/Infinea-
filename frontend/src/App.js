@@ -19,6 +19,11 @@ import B2BDashboard from "@/pages/B2BDashboard";
 import IntegrationsPage from "@/pages/IntegrationsPage";
 import JournalPage from "@/pages/JournalPage";
 
+// Social Pages (Sprint F1)
+import PublicProfilePage from "@/pages/PublicProfilePage";
+import ProfileEditPage from "@/pages/ProfileEditPage";
+import SearchPage from "@/pages/SearchPage";
+
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
 
@@ -256,6 +261,31 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <JournalPage />
+          </ProtectedRoute>
+        }
+      />
+      {/* Social routes (Sprint F1) */}
+      <Route
+        path="/users/:userId"
+        element={
+          <ProtectedRoute>
+            <PublicProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile/edit"
+        element={
+          <ProtectedRoute>
+            <ProfileEditPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/search"
+        element={
+          <ProtectedRoute>
+            <SearchPage />
           </ProtectedRoute>
         }
       />
