@@ -31,6 +31,9 @@ import CGUPage from "@/pages/CGUPage";
 import PublicSharePage from "@/pages/PublicSharePage";
 import GroupsPage from "@/pages/GroupsPage";
 import GroupDetailPage from "@/pages/GroupDetailPage";
+import SearchPage from "@/pages/SearchPage";
+import PublicProfilePage from "@/pages/PublicProfilePage";
+import CommunityFeedPage from "@/pages/CommunityFeedPage";
 import NotFound from "@/pages/NotFound";
 import CoachFAB from "@/components/CoachFAB";
 import MicroInstantBanner from "@/components/MicroInstantBanner";
@@ -488,6 +491,30 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <GroupDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/search"
+        element={
+          <ProtectedRoute>
+            <SearchPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/users/:userId"
+        element={
+          <ProtectedRoute>
+            <PublicProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/community"
+        element={
+          <ProtectedRoute>
+            <CommunityFeedPage />
           </ProtectedRoute>
         }
       />
