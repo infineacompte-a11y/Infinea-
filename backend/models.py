@@ -24,6 +24,7 @@ class UserResponse(BaseModel):
     user_id: str
     email: str
     name: str
+    username: Optional[str] = None
     picture: Optional[str] = None
     subscription_tier: str = "free"
     total_time_invested: int = 0  # in minutes

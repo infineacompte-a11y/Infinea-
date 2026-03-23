@@ -52,7 +52,11 @@ export default function UserCard({ user, showFollow = true, currentUserId }) {
                 )}
               </div>
             </Link>
-            {user.bio ? (
+            {user.username ? (
+              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                @{user.username}
+              </p>
+            ) : user.bio ? (
               <p className="text-xs text-muted-foreground truncate mt-0.5">
                 {user.bio}
               </p>
