@@ -23,7 +23,7 @@ import {
   Zap,
   ChevronRight,
   Search,
-  Activity,
+  Settings,
 } from "lucide-react";
 import InFineaLogo from "@/components/InFineaLogo";
 import { API, authFetch, useAuth } from "@/App";
@@ -82,7 +82,6 @@ const navGroups = [
     items: [
       { to: "/progress", label: "Progression", icon: BarChart3 },
       { to: "/badges", label: "Badges", icon: Award },
-      { to: "/challenges", label: "Défis", icon: Trophy },
       { to: "/journal", label: "Journal", icon: Brain },
       { to: "/notes", label: "Notes", icon: FileText },
     ],
@@ -90,13 +89,13 @@ const navGroups = [
   {
     label: "Communauté",
     items: [
-      { to: "/community", label: "Fil d'activité", icon: Activity },
       { to: "/search", label: "Rechercher", icon: Search },
       { to: "/groups", label: "Groupes", icon: Users },
+      { to: "/challenges", label: "Défis", icon: Trophy },
     ],
   },
   {
-    label: "Outils",
+    label: "Réglages",
     items: [
       { to: "/integrations", label: "Intégrations", icon: Calendar },
       { to: "/b2b", label: "Entreprise", icon: Building2 },
@@ -106,8 +105,8 @@ const navGroups = [
 
 // Bottom nav items (always visible, outside groups)
 const bottomItems = [
-  { to: "/notifications", label: "Notifications", icon: Bell },
   { to: "/profile", label: "Profil", icon: User },
+  { to: "/notifications", label: "Notifications", icon: Bell },
 ];
 
 function NavItem({ to, label, icon: Icon, isActive, isNotif, unreadCount, mobile, onNavigate, animDelay }) {
