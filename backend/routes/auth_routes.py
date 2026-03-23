@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, Depends
 from datetime import datetime, timezone, timedelta
 import uuid
 import httpx
+import os
 
 from database import db
 from config import JWT_EXPIRATION_HOURS
@@ -14,6 +15,14 @@ from auth import create_token, get_current_user, hash_password, verify_password
 from models import UserCreate, UserLogin
 
 router = APIRouter(prefix="/api")
+
+
+@router.get("/auth/google")
+async def get_google_auth_url():
+    """Return the Google OAuth URL for the frontend to redirect to."""
+    frontend_url = os.environ.get("FRONTEND_URL", "https://infinea.vercel.app").rstrip("/")
+    redirect_url = f"{frontend_url}/dashboard"
+    return {"auth_url": f"https://auth.emergentagent.com/?redirect={redirect_url}"}
 
 
 @router.post("/auth/register")
