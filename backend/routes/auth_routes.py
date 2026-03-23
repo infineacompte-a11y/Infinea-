@@ -389,6 +389,7 @@ async def get_me(user: dict = Depends(get_current_user)):
         "username": user.get("username"),
         "bio": user.get("bio"),
         "picture": user.get("picture"),
+        "avatar_url": user.get("avatar_url"),
         "subscription_tier": user.get("subscription_tier", "free"),
         "total_time_invested": user.get("total_time_invested", 0),
         "streak_days": user.get("streak_days", 0),

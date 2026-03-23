@@ -40,6 +40,9 @@ from routes.feed import router as feed_router
 from routes.objectives import router as objectives_router
 from routes.routines import router as routines_router
 from routes.micro_instants import router as micro_instants_router
+from routes.profiles import router as profiles_router
+from routes.feed import router as feed_router
+from routes.challenges import router as challenges_router
 
 api_router.include_router(auth_router)
 api_router.include_router(onboarding_router)
@@ -59,6 +62,7 @@ api_router.include_router(routines_router)
 api_router.include_router(micro_instants_router)
 api_router.include_router(profiles_router)
 api_router.include_router(feed_router)
+api_router.include_router(challenges_router)
 
 # Public routes (no /api prefix)
 app.include_router(social_public_router)
@@ -174,6 +178,12 @@ async def startup_event():
     await db.reactions.create_index([("activity_id", 1), ("user_id", 1)], unique=True)
     await db.comments.create_index([("activity_id", 1), ("created_at", 1)])
     await db.comments.create_index("comment_id", unique=True)
+    # Challenges
+    await db.challenges.create_index("challenge_id", unique=True)
+    await db.challenges.create_index([("participants.user_id", 1), ("status", 1)])
+    await db.challenges.create_index([("privacy", 1), ("status", 1), ("created_at", -1)])
+    await db.challenge_invites.create_index([("user_id", 1), ("status", 1)])
+    await db.challenge_invites.create_index("invite_id", unique=True)
     # H.2 — Refresh tokens (rotation, family tracking, TTL auto-cleanup)
     await db.refresh_tokens.create_index("token", unique=True)
     await db.refresh_tokens.create_index("user_id")

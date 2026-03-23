@@ -22,8 +22,8 @@ import {
   CalendarClock,
   Zap,
   ChevronRight,
+  Activity,
   Search,
-  Settings,
 } from "lucide-react";
 import InFineaLogo from "@/components/InFineaLogo";
 import { API, authFetch, useAuth } from "@/App";
@@ -89,6 +89,7 @@ const navGroups = [
   {
     label: "Communauté",
     items: [
+      { to: "/community", label: "Communauté", icon: Activity },
       { to: "/search", label: "Rechercher", icon: Search },
       { to: "/groups", label: "Groupes", icon: Users },
       { to: "/challenges", label: "Défis", icon: Trophy },

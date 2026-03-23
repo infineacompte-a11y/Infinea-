@@ -495,6 +495,14 @@ function AppRouter() {
         }
       />
       <Route
+        path="/community"
+        element={
+          <ProtectedRoute>
+            <CommunityFeedPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/search"
         element={
           <ProtectedRoute>
@@ -507,14 +515,6 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <PublicProfilePage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/community"
-        element={
-          <ProtectedRoute>
-            <CommunityFeedPage />
           </ProtectedRoute>
         }
       />

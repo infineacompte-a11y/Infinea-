@@ -344,6 +344,17 @@ async def complete_session(
         except Exception:
             pass  # Feed emission must never block session completion
 
+        # Update challenge progress (non-blocking)
+        try:
+            from services.challenge_service import update_challenge_progress
+            await update_challenge_progress(user["user_id"], {
+                "duration": completion.actual_duration,
+                "category": session.get("category"),
+                "streak": new_streak,
+            })
+        except Exception:
+            pass
+
         return {
             "message": "Session completed!",
             "time_added": completion.actual_duration,
