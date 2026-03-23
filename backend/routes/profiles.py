@@ -11,12 +11,57 @@ Design:
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 
 from database import db
 from auth import get_current_user
 
 router = APIRouter()
+
+
+# ============== PRIVACY SETTINGS ==============
+
+PRIVACY_DEFAULTS = {
+    "profile_visible": True,
+    "show_stats": True,
+    "show_badges": True,
+    "show_reflections": False,
+    "activity_default_visibility": "followers",
+}
+
+
+@router.get("/profile/privacy")
+async def get_privacy_settings(user: dict = Depends(get_current_user)):
+    """Get current privacy settings."""
+    user_doc = await db.users.find_one(
+        {"user_id": user["user_id"]}, {"_id": 0, "privacy": 1}
+    )
+    stored = user_doc.get("privacy", {}) if user_doc else {}
+    return {**PRIVACY_DEFAULTS, **stored}
+
+
+@router.put("/profile/privacy")
+async def update_privacy_settings(
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """Update privacy settings."""
+    request_body = await request.json()
+    allowed_keys = set(PRIVACY_DEFAULTS.keys())
+    update = {k: v for k, v in request_body.items() if k in allowed_keys}
+    if not update:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {f"privacy.{k}": v for k, v in update.items()}},
+    )
+    # Return updated settings
+    user_doc = await db.users.find_one(
+        {"user_id": user["user_id"]}, {"_id": 0, "privacy": 1}
+    )
+    stored = user_doc.get("privacy", {}) if user_doc else {}
+    return {**PRIVACY_DEFAULTS, **stored}
 
 
 # ============== USER SEARCH ==============
@@ -27,12 +72,15 @@ async def search_users(
     user: dict = Depends(get_current_user),
     limit: int = Query(20, ge=1, le=50),
 ):
-    """Search users by name, display_name, or username."""
+    """Search users by name, display_name, username, or email local part."""
+    # Strip @ prefix if user searches "@john.doe"
+    search_q = q.lstrip("@")
     query = {
         "$or": [
-            {"name": {"$regex": q, "$options": "i"}},
-            {"display_name": {"$regex": q, "$options": "i"}},
-            {"username": {"$regex": q, "$options": "i"}},
+            {"name": {"$regex": search_q, "$options": "i"}},
+            {"display_name": {"$regex": search_q, "$options": "i"}},
+            {"username": {"$regex": search_q, "$options": "i"}},
+            {"email": {"$regex": f"^{search_q}", "$options": "i"}},
         ],
         "user_id": {"$ne": user["user_id"]},
     }
