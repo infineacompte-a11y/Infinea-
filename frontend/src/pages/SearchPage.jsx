@@ -79,9 +79,9 @@ export default function SearchPage() {
                 type="text"
                 value={query}
                 onChange={handleInputChange}
-                placeholder="Nom ou pseudonyme..."
+                placeholder="Nom ou @identifiant..."
                 autoFocus
-                className="pl-10 h-12 rounded-xl bg-white/10 border-white/10 text-white placeholder:text-white/30 focus:bg-white/15 focus:border-white/30 transition-all"
+                className="pl-10 h-12 rounded-xl bg-white/12 border-white/15 text-white placeholder:text-white/40 focus:bg-white/20 focus:border-white/30 caret-white transition-all"
               />
               {isSearching && (
                 <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 animate-spin" />
@@ -139,6 +139,7 @@ export default function SearchPage() {
                       user={{
                         user_id: u.user_id,
                         name: u.display_name,
+                        username: u.username,
                         picture: u.avatar_url,
                         is_following: u.is_following || false,
                       }}

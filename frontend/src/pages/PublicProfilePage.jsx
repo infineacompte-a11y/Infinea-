@@ -219,6 +219,11 @@ export default function PublicProfilePage() {
                     </Badge>
                   )}
                 </div>
+                {profile.username && (
+                  <p className="text-white/50 text-sm opacity-0 animate-fade-in" style={{ animationDelay: "75ms" }}>
+                    @{profile.username}
+                  </p>
+                )}
                 {profile.bio && (
                   <p className="text-white/60 text-sm mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
                     {profile.bio}
@@ -372,6 +377,7 @@ export default function PublicProfilePage() {
                   user={{
                     user_id: u.user_id,
                     name: u.display_name,
+                    username: u.username,
                     picture: u.avatar_url,
                     is_following: u.is_following || u.follows_back || false,
                   }}

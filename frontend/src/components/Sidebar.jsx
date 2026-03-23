@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -205,11 +205,27 @@ function GroupedNav({ mobile = false, onNavigate, unreadCount = 0 }) {
   );
 }
 
+// Persist sidebar scroll position across remounts (each page renders its own Sidebar)
+let _sidebarScrollY = 0;
+
 export default function Sidebar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout } = useAuth();
   const navigate = useNavigate();
   const unreadCount = useUnreadCount();
+  const navRef = useRef(null);
+
+  // Restore scroll position on mount (useLayoutEffect to avoid flash)
+  useLayoutEffect(() => {
+    if (navRef.current) {
+      navRef.current.scrollTop = _sidebarScrollY;
+    }
+  }, []);
+
+  // Save scroll position on scroll
+  const handleNavScroll = useCallback((e) => {
+    _sidebarScrollY = e.target.scrollTop;
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -227,7 +243,7 @@ export default function Sidebar() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto px-3 py-1 scrollbar-thin">
+        <nav ref={navRef} onScroll={handleNavScroll} className="flex-1 overflow-y-auto px-3 py-1 scrollbar-thin">
           <GroupedNav unreadCount={unreadCount} />
         </nav>
 

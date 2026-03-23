@@ -28,6 +28,27 @@ except ImportError:
 router = APIRouter()
 
 
+async def generate_username(email: str) -> str:
+    """Derive a unique username from an email address.
+    john.doe@gmail.com → john.doe (or john.doe.1 if taken)."""
+    import re
+    local = email.split("@")[0].lower()
+    # Normalize: keep alphanumeric and dots, replace everything else with dot
+    base = re.sub(r"[^a-z0-9.]", ".", local)
+    # Remove consecutive dots and leading/trailing dots
+    base = re.sub(r"\.{2,}", ".", base).strip(".")
+    if not base:
+        base = "user"
+
+    # Check uniqueness
+    candidate = base
+    suffix = 0
+    while await db.users.find_one({"username": candidate}, {"_id": 1}):
+        suffix += 1
+        candidate = f"{base}.{suffix}"
+    return candidate
+
+
 @router.post("/auth/register")
 @limiter.limit("3/minute")
 async def register(request: Request, user_data: UserCreate, response: Response):
@@ -37,10 +58,12 @@ async def register(request: Request, user_data: UserCreate, response: Response):
         raise HTTPException(status_code=400, detail="Email already registered")
 
     user_id = f"user_{uuid.uuid4().hex[:12]}"
+    username = await generate_username(user_data.email)
     user_doc = {
         "user_id": user_id,
         "email": user_data.email,
         "name": user_data.name,
+        "username": username,
         "password_hash": hash_password(user_data.password),
         "picture": None,
         "subscription_tier": "free",
@@ -68,6 +91,7 @@ async def register(request: Request, user_data: UserCreate, response: Response):
         "user_id": user_id,
         "email": user_data.email,
         "name": user_data.name,
+        "username": username,
         "subscription_tier": "free",
         "token": token,
         "refresh_token": refresh,
@@ -102,6 +126,7 @@ async def login(request: Request, user_data: UserLogin, response: Response):
         "user_id": user["user_id"],
         "email": user["email"],
         "name": user["name"],
+        "username": user.get("username"),
         "picture": user.get("picture"),
         "subscription_tier": user.get("subscription_tier", "free"),
         "user_profile": user.get("user_profile"),
@@ -260,16 +285,22 @@ async def google_oauth_callback(request: Request, response: Response, code: str 
     existing_user = await db.users.find_one({"email": email}, {"_id": 0})
     if existing_user:
         user_id = existing_user["user_id"]
+        update_fields = {"name": name, "picture": picture}
+        # Generate username for existing users who don't have one yet
+        if not existing_user.get("username"):
+            update_fields["username"] = await generate_username(email)
         await db.users.update_one(
             {"user_id": user_id},
-            {"$set": {"name": name, "picture": picture}},
+            {"$set": update_fields},
         )
     else:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
+        username = await generate_username(email)
         user_doc = {
             "user_id": user_id,
             "email": email,
             "name": name,
+            "username": username,
             "picture": picture,
             "subscription_tier": "free",
             "total_time_invested": 0,
@@ -340,6 +371,7 @@ async def process_oauth_session(request: Request, response: Response):
         "user_id": user_id,
         "email": user["email"],
         "name": user["name"],
+        "username": user.get("username"),
         "picture": user.get("picture"),
         "subscription_tier": user.get("subscription_tier", "free"),
         "user_profile": user.get("user_profile"),
@@ -353,6 +385,7 @@ async def get_me(user: dict = Depends(get_current_user)):
         "user_id": user["user_id"],
         "email": user["email"],
         "name": user["name"],
+        "username": user.get("username"),
         "picture": user.get("picture"),
         "subscription_tier": user.get("subscription_tier", "free"),
         "total_time_invested": user.get("total_time_invested", 0),
