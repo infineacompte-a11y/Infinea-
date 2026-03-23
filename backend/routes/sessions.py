@@ -330,6 +330,20 @@ async def complete_session(
         }
         await _auto_sync_session(user["user_id"], session_data)
 
+        # Emit activity feed items (non-blocking — never break session flow)
+        try:
+            from services.activity_service import emit_session_activity, emit_badge_activity, emit_streak_activity
+            await emit_session_activity(user["user_id"], {
+                "action_title": session.get("action_title"),
+                "category": session.get("category"),
+                "actual_duration": completion.actual_duration,
+            })
+            for badge in new_badges:
+                await emit_badge_activity(user["user_id"], badge)
+            await emit_streak_activity(user["user_id"], new_streak)
+        except Exception:
+            pass  # Feed emission must never block session completion
+
         return {
             "message": "Session completed!",
             "time_added": completion.actual_duration,
