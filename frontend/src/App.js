@@ -39,7 +39,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 // In production on Vercel, REACT_APP_BACKEND_URL can be "" (empty) to use
 // same-origin /api/* calls which are proxied to the backend via vercel.json rewrites.
 // This avoids CORS issues entirely.
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL ?? "http://localhost:8000";
+const BACKEND_URL = (process.env.REACT_APP_BACKEND_URL ?? "http://localhost:8000").trim();
 export const API = `${BACKEND_URL}/api`;
 
 // Helper fetch with automatic token refresh on 401.
@@ -161,7 +161,8 @@ const AuthCallback = () => {
       }
 
       try {
-        const response = await fetch(`${API}/auth/session`, {
+        const sessionUrl = `${API}/auth/session`;
+        const response = await fetch(sessionUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -169,7 +170,10 @@ const AuthCallback = () => {
         });
 
         if (!response.ok) {
-          throw new Error("Auth failed");
+          const errorBody = await response.text().catch(() => "");
+          console.error("OAuth session failed:", response.status, errorBody);
+          navigate("/login?error=session_failed");
+          return;
         }
 
         const userData = await response.json();
@@ -185,8 +189,8 @@ const AuthCallback = () => {
         setUser(userData);
         navigate("/dashboard", { state: { user: userData } });
       } catch (error) {
-        console.error("OAuth error:", error);
-        navigate("/login");
+        console.error("OAuth network error:", error);
+        navigate("/login?error=network");
       }
     };
 
