@@ -5,6 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import Sidebar from "@/components/Sidebar";
 import {
   BarChart3,
@@ -23,16 +27,21 @@ import {
   EyeOff,
   Copy,
   Check,
+  Pencil,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 
 export default function ProfilePage() {
-  const { user, logout } = useAuth();
+  const { user, setUser, logout } = useAuth();
   const navigate = useNavigate();
   const [socialStats, setSocialStats] = useState(null);
   const [privacySettings, setPrivacySettings] = useState(null);
   const [copiedUsername, setCopiedUsername] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ display_name: "", username: "", bio: "" });
+  const [editSaving, setEditSaving] = useState(false);
 
   // Fetch social stats (followers/following counts)
   const fetchSocialStats = useCallback(async () => {
@@ -97,6 +106,51 @@ export default function ProfilePage() {
     }
   };
 
+  const openEditDialog = async () => {
+    try {
+      const res = await authFetch(`${API}/profile/me`);
+      if (res.ok) {
+        const data = await res.json();
+        setEditForm({
+          display_name: data.display_name || "",
+          username: data.username || "",
+          bio: data.bio || "",
+        });
+      }
+    } catch { /* use current user fallback */ }
+    setEditOpen(true);
+  };
+
+  const handleEditSave = async () => {
+    setEditSaving(true);
+    try {
+      const res = await authFetch(`${API}/profile/me`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUser((prev) => ({
+          ...prev,
+          display_name: data.display_name,
+          username: data.username,
+          bio: data.bio,
+          name: data.display_name || prev.name,
+        }));
+        setEditOpen(false);
+        toast.success("Profil mis à jour");
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || "Erreur lors de la mise à jour");
+      }
+    } catch {
+      toast.error("Erreur de connexion");
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const getInitials = (name) => {
     if (!name) return "U";
     return name
@@ -117,16 +171,16 @@ export default function ProfilePage() {
             <div className="flex items-center gap-5">
               <div className="avatar-gradient-ring relative flex items-center justify-center opacity-0 animate-fade-in">
                 <Avatar className="w-20 h-20 lg:w-24 lg:h-24 ring-offset-2 ring-offset-[#275255]">
-                  <AvatarImage src={user?.picture} alt={user?.name} />
+                  <AvatarImage src={user?.picture} alt={user?.display_name || user?.name} />
                   <AvatarFallback className="bg-white/10 text-white text-2xl">
-                    {getInitials(user?.name)}
+                    {getInitials(user?.display_name || user?.name)}
                   </AvatarFallback>
                 </Avatar>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-1 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
                   <h1 className="text-display text-2xl lg:text-3xl font-semibold text-white truncate">
-                    {user?.name || "Utilisateur"}
+                    {user?.display_name || user?.name || "Utilisateur"}
                   </h1>
                   {user?.subscription_tier === "premium" && (
                     <Badge className="bg-gradient-to-r from-[#E48C75] to-[#459492] text-white border-0 shrink-0">
@@ -151,10 +205,19 @@ export default function ProfilePage() {
                     )}
                   </button>
                 )}
-                <p className="text-white/40 text-xs mt-1 flex items-center gap-1 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
-                  <Mail className="w-3 h-3" />
-                  {user?.email}
-                </p>
+                <div className="flex items-center gap-3 mt-1.5 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
+                  <p className="text-white/40 text-xs flex items-center gap-1">
+                    <Mail className="w-3 h-3" />
+                    {user?.email}
+                  </p>
+                  <button
+                    onClick={openEditDialog}
+                    className="flex items-center gap-1 text-white/40 hover:text-white/70 transition-colors text-xs"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    <span>Modifier</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -371,6 +434,80 @@ export default function ProfilePage() {
           </div>
         </div>
       </main>
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-sans font-semibold tracking-tight">
+              Modifier mon profil
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-display-name">Nom affiché</Label>
+              <Input
+                id="edit-display-name"
+                value={editForm.display_name}
+                onChange={(e) => setEditForm((f) => ({ ...f, display_name: e.target.value }))}
+                placeholder="Votre nom public"
+                maxLength={50}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-username">Identifiant</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">@</span>
+                <Input
+                  id="edit-username"
+                  value={editForm.username}
+                  onChange={(e) => setEditForm((f) => ({ ...f, username: e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, "") }))}
+                  placeholder="identifiant"
+                  maxLength={30}
+                  className="pl-7"
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Lettres minuscules, chiffres, points et underscores (3-30 car.)
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-bio">Bio</Label>
+              <Textarea
+                id="edit-bio"
+                value={editForm.bio}
+                onChange={(e) => setEditForm((f) => ({ ...f, bio: e.target.value }))}
+                placeholder="Décrivez-vous en quelques mots..."
+                maxLength={200}
+                rows={3}
+                className="resize-none"
+              />
+              <p className="text-[11px] text-muted-foreground text-right">
+                {editForm.bio.length}/200
+              </p>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() => setEditOpen(false)}
+              >
+                Annuler
+              </Button>
+              <Button
+                className="flex-1 rounded-xl"
+                onClick={handleEditSave}
+                disabled={editSaving || !editForm.display_name.trim()}
+              >
+                {editSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : null}
+                Enregistrer
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
