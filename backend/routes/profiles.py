@@ -9,6 +9,7 @@ Design:
 - Benchmarked: Strava athlete profiles, Instagram user search.
 """
 
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
@@ -17,6 +18,95 @@ from database import db
 from auth import get_current_user
 
 router = APIRouter()
+
+
+# ============== PROFILE EDITING ==============
+
+DISPLAY_NAME_MAX = 50
+BIO_MAX = 200
+USERNAME_REGEX = re.compile(r"^[a-z0-9][a-z0-9._]{1,28}[a-z0-9]$")
+
+
+@router.get("/profile/me")
+async def get_my_profile(user: dict = Depends(get_current_user)):
+    """Get own editable profile fields."""
+    doc = await db.users.find_one(
+        {"user_id": user["user_id"]},
+        {"_id": 0, "user_id": 1, "name": 1, "display_name": 1, "username": 1,
+         "bio": 1, "picture": 1, "avatar_url": 1, "email": 1},
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    return {
+        "user_id": doc["user_id"],
+        "display_name": doc.get("display_name") or doc.get("name", ""),
+        "username": doc.get("username", ""),
+        "bio": doc.get("bio", ""),
+        "avatar_url": doc.get("avatar_url") or doc.get("picture", ""),
+    }
+
+
+@router.put("/profile/me")
+async def update_my_profile(
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """Update own profile (display_name, bio, username)."""
+    body = await request.json()
+    updates = {}
+
+    # display_name
+    if "display_name" in body:
+        dn = str(body["display_name"]).strip()
+        if not dn or len(dn) > DISPLAY_NAME_MAX:
+            raise HTTPException(status_code=400, detail=f"Le nom doit faire entre 1 et {DISPLAY_NAME_MAX} caractères")
+        updates["display_name"] = dn
+
+    # bio
+    if "bio" in body:
+        bio = str(body["bio"]).strip()
+        if len(bio) > BIO_MAX:
+            raise HTTPException(status_code=400, detail=f"La bio ne doit pas dépasser {BIO_MAX} caractères")
+        updates["bio"] = bio
+
+    # username change
+    if "username" in body:
+        uname = str(body["username"]).strip().lower()
+        if not USERNAME_REGEX.match(uname):
+            raise HTTPException(
+                status_code=400,
+                detail="L'identifiant doit contenir 3-30 caractères (lettres minuscules, chiffres, points, underscores)",
+            )
+        # Check uniqueness (skip if unchanged)
+        current = await db.users.find_one({"user_id": user["user_id"]}, {"username": 1})
+        if current.get("username") != uname:
+            existing = await db.users.find_one({"username": uname}, {"_id": 1})
+            if existing:
+                raise HTTPException(status_code=409, detail="Cet identifiant est déjà pris")
+            updates["username"] = uname
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
+
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": updates},
+    )
+
+    # Return fresh profile
+    doc = await db.users.find_one(
+        {"user_id": user["user_id"]},
+        {"_id": 0, "user_id": 1, "name": 1, "display_name": 1, "username": 1,
+         "bio": 1, "picture": 1, "avatar_url": 1},
+    )
+    return {
+        "user_id": doc["user_id"],
+        "display_name": doc.get("display_name") or doc.get("name", ""),
+        "username": doc.get("username", ""),
+        "bio": doc.get("bio", ""),
+        "avatar_url": doc.get("avatar_url") or doc.get("picture", ""),
+    }
 
 
 # ============== PRIVACY SETTINGS ==============
