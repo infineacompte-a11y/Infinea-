@@ -1,0 +1,318 @@
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import Sidebar from "@/components/Sidebar";
+import SafetyMenu from "@/components/SafetyMenu";
+import { ArrowLeft, Send, Loader2, MessageCircle } from "lucide-react";
+import { toast } from "sonner";
+import { API, authFetch, useAuth } from "@/App";
+import { sanitize } from "@/lib/sanitize";
+
+function timeAgo(iso) {
+  if (!iso) return "";
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "à l'instant";
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}j`;
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}
+
+function formatTime(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function getInitials(name) {
+  if (!name) return "U";
+  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+}
+
+export default function ConversationPage() {
+  const { conversationId } = useParams();
+  const { user: currentUser } = useAuth();
+  const navigate = useNavigate();
+
+  const [messages, setMessages] = useState([]);
+  const [conversation, setConversation] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [messageText, setMessageText] = useState("");
+  const [hasMore, setHasMore] = useState(false);
+  const [cursor, setCursor] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const pollRef = useRef(null);
+
+  // Fetch conversation info
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await authFetch(`${API}/conversations`);
+        if (res.ok) {
+          const data = await res.json();
+          const conv = (data.conversations || []).find(
+            (c) => c.conversation_id === conversationId
+          );
+          if (conv) setConversation(conv);
+        }
+      } catch { /* silent */ }
+    })();
+  }, [conversationId]);
+
+  // Fetch messages
+  const fetchMessages = useCallback(async (cursorVal = null) => {
+    const isInitial = !cursorVal;
+    if (isInitial) setLoading(true);
+    else setLoadingMore(true);
+
+    try {
+      const url = cursorVal
+        ? `${API}/conversations/${conversationId}/messages?limit=30&cursor=${encodeURIComponent(cursorVal)}`
+        : `${API}/conversations/${conversationId}/messages?limit=30`;
+      const res = await authFetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const newMsgs = data.messages || [];
+        if (isInitial) {
+          setMessages(newMsgs);
+        } else {
+          // Prepend older messages
+          setMessages((prev) => [...newMsgs, ...prev]);
+        }
+        setCursor(data.next_cursor);
+        setHasMore(data.has_more);
+      }
+    } catch {
+      toast.error("Erreur lors du chargement");
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, [conversationId]);
+
+  useEffect(() => {
+    fetchMessages();
+  }, [fetchMessages]);
+
+  // Mark as read on mount
+  useEffect(() => {
+    if (conversationId) {
+      authFetch(`${API}/conversations/${conversationId}/read`, { method: "PUT" }).catch(() => {});
+    }
+  }, [conversationId]);
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    if (!loadingMore && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages.length, loadingMore]);
+
+  // Poll for new messages every 10s
+  useEffect(() => {
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await authFetch(
+          `${API}/conversations/${conversationId}/messages?limit=30`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setMessages(data.messages || []);
+          // Mark as read silently
+          authFetch(`${API}/conversations/${conversationId}/read`, { method: "PUT" }).catch(() => {});
+        }
+      } catch { /* silent */ }
+    }, 10000);
+    return () => clearInterval(pollRef.current);
+  }, [conversationId]);
+
+  // Send message
+  const handleSend = async (e) => {
+    e.preventDefault();
+    const text = messageText.trim();
+    if (!text || sending) return;
+    setSending(true);
+
+    try {
+      const res = await authFetch(`${API}/conversations/${conversationId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text }),
+      });
+      if (res.ok) {
+        const newMsg = await res.json();
+        setMessages((prev) => [...prev, newMsg]);
+        setMessageText("");
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || "Erreur lors de l'envoi");
+      }
+    } catch {
+      toast.error("Erreur de connexion");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Load older messages
+  const handleLoadMore = () => {
+    if (hasMore && cursor && !loadingMore) {
+      fetchMessages(cursor);
+    }
+  };
+
+  const other = conversation?.other_user || {};
+  const myId = currentUser?.user_id;
+
+  return (
+    <div className="min-h-screen app-bg-mesh">
+      <Sidebar />
+      <main className="lg:ml-64 pt-14 lg:pt-0 pb-0 flex flex-col h-screen lg:h-screen">
+        {/* Header */}
+        <div className="section-dark-header px-4 lg:px-8 py-4 shrink-0">
+          <div className="max-w-3xl mx-auto flex items-center gap-3">
+            <Link
+              to="/messages"
+              className="text-white/50 hover:text-white/80 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Link>
+            <Link to={other.user_id ? `/users/${other.user_id}` : "#"} className="flex items-center gap-3 flex-1 min-w-0">
+              <Avatar className="w-10 h-10 ring-2 ring-white/10">
+                <AvatarImage src={other.avatar_url} alt={other.display_name} />
+                <AvatarFallback className="bg-white/10 text-white text-sm">
+                  {getInitials(other.display_name)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="text-white font-semibold text-sm truncate">
+                  {other.display_name || "Conversation"}
+                </p>
+                {other.username && (
+                  <p className="text-white/40 text-xs">@{other.username}</p>
+                )}
+              </div>
+            </Link>
+            {other.user_id && (
+              <SafetyMenu
+                userId={other.user_id}
+                targetType="user"
+                targetId={other.user_id}
+                size="sm"
+                onBlockChange={(blocked) => {
+                  if (blocked) navigate("/messages");
+                }}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Messages area */}
+        <div
+          ref={messagesContainerRef}
+          className="flex-1 overflow-y-auto px-4 lg:px-8"
+        >
+          <div className="max-w-3xl mx-auto py-4 space-y-1">
+            {/* Load more */}
+            {hasMore && (
+              <div className="flex justify-center py-2">
+                <button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="text-xs text-primary hover:underline disabled:opacity-50"
+                >
+                  {loadingMore ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    "Charger les messages précédents"
+                  )}
+                </button>
+              </div>
+            )}
+
+            {loading ? (
+              <div className="flex justify-center py-16">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <MessageCircle className="w-10 h-10 text-muted-foreground/30 mb-3" />
+                <p className="text-muted-foreground text-sm">
+                  Envoyez le premier message
+                </p>
+              </div>
+            ) : (
+              messages.map((msg, i) => {
+                const isMine = msg.sender_id === myId;
+                const prevMsg = messages[i - 1];
+                const showTime =
+                  !prevMsg ||
+                  new Date(msg.created_at).getTime() - new Date(prevMsg.created_at).getTime() > 300000;
+
+                return (
+                  <React.Fragment key={msg.message_id}>
+                    {showTime && (
+                      <div className="flex justify-center py-2">
+                        <span className="text-[10px] text-muted-foreground/60 bg-muted/50 px-2 py-0.5 rounded-full">
+                          {timeAgo(msg.created_at)} · {formatTime(msg.created_at)}
+                        </span>
+                      </div>
+                    )}
+                    <div className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+                      <div
+                        className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
+                          isMine
+                            ? "bg-gradient-to-br from-[#459492] to-[#55B3AE] text-white rounded-br-md"
+                            : "bg-card border border-border/50 text-foreground rounded-bl-md"
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap break-words">{sanitize(msg.content)}</p>
+                      </div>
+                    </div>
+                  </React.Fragment>
+                );
+              })
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
+
+        {/* Input bar */}
+        <div className="shrink-0 border-t border-border/30 bg-background/80 backdrop-blur-sm px-4 lg:px-8 py-3">
+          <div className="max-w-3xl mx-auto">
+            <form onSubmit={handleSend} className="flex items-center gap-2">
+              <Input
+                value={messageText}
+                onChange={(e) => setMessageText(e.target.value)}
+                placeholder="Écris un message..."
+                maxLength={1000}
+                autoFocus
+                className="flex-1 h-10 rounded-full border-border/50 bg-muted/30 focus:bg-white px-4 text-sm"
+              />
+              <Button
+                type="submit"
+                size="icon"
+                disabled={!messageText.trim() || sending}
+                className="h-10 w-10 rounded-full bg-gradient-to-r from-[#459492] to-[#55B3AE] hover:from-[#275255] hover:to-[#459492] text-white shadow-md shrink-0"
+              >
+                {sending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+              </Button>
+            </form>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

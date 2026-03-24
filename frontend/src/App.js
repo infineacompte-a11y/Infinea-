@@ -35,6 +35,8 @@ import SearchPage from "@/pages/SearchPage";
 import PublicProfilePage from "@/pages/PublicProfilePage";
 import CommunityFeedPage from "@/pages/CommunityFeedPage";
 import BlockedUsersPage from "@/pages/BlockedUsersPage";
+import MessagesPage from "@/pages/MessagesPage";
+import ConversationPage from "@/pages/ConversationPage";
 import NotFound from "@/pages/NotFound";
 import CoachFAB from "@/components/CoachFAB";
 import MicroInstantBanner from "@/components/MicroInstantBanner";
@@ -526,6 +528,22 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <BlockedUsersPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/messages"
+        element={
+          <ProtectedRoute>
+            <MessagesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/messages/:conversationId"
+        element={
+          <ProtectedRoute>
+            <ConversationPage />
           </ProtectedRoute>
         }
       />

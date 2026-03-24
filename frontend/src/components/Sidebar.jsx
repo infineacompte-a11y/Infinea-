@@ -24,9 +24,41 @@ import {
   ChevronRight,
   Activity,
   Search,
+  MessageCircle,
 } from "lucide-react";
 import InFineaLogo from "@/components/InFineaLogo";
 import { API, authFetch, useAuth } from "@/App";
+
+// ─── Lightweight poll for unread message count ───
+function useUnreadMessages(intervalMs = 30000) {
+  const [count, setCount] = useState(0);
+  const location = useLocation();
+
+  const fetch_ = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API}/messages/unread-count`);
+      if (res.ok) {
+        const data = await res.json();
+        setCount(data.unread_count || 0);
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => {
+    fetch_();
+    const id = setInterval(fetch_, intervalMs);
+    return () => clearInterval(id);
+  }, [fetch_, intervalMs]);
+
+  useEffect(() => {
+    if (location.pathname.startsWith("/messages")) {
+      const t = setTimeout(() => fetch_(), 2000);
+      return () => clearTimeout(t);
+    }
+  }, [location.pathname, fetch_]);
+
+  return count;
+}
 
 // ─── Lightweight poll for unread notification count ───
 function useUnreadCount(intervalMs = 60000) {
@@ -90,6 +122,7 @@ const navGroups = [
     label: "Communauté",
     items: [
       { to: "/community", label: "Communauté", icon: Activity },
+      { to: "/messages", label: "Messages", icon: MessageCircle },
       { to: "/search", label: "Rechercher", icon: Search },
       { to: "/groups", label: "Groupes", icon: Users },
       { to: "/challenges", label: "Défis", icon: Trophy },
@@ -141,7 +174,7 @@ function NavItem({ to, label, icon: Icon, isActive, isNotif, unreadCount, mobile
   );
 }
 
-function GroupedNav({ mobile = false, onNavigate, unreadCount = 0 }) {
+function GroupedNav({ mobile = false, onNavigate, unreadCount = 0, unreadMessages = 0 }) {
   const location = useLocation();
   let globalIndex = 0;
 
@@ -161,13 +194,14 @@ function GroupedNav({ mobile = false, onNavigate, unreadCount = 0 }) {
               const idx = globalIndex++;
               const isActive = location.pathname === item.to ||
                 (item.to === "/dashboard" && location.pathname === "/");
+              const isMsg = item.to === "/messages";
               return (
                 <NavItem
                   key={item.to}
                   {...item}
                   isActive={isActive}
-                  isNotif={false}
-                  unreadCount={0}
+                  isNotif={isMsg}
+                  unreadCount={isMsg ? unreadMessages : 0}
                   mobile={mobile}
                   onNavigate={onNavigate}
                   animDelay={mobile ? null : idx * 25}
@@ -213,6 +247,7 @@ export default function Sidebar() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const unreadCount = useUnreadCount();
+  const unreadMessages = useUnreadMessages();
   const navRef = useRef(null);
 
   // Restore scroll position on mount (useLayoutEffect to avoid flash)
@@ -244,7 +279,7 @@ export default function Sidebar() {
 
         {/* Nav */}
         <nav ref={navRef} onScroll={handleNavScroll} className="flex-1 overflow-y-auto px-3 py-1 scrollbar-thin">
-          <GroupedNav unreadCount={unreadCount} />
+          <GroupedNav unreadCount={unreadCount} unreadMessages={unreadMessages} />
         </nav>
 
         {/* Logout */}
@@ -286,7 +321,7 @@ export default function Sidebar() {
 
               {/* Scrollable nav */}
               <nav className="flex-1 overflow-y-auto px-3 pb-2">
-                <GroupedNav mobile onNavigate={() => setMobileMenuOpen(false)} unreadCount={unreadCount} />
+                <GroupedNav mobile onNavigate={() => setMobileMenuOpen(false)} unreadCount={unreadCount} unreadMessages={unreadMessages} />
               </nav>
 
               {/* Logout — properly positioned, not absolute */}
