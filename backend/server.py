@@ -44,6 +44,7 @@ from routes.profiles import router as profiles_router
 from routes.feed import router as feed_router
 from routes.challenges import router as challenges_router
 from routes.safety import router as safety_router
+from routes.messaging import router as messaging_router
 
 api_router.include_router(auth_router)
 api_router.include_router(onboarding_router)
@@ -65,6 +66,7 @@ api_router.include_router(profiles_router)
 api_router.include_router(feed_router)
 api_router.include_router(challenges_router)
 api_router.include_router(safety_router)
+api_router.include_router(messaging_router)
 
 # Public routes (no /api prefix)
 app.include_router(social_public_router)
@@ -198,6 +200,13 @@ async def startup_event():
     await db.blocks.create_index("blocked_id")
     await db.reports.create_index("report_id", unique=True)
     await db.reports.create_index([("reporter_id", 1), ("target_type", 1), ("target_id", 1)])
+
+    # Messaging
+    await db.conversations.create_index("conversation_id", unique=True)
+    await db.conversations.create_index("participants")
+    await db.conversations.create_index("updated_at")
+    await db.messages.create_index("message_id", unique=True)
+    await db.messages.create_index([("conversation_id", 1), ("created_at", 1)])
 
     logger.info("All indexes ensured")
 

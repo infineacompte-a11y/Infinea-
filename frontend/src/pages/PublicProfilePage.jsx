@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import {
   Award,
   CalendarDays,
   ArrowLeft,
+  MessageCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
@@ -35,6 +36,7 @@ import SafetyMenu from "@/components/SafetyMenu";
 export default function PublicProfilePage() {
   const { userId } = useParams();
   const { user: currentUser } = useAuth();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -269,6 +271,15 @@ export default function PublicProfilePage() {
                   </div>
                   {!isOwnProfile && (
                     <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 rounded-xl"
+                        onClick={() => navigate(`/messages?user=${userId}`)}
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        Message
+                      </Button>
                       <FollowButton
                         userId={userId}
                         initialFollowing={profile.is_following}

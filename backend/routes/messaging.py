@@ -1,0 +1,339 @@
+"""
+InFinea — Direct Messaging routes.
+1:1 conversations between users.
+
+Design:
+- Conversation-based: one conversation per pair of users.
+- Participants sorted for deduplication.
+- Cursor-based pagination on messages (oldest → newest).
+- Denormalized last_message + unread_count on conversation doc.
+- Benchmarked: Instagram DM, WhatsApp simplicity.
+"""
+
+import uuid
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, HTTPException, Depends, Request
+
+from database import db
+from auth import get_current_user
+from config import limiter
+from models import ConversationCreate, MessageSend
+from services.moderation import get_blocked_ids, check_content, sanitize_text
+from helpers import send_push_to_user
+
+router = APIRouter(tags=["messaging"])
+
+
+# ── Helpers ──
+
+async def _get_conversation_for_user(conversation_id: str, user_id: str):
+    """Fetch conversation and verify user is a participant."""
+    conv = await db.conversations.find_one(
+        {"conversation_id": conversation_id, "participants": user_id},
+        {"_id": 0},
+    )
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation introuvable")
+    return conv
+
+
+def _other_participant(conv: dict, user_id: str) -> str:
+    """Return the other participant's user_id."""
+    for p in conv["participants"]:
+        if p != user_id:
+            return p
+    return user_id
+
+
+async def _enrich_conversations(conversations: list, user_id: str) -> list:
+    """Add other_user info (display_name, avatar, username) to each conversation."""
+    other_ids = [_other_participant(c, user_id) for c in conversations]
+    if not other_ids:
+        return conversations
+
+    users = await db.users.find(
+        {"user_id": {"$in": other_ids}},
+        {"_id": 0, "user_id": 1, "name": 1, "display_name": 1, "username": 1, "picture": 1},
+    ).to_list(len(other_ids))
+    user_map = {u["user_id"]: u for u in users}
+
+    for conv in conversations:
+        other_id = _other_participant(conv, user_id)
+        other = user_map.get(other_id, {})
+        conv["other_user"] = {
+            "user_id": other_id,
+            "display_name": other.get("display_name") or other.get("name", "Utilisateur"),
+            "username": other.get("username"),
+            "avatar_url": other.get("picture"),
+        }
+        conv["my_unread_count"] = conv.get("unread_count", {}).get(user_id, 0)
+        conv.pop("unread_count", None)
+
+    return conversations
+
+
+# ── Endpoints ──
+
+@router.post("/conversations")
+async def create_or_get_conversation(body: ConversationCreate, user: dict = Depends(get_current_user)):
+    """
+    Get or create a 1:1 conversation with another user.
+    Returns existing conversation if one already exists.
+    """
+    target_id = body.user_id
+    my_id = user["user_id"]
+
+    if target_id == my_id:
+        raise HTTPException(status_code=400, detail="Impossible de vous envoyer un message")
+
+    # Check target exists
+    target = await db.users.find_one({"user_id": target_id}, {"user_id": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    # Block check
+    blocked_ids = await get_blocked_ids(my_id)
+    if target_id in blocked_ids:
+        raise HTTPException(status_code=403, detail="Impossible d'envoyer un message à cet utilisateur")
+
+    # Sorted participants for dedup
+    participants = sorted([my_id, target_id])
+
+    # Get or create
+    existing = await db.conversations.find_one(
+        {"participants": participants},
+        {"_id": 0},
+    )
+    if existing:
+        enriched = await _enrich_conversations([existing], my_id)
+        return enriched[0]
+
+    now = datetime.now(timezone.utc).isoformat()
+    conv = {
+        "conversation_id": f"conv_{uuid.uuid4().hex[:12]}",
+        "participants": participants,
+        "last_message": None,
+        "unread_count": {my_id: 0, target_id: 0},
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.conversations.insert_one({**conv, "_id": conv["conversation_id"]})
+    conv.pop("_id", None)
+
+    enriched = await _enrich_conversations([conv], my_id)
+    return enriched[0]
+
+
+@router.get("/conversations")
+async def list_conversations(user: dict = Depends(get_current_user), limit: int = 30):
+    """List user's conversations, most recent first."""
+    if limit > 50:
+        limit = 50
+
+    conversations = await db.conversations.find(
+        {"participants": user["user_id"]},
+        {"_id": 0},
+    ).sort("updated_at", -1).limit(limit).to_list(limit)
+
+    return {"conversations": await _enrich_conversations(conversations, user["user_id"])}
+
+
+@router.get("/conversations/{conversation_id}/messages")
+async def get_messages(
+    conversation_id: str,
+    user: dict = Depends(get_current_user),
+    cursor: str = None,
+    limit: int = 30,
+):
+    """
+    Get messages in a conversation (oldest → newest).
+    Cursor-based: pass `next_cursor` from previous response.
+    """
+    if limit > 50:
+        limit = 50
+
+    conv = await _get_conversation_for_user(conversation_id, user["user_id"])
+
+    query = {"conversation_id": conversation_id}
+    if cursor:
+        query["created_at"] = {"$lt": cursor}
+
+    messages = await db.messages.find(
+        query, {"_id": 0}
+    ).sort("created_at", -1).limit(limit + 1).to_list(limit + 1)
+
+    has_more = len(messages) > limit
+    if has_more:
+        messages = messages[:limit]
+
+    # Reverse to get oldest → newest order
+    messages.reverse()
+    next_cursor = messages[0]["created_at"] if messages and has_more else None
+
+    return {
+        "messages": messages,
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+    }
+
+
+@router.post("/conversations/{conversation_id}/messages")
+@limiter.limit("30/minute")
+async def send_message(
+    request: Request,
+    conversation_id: str,
+    body: MessageSend,
+    user: dict = Depends(get_current_user),
+):
+    """Send a message in a conversation."""
+    my_id = user["user_id"]
+    conv = await _get_conversation_for_user(conversation_id, my_id)
+
+    other_id = _other_participant(conv, my_id)
+
+    # Block check
+    blocked_ids = await get_blocked_ids(my_id)
+    if other_id in blocked_ids:
+        raise HTTPException(status_code=403, detail="Impossible d'envoyer un message à cet utilisateur")
+
+    # Sanitize + moderate
+    content = sanitize_text(body.content, max_length=1000)
+    if not content:
+        raise HTTPException(status_code=400, detail="Le message ne peut pas être vide")
+
+    moderation = check_content(content)
+    if not moderation["allowed"]:
+        raise HTTPException(status_code=400, detail=moderation["reason"])
+
+    now = datetime.now(timezone.utc).isoformat()
+    message = {
+        "message_id": f"msg_{uuid.uuid4().hex[:12]}",
+        "conversation_id": conversation_id,
+        "sender_id": my_id,
+        "content": content,
+        "created_at": now,
+        "read_at": None,
+    }
+    await db.messages.insert_one({**message, "_id": message["message_id"]})
+    message.pop("_id", None)
+
+    # Update conversation denormalized fields
+    await db.conversations.update_one(
+        {"conversation_id": conversation_id},
+        {
+            "$set": {
+                "last_message": {
+                    "content": content[:100],
+                    "sender_id": my_id,
+                    "created_at": now,
+                },
+                "updated_at": now,
+            },
+            "$inc": {f"unread_count.{other_id}": 1},
+        },
+    )
+
+    # Notification (non-blocking)
+    try:
+        display = user.get("display_name") or user.get("name", "Quelqu'un")
+        preview = content[:80] + ("..." if len(content) > 80 else "")
+        await db.notifications.insert_one({
+            "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+            "user_id": other_id,
+            "type": "new_message",
+            "title": "Nouveau message",
+            "message": f"{display} : {preview}",
+            "icon": "message-circle",
+            "data": {"conversation_id": conversation_id, "sender_id": my_id},
+            "read": False,
+            "created_at": now,
+        })
+        await send_push_to_user(
+            other_id,
+            f"Message de {display}",
+            preview,
+            url="/messages",
+            tag="dm",
+        )
+    except Exception:
+        pass
+
+    return message
+
+
+@router.put("/conversations/{conversation_id}/read")
+async def mark_conversation_read(conversation_id: str, user: dict = Depends(get_current_user)):
+    """Mark all messages in conversation as read for current user."""
+    my_id = user["user_id"]
+    conv = await _get_conversation_for_user(conversation_id, my_id)
+
+    # Reset unread counter
+    await db.conversations.update_one(
+        {"conversation_id": conversation_id},
+        {"$set": {f"unread_count.{my_id}": 0}},
+    )
+
+    # Mark individual messages as read
+    await db.messages.update_many(
+        {
+            "conversation_id": conversation_id,
+            "sender_id": {"$ne": my_id},
+            "read_at": None,
+        },
+        {"$set": {"read_at": datetime.now(timezone.utc).isoformat()}},
+    )
+
+    return {"message": "Conversation marquée comme lue"}
+
+
+@router.delete("/messages/{message_id}")
+async def delete_message(message_id: str, user: dict = Depends(get_current_user)):
+    """Delete own message."""
+    msg = await db.messages.find_one(
+        {"message_id": message_id, "sender_id": user["user_id"]},
+        {"_id": 0},
+    )
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message introuvable")
+
+    await db.messages.delete_one({"message_id": message_id})
+
+    # If this was the last message, update conversation's last_message
+    conv_id = msg["conversation_id"]
+    latest = await db.messages.find_one(
+        {"conversation_id": conv_id},
+        {"_id": 0},
+        sort=[("created_at", -1)],
+    )
+    if latest:
+        await db.conversations.update_one(
+            {"conversation_id": conv_id},
+            {"$set": {
+                "last_message": {
+                    "content": latest["content"][:100],
+                    "sender_id": latest["sender_id"],
+                    "created_at": latest["created_at"],
+                },
+            }},
+        )
+    else:
+        await db.conversations.update_one(
+            {"conversation_id": conv_id},
+            {"$set": {"last_message": None}},
+        )
+
+    return {"message": "Message supprimé"}
+
+
+@router.get("/messages/unread-count")
+async def get_unread_messages_count(user: dict = Depends(get_current_user)):
+    """Total unread messages across all conversations (for sidebar badge)."""
+    pipeline = [
+        {"$match": {"participants": user["user_id"]}},
+        {"$project": {"count": f"$unread_count.{user['user_id']}"}},
+        {"$group": {"_id": None, "total": {"$sum": "$count"}}},
+    ]
+    result = await db.conversations.aggregate(pipeline).to_list(1)
+    total = result[0]["total"] if result else 0
+    return {"unread_count": total}

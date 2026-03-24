@@ -245,3 +245,14 @@ class ReflectionResponse(BaseModel):
     related_session_id: Optional[str]
     related_category: Optional[str]
     created_at: str
+
+
+# ── Messaging ──
+
+class ConversationCreate(BaseModel):
+    """Request body for starting a DM conversation."""
+    user_id: str = Field(description="User ID of the person to message")
+
+class MessageSend(BaseModel):
+    """Request body for sending a message."""
+    content: str = Field(min_length=1, max_length=1000)
