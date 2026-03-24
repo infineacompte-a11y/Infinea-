@@ -210,6 +210,14 @@ async def startup_event():
             )
         logger.info("Username migration complete")
 
+    # One-time migration: set existing activities to public visibility for Discover feed
+    migrated = await db.activities.update_many(
+        {"visibility": "followers"},
+        {"$set": {"visibility": "public"}},
+    )
+    if migrated.modified_count > 0:
+        logger.info(f"Migrated {migrated.modified_count} activities to public visibility")
+
     # Start background tasks
     from services.action_generator import daily_generation_loop
     from services.feature_calculator import feature_computation_loop
