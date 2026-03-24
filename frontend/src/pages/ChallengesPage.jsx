@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 import Sidebar from "@/components/Sidebar";
+import InviteChallengeDialog from "@/components/InviteChallengeDialog";
 
 // ── Icon mapping ──
 const ICON_MAP = {
@@ -156,6 +157,7 @@ function ChallengeDetail({ challengeId, onBack, currentUserId }) {
   const [challenge, setChallenge] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -286,16 +288,27 @@ function ChallengeDetail({ challengeId, onBack, currentUserId }) {
               Rejoindre le défi
             </Button>
           )}
-          {challenge.is_participant && challenge.status !== "completed" && challenge.created_by !== currentUserId && (
-            <Button
-              variant="outline"
-              onClick={handleLeave}
-              disabled={actionLoading}
-              className="w-full mt-4 rounded-xl gap-2 text-muted-foreground"
-            >
-              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LeaveIcon className="w-4 h-4" />}
-              Quitter le défi
-            </Button>
+          {challenge.is_participant && challenge.status !== "completed" && (
+            <div className="flex gap-2 mt-4">
+              <Button
+                onClick={() => setInviteOpen(true)}
+                className="flex-1 rounded-xl gap-2"
+              >
+                <UserPlus className="w-4 h-4" />
+                Inviter
+              </Button>
+              {challenge.created_by !== currentUserId && (
+                <Button
+                  variant="outline"
+                  onClick={handleLeave}
+                  disabled={actionLoading}
+                  className="rounded-xl gap-2 text-muted-foreground"
+                >
+                  {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LeaveIcon className="w-4 h-4" />}
+                  Quitter
+                </Button>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -355,6 +368,18 @@ function ChallengeDetail({ challengeId, onBack, currentUserId }) {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Invite dialog */}
+      {challenge && (
+        <InviteChallengeDialog
+          open={inviteOpen}
+          onOpenChange={setInviteOpen}
+          challengeId={challengeId}
+          challengeTitle={challenge.title}
+          existingParticipantIds={(challenge.participants || []).map((p) => p.user_id)}
+          onInvited={fetchDetail}
+        />
       )}
     </div>
   );
@@ -551,9 +576,14 @@ export default function ChallengesPage() {
     } catch { /* silent */ }
   };
 
-  const handleTemplateLaunch = () => {
+  const handleTemplateLaunch = (challenge) => {
     fetchMine();
-    setActiveTab("mine");
+    // Open detail view immediately so user can invite friends
+    if (challenge?.challenge_id) {
+      setSelectedChallenge(challenge.challenge_id);
+    } else {
+      setActiveTab("mine");
+    }
   };
 
   // Detail view
