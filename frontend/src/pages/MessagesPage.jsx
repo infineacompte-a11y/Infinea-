@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Sidebar from "@/components/Sidebar";
-import { MessageCircle, ArrowLeft, Loader2 } from "lucide-react";
+import { MessageCircle, ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch } from "@/App";
 
@@ -79,7 +79,8 @@ export default function MessagesPage() {
             <h1 className="text-display text-3xl lg:text-4xl font-semibold text-white opacity-0 animate-fade-in">
               Messages
             </h1>
-            <p className="text-white/60 text-sm mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
+            <p className="text-white/60 text-sm mt-1 flex items-center gap-1.5 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
+              <Sparkles className="w-3.5 h-3.5 text-white/40" />
               Vos conversations privées
             </p>
           </div>
@@ -100,6 +101,7 @@ export default function MessagesPage() {
                   Aucun message
                 </h2>
                 <p className="text-muted-foreground text-sm max-w-xs mb-4">
+                  <Sparkles className="w-3.5 h-3.5 text-primary/40 inline mr-1" />
                   Envoyez un message depuis le profil d'un utilisateur pour démarrer une conversation.
                 </p>
                 <Link to="/search">

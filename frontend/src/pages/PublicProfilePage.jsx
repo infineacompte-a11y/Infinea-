@@ -22,6 +22,9 @@ import {
   CalendarDays,
   ArrowLeft,
   MessageCircle,
+  Zap,
+  Trophy,
+  Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
@@ -45,6 +48,10 @@ export default function PublicProfilePage() {
   const [listDialog, setListDialog] = useState(null); // "followers" | "following" | null
   const [listData, setListData] = useState([]);
   const [listLoading, setListLoading] = useState(false);
+
+  // Activity timeline
+  const [activities, setActivities] = useState([]);
+  const [activitiesLoaded, setActivitiesLoaded] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -71,6 +78,21 @@ export default function PublicProfilePage() {
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
+
+  // Fetch activities for timeline
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      try {
+        const res = await authFetch(`${API}/users/${userId}/activities?limit=10`);
+        if (res.ok) {
+          const data = await res.json();
+          setActivities(data.activities || []);
+        }
+      } catch { /* silent */ }
+      setActivitiesLoaded(true);
+    })();
+  }, [userId]);
 
   const handleFollowToggle = (isFollowing) => {
     setProfile((prev) =>
@@ -116,6 +138,26 @@ export default function PublicProfilePage() {
       month: "long",
       year: "numeric",
     });
+  };
+
+  const timeAgo = (iso) => {
+    if (!iso) return "";
+    const diff = Date.now() - new Date(iso).getTime();
+    const min = Math.floor(diff / 60000);
+    if (min < 1) return "à l'instant";
+    if (min < 60) return `il y a ${min} min`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `il y a ${h}h`;
+    const d = Math.floor(h / 24);
+    if (d < 7) return `il y a ${d}j`;
+    return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+  };
+
+  const ACTIVITY_CONFIG = {
+    session_completed: { icon: Zap, color: "#459492", getText: (d) => `a terminé "${d.action_title || "une micro-action"}" en ${d.duration || 0} min` },
+    badge_earned: { icon: Award, color: "#E48C75", getText: (d) => `a obtenu le badge "${d.badge_name || "nouveau badge"}"` },
+    streak_milestone: { icon: Flame, color: "#E48C75", getText: (d) => `a atteint ${d.streak_days} jours de streak !` },
+    challenge_completed: { icon: Trophy, color: "#459492", getText: (d) => `a complété le défi "${d.challenge_title || "un défi"}" !` },
   };
 
   // Loading state
@@ -349,7 +391,7 @@ export default function PublicProfilePage() {
 
             {/* Badges */}
             {profile.badges && profile.badges.length > 0 && (
-              <Card className="opacity-0 animate-fade-in" style={{ animationDelay: "400ms", animationFillMode: "forwards" }}>
+              <Card className="mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "400ms", animationFillMode: "forwards" }}>
                 <CardHeader>
                   <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
                     <Award className="w-5 h-5 text-[#E48C75]" />
@@ -367,6 +409,44 @@ export default function PublicProfilePage() {
                         {badge.emoji || "🏅"} {badge.name || badge}
                       </Badge>
                     ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Activity Timeline */}
+            {activitiesLoaded && activities.length > 0 && (
+              <Card className="opacity-0 animate-fade-in" style={{ animationDelay: "500ms", animationFillMode: "forwards" }}>
+                <CardHeader>
+                  <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-[#459492]" />
+                    Activité récente
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {activities.map((act) => {
+                      const cfg = ACTIVITY_CONFIG[act.type] || ACTIVITY_CONFIG.session_completed;
+                      const ActIcon = cfg.icon;
+                      return (
+                        <div key={act.activity_id} className="flex items-start gap-3">
+                          <div
+                            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
+                            style={{ backgroundColor: `${cfg.color}15` }}
+                          >
+                            <ActIcon className="w-4 h-4" style={{ color: cfg.color }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-foreground/80">
+                              {cfg.getText(act.data || {})}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground/50 mt-0.5">
+                              {timeAgo(act.created_at)}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>
@@ -403,7 +483,8 @@ export default function PublicProfilePage() {
                     name: u.display_name,
                     username: u.username,
                     picture: u.avatar_url,
-                    is_following: u.is_following || u.follows_back || false,
+                    is_following: u.is_following || false,
+                    follows_back: u.follows_back || false,
                   }}
                   currentUserId={currentUser?.user_id}
                   showFollow

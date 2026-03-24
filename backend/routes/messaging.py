@@ -54,7 +54,8 @@ async def _enrich_conversations(conversations: list, user_id: str) -> list:
 
     users = await db.users.find(
         {"user_id": {"$in": other_ids}},
-        {"_id": 0, "user_id": 1, "name": 1, "display_name": 1, "username": 1, "picture": 1},
+        {"_id": 0, "user_id": 1, "name": 1, "display_name": 1, "username": 1,
+         "picture": 1, "avatar_url": 1, "streak_days": 1},
     ).to_list(len(other_ids))
     user_map = {u["user_id"]: u for u in users}
 
@@ -65,7 +66,8 @@ async def _enrich_conversations(conversations: list, user_id: str) -> list:
             "user_id": other_id,
             "display_name": other.get("display_name") or other.get("name", "Utilisateur"),
             "username": other.get("username"),
-            "avatar_url": other.get("picture"),
+            "avatar_url": other.get("avatar_url") or other.get("picture"),
+            "streak_days": other.get("streak_days", 0),
         }
         conv["my_unread_count"] = conv.get("unread_count", {}).get(user_id, 0)
         conv.pop("unread_count", None)
