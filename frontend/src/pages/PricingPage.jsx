@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { trackSubscriptionStarted } from "@/lib/analytics";
 import {
   Check,
   X,
@@ -91,6 +92,7 @@ export default function PricingPage() {
 
       if (!response.ok) throw new Error("Erreur d'activation");
 
+      trackSubscriptionStarted("premium");
       toast.success("Premium activé ! Bienvenue dans Premium !");
       window.location.href = "/dashboard";
       return;
@@ -132,6 +134,7 @@ export default function PricingPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Erreur");
+      trackSubscriptionStarted("premium_promo");
       toast.success("Premium activé ! Bienvenue dans Premium !");
       window.location.href = "/dashboard";
     } catch (error) {

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { track } from "@/lib/analytics";
 import {
   ChevronRight,
   ChevronLeft,
@@ -136,6 +137,7 @@ export default function OnboardingPage() {
   };
 
   const handleFinish = () => {
+    track("onboarding_completed");
     navigate("/dashboard");
   };
 

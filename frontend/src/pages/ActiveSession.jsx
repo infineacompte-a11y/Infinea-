@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { trackSessionCompleted } from "@/lib/analytics";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -94,6 +95,11 @@ export default function ActiveSession() {
       setIsRunning(false);
 
       if (completed) {
+        trackSessionCompleted({
+          action_title: session?.action_title,
+          category: session?.category,
+          actual_duration: Math.ceil(elapsedTime / 60),
+        });
         toast.success("Bravo ! Session terminée avec succès !");
       }
     } catch (error) {
