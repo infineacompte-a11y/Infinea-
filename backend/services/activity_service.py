@@ -37,7 +37,7 @@ async def create_activity(
     user_id: str,
     activity_type: str,
     data: dict,
-    visibility: str = "followers",
+    visibility: str = "public",
 ) -> Optional[dict]:
     """
     Create a new activity feed item.
