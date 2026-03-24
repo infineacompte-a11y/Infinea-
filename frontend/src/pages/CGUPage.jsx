@@ -32,7 +32,7 @@ export default function CGUPage() {
             <h2 className="font-sans font-semibold tracking-tight text-xl font-semibold mb-3 text-[#141E24]">1. Objet</h2>
             <p className="text-[#667085] leading-relaxed">
               Les présentes Conditions Générales d'Utilisation (ci-après « CGU ») régissent l'accès et l'utilisation de la plateforme InFinea, accessible à l'adresse{" "}
-              <a href="https://infinea.vercel.app" className="text-[#459492] hover:text-[#55B3AE] hover:underline transition-colors">infinea.vercel.app</a>.
+              <a href="https://infinea.app" className="text-[#459492] hover:text-[#55B3AE] hover:underline transition-colors">infinea.app</a>.
               InFinea est un service de productivité personnelle qui aide ses utilisateurs à transformer leur temps disponible en micro-actions productives, grâce à des suggestions personnalisées par intelligence artificielle.
             </p>
           </section>

@@ -1,32 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://infinea.vercel.app/</loc>
+    <loc>https://infinea.app/</loc>
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://infinea.vercel.app/pricing</loc>
+    <loc>https://infinea.app/pricing</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://infinea.vercel.app/register</loc>
+    <loc>https://infinea.app/register</loc>
     <changefreq>yearly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://infinea.vercel.app/login</loc>
+    <loc>https://infinea.app/login</loc>
     <changefreq>yearly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://infinea.vercel.app/privacy</loc>
+    <loc>https://infinea.app/privacy</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://infinea.vercel.app/cgu</loc>
+    <loc>https://infinea.app/cgu</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>

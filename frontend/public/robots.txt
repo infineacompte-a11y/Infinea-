@@ -12,4 +12,4 @@ Disallow: /integrations
 Disallow: /journal
 Disallow: /onboarding
 
-Sitemap: https://infinea.vercel.app/sitemap.xml
+Sitemap: https://infinea.app/sitemap.xml

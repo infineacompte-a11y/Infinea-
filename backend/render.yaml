@@ -18,8 +18,8 @@ services:
       - key: BACKEND_URL
         value: https://infinea-api.onrender.com
       - key: FRONTEND_URL
-        value: https://infinea.vercel.app
+        value: https://infinea.app
       - key: ALLOWED_ORIGINS
-        value: https://infinea.vercel.app
+        value: https://infinea.app
       - key: PYTHON_VERSION
         value: 3.11.0
