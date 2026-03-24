@@ -21,6 +21,7 @@ from config import limiter
 from models import ConversationCreate, MessageSend
 from services.moderation import get_blocked_ids, check_content, sanitize_text, extract_mentions
 from helpers import send_push_to_user
+from services.email_service import send_email_to_user, email_mention
 
 router = APIRouter(tags=["messaging"])
 
@@ -289,6 +290,9 @@ async def send_message(
                 url="/messages",
                 tag="mention",
             )
+            # Email for mentions in DM
+            subject, html = email_mention(display, content, "/messages")
+            await send_email_to_user(m["user_id"], subject, html, email_category="social")
         except Exception:
             pass
 

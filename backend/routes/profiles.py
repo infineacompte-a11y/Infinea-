@@ -11,13 +11,16 @@ Design:
 
 import asyncio
 import re
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 
 from database import db
 from auth import get_current_user
+from helpers import send_push_to_user
 from services.moderation import get_blocked_ids, check_content, sanitize_text
+from services.email_service import send_email_to_user, email_new_follower
 
 router = APIRouter()
 
@@ -508,6 +511,34 @@ async def follow_user(user_id: str, user: dict = Depends(get_current_user)):
             "status": "active",
             "followed_at": now,
         })
+
+    # Notify the followed user (non-blocking, silent fail)
+    try:
+        display = user.get("display_name") or user.get("name", "Quelqu'un")
+        await db.notifications.insert_one({
+            "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+            "user_id": user_id,
+            "type": "new_follower",
+            "message": f"{display} a commencé à te suivre",
+            "data": {
+                "follower_id": user["user_id"],
+                "follower_name": display,
+            },
+            "read": False,
+            "created_at": now,
+        })
+        await send_push_to_user(
+            user_id,
+            "Nouveau follower",
+            f"{display} te suit maintenant",
+            url=f"/users/{user['user_id']}",
+            tag="new_follower",
+        )
+        # Email notification
+        subject, html = email_new_follower(display, f"/users/{user['user_id']}")
+        await send_email_to_user(user_id, subject, html, email_category="social")
+    except Exception:
+        pass
 
     return {"message": "Abonné", "is_following": True}
 
