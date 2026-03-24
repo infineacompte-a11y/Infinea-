@@ -21,6 +21,13 @@ import {
   ChevronRight,
   Sparkles,
   RefreshCw,
+  Heart,
+  MessageCircle,
+  AtSign,
+  UserPlus,
+  Mail,
+  UserCheck,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
@@ -212,14 +219,20 @@ export default function NotificationsPage() {
   const unreadCount = notifications.filter((n) => !n.read).length;
   const groupedNotifications = useMemo(() => groupByDate(notifications), [notifications]);
 
-  const getNotificationIcon = (type) => {
-    switch (type) {
-      case "badge_earned": return Award;
-      case "streak_alert": return Flame;
-      case "reminder": return Clock;
-      default: return Bell;
-    }
+  const NOTIF_TYPE_MAP = {
+    reaction:              { icon: Heart,          color: "#E48C75" },
+    comment:               { icon: MessageCircle,  color: "#55B3AE" },
+    mention:               { icon: AtSign,         color: "#459492" },
+    new_follower:          { icon: UserPlus,       color: "#5DB786" },
+    new_message:           { icon: Mail,           color: "#55B3AE" },
+    badge_earned:          { icon: Award,          color: "#F5A623" },
+    streak_alert:          { icon: Flame,          color: "#E48C75" },
+    group_invite:          { icon: Users,          color: "#459492" },
+    group_member_joined:   { icon: UserCheck,      color: "#5DB786" },
+    reminder:              { icon: Clock,          color: null },
   };
+
+  const getNotifMeta = (type) => NOTIF_TYPE_MAP[type] || { icon: Bell, color: null };
 
   const tabs = [
     { key: "smart", label: "Coach", icon: Sparkles, badge: smartNotifs.length || null },
@@ -400,22 +413,43 @@ export default function NotificationsPage() {
                       </div>
                       <div className="space-y-2">
                         {items.map((notif, i) => {
-                          const Icon = getNotificationIcon(notif.type);
+                          const { icon: Icon, color } = getNotifMeta(notif.type);
+                          const accent = color || "#E48C75";
                           return (
                             <div
                               key={i}
                               className={`opacity-0 animate-fade-in group p-4 rounded-xl border transition-all duration-200 hover:bg-muted/30 ${
                                 notif.read
                                   ? "opacity-60 border-border bg-card"
-                                  : "border-l-2 border-l-[#E48C75] border-t border-r border-b border-t-[#E48C75]/20 border-r-[#E48C75]/20 border-b-[#E48C75]/20 bg-[#E48C75]/5"
+                                  : "border-l-2"
                               }`}
-                              style={{ animationDelay: `${i * 30}ms`, animationFillMode: "forwards" }}
+                              style={{
+                                animationDelay: `${i * 30}ms`,
+                                animationFillMode: "forwards",
+                                ...(!notif.read ? {
+                                  borderLeftColor: accent,
+                                  borderTopColor: `${accent}33`,
+                                  borderRightColor: `${accent}33`,
+                                  borderBottomColor: `${accent}33`,
+                                  backgroundColor: `${accent}0D`,
+                                } : {}),
+                              }}
                             >
                               <div className="flex items-start gap-3">
-                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                                  notif.read ? "bg-muted" : "bg-[#E48C75]/40"
-                                }`}>
-                                  <Icon className={`w-4 h-4 ${notif.read ? "text-muted-foreground" : "text-[#E48C75]"}`} />
+                                <div
+                                  className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                                  style={notif.read
+                                    ? { backgroundColor: "hsl(var(--muted))" }
+                                    : { backgroundColor: `${accent}66` }
+                                  }
+                                >
+                                  <Icon
+                                    className="w-4 h-4"
+                                    style={notif.read
+                                      ? { color: "hsl(var(--muted-foreground))" }
+                                      : { color: accent }
+                                    }
+                                  />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="font-medium text-sm">{notif.title}</p>
@@ -425,7 +459,10 @@ export default function NotificationsPage() {
                                   </p>
                                 </div>
                                 {!notif.read && (
-                                  <div className="w-2 h-2 rounded-full bg-[#E48C75] shrink-0 mt-2 animate-pulse" />
+                                  <div
+                                    className="w-2 h-2 rounded-full shrink-0 mt-2 animate-pulse"
+                                    style={{ backgroundColor: accent }}
+                                  />
                                 )}
                               </div>
                             </div>

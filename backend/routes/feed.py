@@ -305,6 +305,13 @@ async def react_to_activity(
                     "read": False,
                     "created_at": now,
                 })
+                await send_push_to_user(
+                    activity["user_id"],
+                    "Nouvelle réaction",
+                    f"{display} a réagi à ton activité",
+                    url="/community",
+                    tag="reaction",
+                )
             except Exception:
                 pass  # Non-blocking
 
@@ -377,6 +384,13 @@ async def add_comment(
                 "read": False,
                 "created_at": now,
             })
+            await send_push_to_user(
+                activity["user_id"],
+                "Nouveau commentaire",
+                f"{display} a commenté ton activité",
+                url="/community",
+                tag="comment",
+            )
         except Exception:
             pass
 
