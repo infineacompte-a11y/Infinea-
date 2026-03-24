@@ -20,6 +20,7 @@ from database import db
 from auth import get_current_user
 from helpers import send_push_to_user
 from services.moderation import get_blocked_ids, check_content, sanitize_text
+from services.email_service import send_email_to_user, email_new_follower
 
 router = APIRouter()
 
@@ -533,6 +534,9 @@ async def follow_user(user_id: str, user: dict = Depends(get_current_user)):
             url=f"/users/{user['user_id']}",
             tag="new_follower",
         )
+        # Email notification
+        subject, html = email_new_follower(display, f"/users/{user['user_id']}")
+        await send_email_to_user(user_id, subject, html, email_category="social")
     except Exception:
         pass
 

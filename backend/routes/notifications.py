@@ -23,14 +23,19 @@ async def get_notification_preferences(user: dict = Depends(get_current_user)):
     )
 
     if not prefs:
-        # Return defaults
+        # Return defaults (must match NotificationPreferences model)
         return {
             "user_id": user["user_id"],
             "daily_reminder": True,
             "reminder_time": "09:00",
             "streak_alerts": True,
             "achievement_alerts": True,
-            "weekly_summary": True
+            "weekly_summary": True,
+            "email_notifications": True,
+            "email_social": True,
+            "email_achievements": True,
+            "email_streak": True,
+            "email_weekly_summary": True,
         }
 
     return prefs

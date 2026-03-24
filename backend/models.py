@@ -197,6 +197,12 @@ class NotificationPreferences(BaseModel):
     streak_alerts: bool = True
     achievement_alerts: bool = True
     weekly_summary: bool = True
+    # Email preferences
+    email_notifications: bool = True       # Master toggle
+    email_social: bool = True              # Follows, mentions
+    email_achievements: bool = True        # Badges, milestones
+    email_streak: bool = True              # Streak alerts
+    email_weekly_summary: bool = True      # Weekly digest
 
 
 # ── Social ──

@@ -20,6 +20,7 @@ from auth import get_current_user
 from services.activity_service import get_feed, REACTION_TYPES
 from services.moderation import get_blocked_ids, check_content, sanitize_text, extract_mentions
 from helpers import send_push_to_user
+from services.email_service import send_email_to_user, email_mention
 
 router = APIRouter()
 
@@ -419,6 +420,9 @@ async def add_comment(
                 url="/community",
                 tag="mention",
             )
+            # Email for mentions
+            subject, html = email_mention(display, content, "/community")
+            await send_email_to_user(m["user_id"], subject, html, email_category="social")
         except Exception:
             pass
 

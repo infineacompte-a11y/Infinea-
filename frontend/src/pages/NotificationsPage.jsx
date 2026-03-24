@@ -587,6 +587,90 @@ export default function NotificationsPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Email Preferences */}
+              <Card className="rounded-xl mt-4">
+                <CardHeader>
+                  <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
+                    <Mail className="w-5 h-5 text-primary" />
+                    Notifications email
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {preferences && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label>Emails activés</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Recevoir des emails pour les événements importants
+                          </p>
+                        </div>
+                        <Switch
+                          checked={preferences.email_notifications ?? true}
+                          onCheckedChange={(v) => handleUpdatePreferences("email_notifications", v)}
+                        />
+                      </div>
+
+                      {(preferences.email_notifications ?? true) && (
+                        <>
+                          <div className="flex items-center justify-between pl-8">
+                            <div>
+                              <Label>Social</Label>
+                              <p className="text-xs text-muted-foreground">
+                                Nouveaux followers, mentions
+                              </p>
+                            </div>
+                            <Switch
+                              checked={preferences.email_social ?? true}
+                              onCheckedChange={(v) => handleUpdatePreferences("email_social", v)}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between pl-8">
+                            <div>
+                              <Label>Accomplissements</Label>
+                              <p className="text-xs text-muted-foreground">
+                                Badges, milestones
+                              </p>
+                            </div>
+                            <Switch
+                              checked={preferences.email_achievements ?? true}
+                              onCheckedChange={(v) => handleUpdatePreferences("email_achievements", v)}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between pl-8">
+                            <div>
+                              <Label>Alertes streak</Label>
+                              <p className="text-xs text-muted-foreground">
+                                Email quand ton streak est en danger
+                              </p>
+                            </div>
+                            <Switch
+                              checked={preferences.email_streak ?? true}
+                              onCheckedChange={(v) => handleUpdatePreferences("email_streak", v)}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between pl-8">
+                            <div>
+                              <Label>Résumé hebdomadaire</Label>
+                              <p className="text-xs text-muted-foreground">
+                                Récap de ta semaine par email
+                              </p>
+                            </div>
+                            <Switch
+                              checked={preferences.email_weekly_summary ?? true}
+                              onCheckedChange={(v) => handleUpdatePreferences("email_weekly_summary", v)}
+                            />
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           )}
         </div>
