@@ -191,6 +191,25 @@ async def startup_event():
 
     logger.info("All indexes ensured")
 
+    # One-time migration: generate usernames for existing users who don't have one
+    from routes.auth_routes import generate_username
+    users_without_username = await db.users.find(
+        {"$or": [{"username": None}, {"username": {"$exists": False}}]},
+        {"_id": 0, "user_id": 1, "email": 1},
+    ).to_list(None)
+    if users_without_username:
+        logger.info(f"Migrating usernames for {len(users_without_username)} users")
+        for u in users_without_username:
+            email = u.get("email", "")
+            if not email:
+                continue
+            username = await generate_username(email)
+            await db.users.update_one(
+                {"user_id": u["user_id"]},
+                {"$set": {"username": username}},
+            )
+        logger.info("Username migration complete")
+
     # Start background tasks
     from services.action_generator import daily_generation_loop
     from services.feature_calculator import feature_computation_loop
