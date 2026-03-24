@@ -19,7 +19,7 @@ from database import db
 from auth import get_current_user
 from config import limiter
 from models import ConversationCreate, MessageSend
-from services.moderation import get_blocked_ids, check_content, sanitize_text
+from services.moderation import get_blocked_ids, check_content, sanitize_text, extract_mentions
 from helpers import send_push_to_user
 
 router = APIRouter(tags=["messaging"])
@@ -208,12 +208,16 @@ async def send_message(
     if not moderation["allowed"]:
         raise HTTPException(status_code=400, detail=moderation["reason"])
 
+    # Extract @mentions
+    mentions = await extract_mentions(content, my_id, blocked_ids)
+
     now = datetime.now(timezone.utc).isoformat()
     message = {
         "message_id": f"msg_{uuid.uuid4().hex[:12]}",
         "conversation_id": conversation_id,
         "sender_id": my_id,
         "content": content,
+        "mentions": mentions,
         "created_at": now,
         "read_at": None,
     }
@@ -237,8 +241,8 @@ async def send_message(
     )
 
     # Notification (non-blocking)
+    display = user.get("display_name") or user.get("name", "Quelqu'un")
     try:
-        display = user.get("display_name") or user.get("name", "Quelqu'un")
         preview = content[:80] + ("..." if len(content) > 80 else "")
         await db.notifications.insert_one({
             "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
@@ -260,6 +264,33 @@ async def send_message(
         )
     except Exception:
         pass
+
+    # Notify mentioned users (skip other participant — already notified via new_message)
+    for m in mentions:
+        if m["user_id"] == other_id:
+            continue
+        try:
+            await db.notifications.insert_one({
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": m["user_id"],
+                "type": "mention",
+                "message": f"{display} vous a mentionné dans un message",
+                "data": {
+                    "conversation_id": conversation_id,
+                    "mentioner_id": my_id,
+                },
+                "read": False,
+                "created_at": now,
+            })
+            await send_push_to_user(
+                m["user_id"],
+                f"{display} vous a mentionné",
+                content[:80],
+                url="/messages",
+                tag="mention",
+            )
+        except Exception:
+            pass
 
     return message
 

@@ -9,6 +9,7 @@ Design:
 - Benchmarked: Strava athlete profiles, Instagram user search.
 """
 
+import asyncio
 import re
 from datetime import datetime, timezone
 
@@ -217,6 +218,151 @@ async def search_users(
             "username": u.get("username"),
             "avatar_url": u.get("avatar_url") or u.get("picture"),
             "is_following": u["user_id"] in my_follows,
+        })
+
+    return {"users": results}
+
+
+# ============== MENTION AUTOCOMPLETE ==============
+
+@router.get("/users/search-mention")
+async def search_mention(
+    user: dict = Depends(get_current_user),
+    q: str = Query("", max_length=50),
+    context: str = Query("comment"),
+    context_id: str = Query(""),
+    limit: int = Query(6, ge=1, le=15),
+):
+    """
+    Context-aware mention autocomplete.
+    Ranking: activity owner > mutual follows > following > followers > any user.
+    Empty query returns ranked suggestions instantly.
+    Benchmarked: Slack (speed), Discord (context), Twitter (simplicity).
+    """
+    my_id = user["user_id"]
+    q_clean = q.strip().lstrip("@").lower()
+
+    # ── Parallel queries: follows + context owner ──
+    async def fetch_i_follow():
+        docs = await db.follows.find(
+            {"follower_id": my_id, "status": "active"},
+            {"_id": 0, "following_id": 1},
+        ).to_list(1000)
+        return {d["following_id"] for d in docs}
+
+    async def fetch_follow_me():
+        docs = await db.follows.find(
+            {"following_id": my_id, "status": "active"},
+            {"_id": 0, "follower_id": 1},
+        ).to_list(1000)
+        return {d["follower_id"] for d in docs}
+
+    async def fetch_context_owner():
+        if context == "comment" and context_id:
+            act = await db.activities.find_one(
+                {"activity_id": context_id}, {"_id": 0, "user_id": 1}
+            )
+            return act["user_id"] if act else None
+        if context == "message" and context_id:
+            conv = await db.conversations.find_one(
+                {"conversation_id": context_id}, {"_id": 0, "participants": 1}
+            )
+            if conv:
+                others = [p for p in conv["participants"] if p != my_id]
+                return others[0] if others else None
+        return None
+
+    i_follow_set, follow_me_set, context_owner_id = await asyncio.gather(
+        fetch_i_follow(), fetch_follow_me(), fetch_context_owner()
+    )
+    mutual_set = i_follow_set & follow_me_set
+    blocked_ids = await get_blocked_ids(my_id)
+    exclude_ids = blocked_ids | {my_id}
+
+    # ── Build candidate pool ──
+    if q_clean:
+        # Text search: prefix + contains on username and display_name
+        regex_prefix = re.compile(f"^{re.escape(q_clean)}", re.IGNORECASE)
+        regex_contains = re.compile(re.escape(q_clean), re.IGNORECASE)
+        candidates = await db.users.find(
+            {
+                "$or": [
+                    {"username": {"$regex": q_clean, "$options": "i"}},
+                    {"display_name": {"$regex": q_clean, "$options": "i"}},
+                    {"name": {"$regex": q_clean, "$options": "i"}},
+                ],
+                "user_id": {"$nin": list(exclude_ids)},
+            },
+            {"_id": 0, "user_id": 1, "name": 1, "display_name": 1,
+             "username": 1, "avatar_url": 1, "picture": 1, "privacy": 1},
+        ).limit(30).to_list(30)
+    else:
+        # No text filter — pull from social graph
+        social_ids = list((mutual_set | i_follow_set | follow_me_set) - exclude_ids)
+        if context_owner_id and context_owner_id not in exclude_ids:
+            if context_owner_id not in social_ids:
+                social_ids.insert(0, context_owner_id)
+        social_ids = social_ids[:30]
+        if not social_ids:
+            return {"users": []}
+        candidates = await db.users.find(
+            {"user_id": {"$in": social_ids}},
+            {"_id": 0, "user_id": 1, "name": 1, "display_name": 1,
+             "username": 1, "avatar_url": 1, "picture": 1, "privacy": 1},
+        ).to_list(len(social_ids))
+
+    # ── Filter private profiles ──
+    visible = [
+        u for u in candidates
+        if u.get("privacy", {}).get("profile_visible", True) is not False
+    ]
+
+    # ── Score & rank ──
+    scored = []
+    for u in visible:
+        uid = u["user_id"]
+        score = 0
+
+        # Tier 0: context owner
+        if uid == context_owner_id:
+            score += 1000
+        # Tier 1-3: follow relationship
+        if uid in mutual_set:
+            score += 300
+        elif uid in i_follow_set:
+            score += 200
+        elif uid in follow_me_set:
+            score += 100
+        else:
+            score += 50
+
+        # Text match bonuses
+        if q_clean:
+            uname = (u.get("username") or "").lower()
+            dname = (u.get("display_name") or u.get("name") or "").lower()
+            if uname.startswith(q_clean):
+                score += 100
+            elif dname.startswith(q_clean):
+                score += 80
+            else:
+                score += 40  # contains match (already filtered by query)
+
+        scored.append((score, u))
+
+    scored.sort(key=lambda x: -x[0])
+    top = scored[:limit]
+
+    # ── Format response ──
+    results = []
+    for _, u in top:
+        uid = u["user_id"]
+        results.append({
+            "user_id": uid,
+            "display_name": u.get("display_name") or u.get("name", "Utilisateur"),
+            "username": u.get("username"),
+            "avatar_url": u.get("avatar_url") or u.get("picture"),
+            "is_following": uid in i_follow_set,
+            "is_mutual": uid in mutual_set,
         })
 
     return {"users": results}

@@ -28,6 +28,8 @@ import FollowButton from "@/components/FollowButton";
 import { API, authFetch, useAuth } from "@/App";
 import SafetyMenu from "@/components/SafetyMenu";
 import ReportDialog from "@/components/ReportDialog";
+import MentionInput from "@/components/MentionInput";
+import MentionText from "@/components/MentionText";
 import { sanitize } from "@/lib/sanitize";
 
 // ── Reaction config (InFinea DNA) ──
@@ -158,6 +160,7 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
   const [comments, setComments] = useState([]);
   const [commentsLoaded, setCommentsLoaded] = useState(false);
   const [commentText, setCommentText] = useState("");
+  const [commentMentions, setCommentMentions] = useState([]);
   const [sendingComment, setSendingComment] = useState(false);
   const [reportCommentId, setReportCommentId] = useState(null);
   const [reactingType, setReactingType] = useState(null);
@@ -205,7 +208,7 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
   };
 
   const handleSendComment = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     const text = commentText.trim();
     if (!text) return;
     setSendingComment(true);
@@ -219,6 +222,7 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
         const newComment = await res.json();
         setComments((prev) => [...prev, newComment]);
         setCommentText("");
+        setCommentMentions([]);
       } else {
         toast.error("Erreur lors de l'envoi");
       }
@@ -386,7 +390,12 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
                     >
                       {c.user_name}
                     </Link>
-                    <span className="text-xs text-foreground/70 break-words">{sanitize(c.content)}</span>
+                    <MentionText
+                      content={c.content}
+                      mentions={c.mentions}
+                      currentUserId={currentUserId}
+                      className="text-xs text-foreground/70 break-words"
+                    />
                   </div>
                   <span className="text-[10px] text-muted-foreground/50">
                     {timeAgo(c.created_at)}
@@ -412,14 +421,19 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
               </div>
             ))}
 
-            {/* Comment input — Instagram style inline */}
+            {/* Comment input — with @mention autocomplete */}
             <form onSubmit={handleSendComment} className="flex items-center gap-2 pt-1">
-              <Input
+              <MentionInput
                 value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
+                onChange={setCommentText}
+                mentions={commentMentions}
+                onMentionsChange={setCommentMentions}
+                context="comment"
+                contextId={activity.activity_id}
                 placeholder="Ajouter un commentaire..."
                 maxLength={500}
                 className="h-8 text-xs rounded-full border-border/50 bg-muted/30 focus:bg-white"
+                onSubmit={handleSendComment}
               />
               <Button
                 type="submit"

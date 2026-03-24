@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Sidebar from "@/components/Sidebar";
 import SafetyMenu from "@/components/SafetyMenu";
+import MentionInput from "@/components/MentionInput";
+import MentionText from "@/components/MentionText";
 import { ArrowLeft, Send, Loader2, MessageCircle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
@@ -43,6 +45,7 @@ export default function ConversationPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [messageText, setMessageText] = useState("");
+  const [messageMentions, setMessageMentions] = useState([]);
   const [hasMore, setHasMore] = useState(false);
   const [cursor, setCursor] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -136,7 +139,7 @@ export default function ConversationPage() {
 
   // Send message
   const handleSend = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     const text = messageText.trim();
     if (!text || sending) return;
     setSending(true);
@@ -151,6 +154,7 @@ export default function ConversationPage() {
         const newMsg = await res.json();
         setMessages((prev) => [...prev, newMsg]);
         setMessageText("");
+        setMessageMentions([]);
       } else {
         const err = await res.json().catch(() => ({}));
         toast.error(err.detail || "Erreur lors de l'envoi");
@@ -309,7 +313,13 @@ export default function ConversationPage() {
                             : "bg-card border border-border/50 text-foreground rounded-bl-md"
                         }`}
                       >
-                        <p className="whitespace-pre-wrap break-words">{sanitize(msg.content)}</p>
+                        <p className="whitespace-pre-wrap break-words">
+                          <MentionText
+                            content={msg.content}
+                            mentions={msg.mentions}
+                            currentUserId={myId}
+                          />
+                        </p>
                       </div>
                     </div>
                   </React.Fragment>
@@ -339,13 +349,18 @@ export default function ConversationPage() {
               </div>
             )}
             <form onSubmit={handleSend} className="flex items-center gap-2">
-              <Input
+              <MentionInput
                 value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
+                onChange={setMessageText}
+                mentions={messageMentions}
+                onMentionsChange={setMessageMentions}
+                context="message"
+                contextId={conversationId}
                 placeholder="Écris un message..."
                 maxLength={1000}
                 autoFocus
                 className="flex-1 h-10 rounded-full border-border/50 bg-muted/30 focus:bg-white px-4 text-sm"
+                onSubmit={handleSend}
               />
               <Button
                 type="submit"

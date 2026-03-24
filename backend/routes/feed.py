@@ -18,7 +18,8 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from database import db
 from auth import get_current_user
 from services.activity_service import get_feed, REACTION_TYPES
-from services.moderation import get_blocked_ids, check_content, sanitize_text
+from services.moderation import get_blocked_ids, check_content, sanitize_text, extract_mentions
+from helpers import send_push_to_user
 
 router = APIRouter()
 
@@ -333,6 +334,10 @@ async def add_comment(
     if not activity:
         raise HTTPException(status_code=404, detail="Activité introuvable")
 
+    # Extract @mentions
+    blocked_ids = await get_blocked_ids(user["user_id"])
+    mentions = await extract_mentions(content, user["user_id"], blocked_ids)
+
     now = datetime.now(timezone.utc).isoformat()
     comment_id = f"com_{uuid.uuid4().hex[:12]}"
 
@@ -344,6 +349,7 @@ async def add_comment(
         "user_username": user.get("username"),
         "user_avatar": user.get("avatar_url") or user.get("picture"),
         "content": content,
+        "mentions": mentions,
         "created_at": now,
     }
 
@@ -353,10 +359,11 @@ async def add_comment(
         {"$inc": {"comment_count": 1}},
     )
 
+    display = user.get("display_name") or user.get("name", "Quelqu'un")
+
     # Notify activity owner (non-blocking)
     if activity["user_id"] != user["user_id"]:
         try:
-            display = user.get("display_name") or user.get("name", "Quelqu'un")
             await db.notifications.insert_one({
                 "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
                 "user_id": activity["user_id"],
@@ -373,6 +380,34 @@ async def add_comment(
         except Exception:
             pass
 
+    # Notify mentioned users (non-blocking, skip activity owner — already notified)
+    for m in mentions:
+        if m["user_id"] == activity["user_id"]:
+            continue
+        try:
+            await db.notifications.insert_one({
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": m["user_id"],
+                "type": "mention",
+                "message": f"{display} vous a mentionné dans un commentaire",
+                "data": {
+                    "activity_id": activity_id,
+                    "comment_id": comment_id,
+                    "mentioner_id": user["user_id"],
+                },
+                "read": False,
+                "created_at": now,
+            })
+            await send_push_to_user(
+                m["user_id"],
+                f"{display} vous a mentionné",
+                content[:80],
+                url="/community",
+                tag="mention",
+            )
+        except Exception:
+            pass
+
     return {
         "comment_id": comment_id,
         "activity_id": activity_id,
@@ -381,6 +416,7 @@ async def add_comment(
         "user_username": comment_doc["user_username"],
         "user_avatar": comment_doc["user_avatar"],
         "content": content,
+        "mentions": mentions,
         "created_at": now,
     }
 

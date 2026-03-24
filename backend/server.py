@@ -208,6 +208,10 @@ async def startup_event():
     await db.messages.create_index("message_id", unique=True)
     await db.messages.create_index([("conversation_id", 1), ("created_at", 1)])
 
+    # Mentions (for "who mentioned me" queries)
+    await db.comments.create_index("mentions.user_id")
+    await db.messages.create_index("mentions.user_id")
+
     logger.info("All indexes ensured")
 
     # One-time migration: generate usernames for existing users who don't have one
