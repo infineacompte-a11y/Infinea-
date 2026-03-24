@@ -20,11 +20,15 @@ import {
   Compass,
   Crown,
   UserPlus,
+  Flag,
 } from "lucide-react";
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
 import FollowButton from "@/components/FollowButton";
 import { API, authFetch, useAuth } from "@/App";
+import SafetyMenu from "@/components/SafetyMenu";
+import ReportDialog from "@/components/ReportDialog";
+import { sanitize } from "@/lib/sanitize";
 
 // ── Reaction config (InFinea DNA) ──
 const REACTIONS = [
@@ -155,6 +159,7 @@ function ActivityCard({ activity, currentUserId, onReactionChange }) {
   const [commentsLoaded, setCommentsLoaded] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [sendingComment, setSendingComment] = useState(false);
+  const [reportCommentId, setReportCommentId] = useState(null);
   const [reactingType, setReactingType] = useState(null);
 
   const totalReactions =
@@ -260,6 +265,17 @@ function ActivityCard({ activity, currentUserId, onReactionChange }) {
               <span className="text-[11px] text-muted-foreground/50 ml-auto shrink-0">
                 {timeAgo(activity.created_at)}
               </span>
+              {activity.user_id !== currentUserId && (
+                <SafetyMenu
+                  userId={activity.user_id}
+                  targetType="activity"
+                  targetId={activity.activity_id}
+                  size="sm"
+                  onBlockChange={(blocked) => {
+                    if (blocked) window.location.reload();
+                  }}
+                />
+              )}
             </div>
             <div className="flex items-center gap-1.5 mt-1">
               <div
@@ -360,19 +376,27 @@ function ActivityCard({ activity, currentUserId, onReactionChange }) {
                     >
                       {c.user_name}
                     </Link>
-                    <span className="text-xs text-foreground/70 break-words">{c.content}</span>
+                    <span className="text-xs text-foreground/70 break-words">{sanitize(c.content)}</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground/50">
                     {timeAgo(c.created_at)}
                   </span>
                 </div>
-                {c.user_id === currentUserId && (
+                {c.user_id === currentUserId ? (
                   <button
                     onClick={() => handleDeleteComment(c.comment_id)}
                     className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all p-1"
                     title="Supprimer"
                   >
                     <Trash2 className="w-3 h-3" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setReportCommentId(c.comment_id)}
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all p-1"
+                    title="Signaler"
+                  >
+                    <Flag className="w-3 h-3" />
                   </button>
                 )}
               </div>
@@ -402,6 +426,16 @@ function ActivityCard({ activity, currentUserId, onReactionChange }) {
               </Button>
             </form>
           </div>
+        )}
+
+        {/* Report comment dialog */}
+        {reportCommentId && (
+          <ReportDialog
+            open={!!reportCommentId}
+            onOpenChange={(open) => { if (!open) setReportCommentId(null); }}
+            targetType="comment"
+            targetId={reportCommentId}
+          />
         )}
       </CardContent>
     </Card>

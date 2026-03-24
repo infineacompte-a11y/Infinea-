@@ -43,6 +43,7 @@ from routes.micro_instants import router as micro_instants_router
 from routes.profiles import router as profiles_router
 from routes.feed import router as feed_router
 from routes.challenges import router as challenges_router
+from routes.safety import router as safety_router
 
 api_router.include_router(auth_router)
 api_router.include_router(onboarding_router)
@@ -63,6 +64,7 @@ api_router.include_router(micro_instants_router)
 api_router.include_router(profiles_router)
 api_router.include_router(feed_router)
 api_router.include_router(challenges_router)
+api_router.include_router(safety_router)
 
 # Public routes (no /api prefix)
 app.include_router(social_public_router)
@@ -191,6 +193,11 @@ async def startup_event():
     await db.refresh_tokens.create_index("token", unique=True)
     await db.refresh_tokens.create_index("user_id")
     await db.refresh_tokens.create_index("family_id")
+    # Social safety — blocks & reports
+    await db.blocks.create_index([("blocker_id", 1), ("blocked_id", 1)], unique=True)
+    await db.blocks.create_index("blocked_id")
+    await db.reports.create_index("report_id", unique=True)
+    await db.reports.create_index([("reporter_id", 1), ("target_type", 1), ("target_id", 1)])
 
     logger.info("All indexes ensured")
 

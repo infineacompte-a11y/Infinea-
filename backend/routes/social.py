@@ -11,6 +11,7 @@ from auth import get_current_user
 from models import GroupCreate, GroupInvite, ShareCreate
 from config import limiter
 from helpers import send_push_to_user
+from services.moderation import check_content, sanitize_text
 
 router = APIRouter()
 public_router = APIRouter()
@@ -71,10 +72,18 @@ async def create_group(request: Request, body: GroupCreate, user: dict = Depends
     group_id = f"grp_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
 
+    # Sanitize + moderate group name
+    group_name = sanitize_text(body.name, max_length=50)
+    if not group_name:
+        raise HTTPException(status_code=400, detail="Le nom du groupe est requis")
+    moderation = check_content(group_name)
+    if not moderation["allowed"]:
+        raise HTTPException(status_code=400, detail=moderation["reason"])
+
     group_doc = {
         "group_id": group_id,
-        "name": body.name.strip(),
-        "objective_title": (body.objective_title or "").strip() or None,
+        "name": group_name,
+        "objective_title": sanitize_text(body.objective_title or "", max_length=100) or None,
         "category": body.category if body.category in GROUP_CATEGORIES else None,
         "owner_id": user["user_id"],
         "members": [{
