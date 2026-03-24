@@ -15,6 +15,8 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
+from services.email_service import send_email_to_user, email_streak_alert, email_weekly_summary
+
 logger = logging.getLogger("notification_scheduler")
 
 # ── F.3 Contextual Push Constants ──
@@ -101,6 +103,12 @@ async def generate_proactive_notifications(db):
                         message="Vous n'avez pas encore fait de session aujourd'hui. Une micro-action de 5 min suffit pour maintenir votre série.",
                         icon="flame"
                     )
+                    # Email streak alert
+                    try:
+                        subject, html = email_streak_alert(streak)
+                        await send_email_to_user(user_id, subject, html, email_category="streak")
+                    except Exception:
+                        pass
                     stats["streak_alerts"] += 1
 
             # ── 2. Routine reminder (after 10:00 UTC, max 1/day) ──
@@ -381,6 +389,70 @@ async def generate_contextual_instant_notifications(db):
         logger.debug(f"F.3 contextual instant pushes: no pushes this cycle ({stats})")
 
 
+async def _send_weekly_summary_emails(db):
+    """Send weekly summary emails on Monday mornings (10:00-11:00 UTC window).
+
+    Checks: is it Monday? Is it between 10-11 UTC? Has user already received
+    this week's summary? If all pass, aggregates last 7 days and sends email.
+    """
+    now = datetime.now(timezone.utc)
+    if now.weekday() != 0 or now.hour != 10:
+        return  # Only runs on Monday between 10:00-10:59 UTC
+
+    week_ago = (now - timedelta(days=7)).isoformat()
+    today_str = now.strftime("%Y-%m-%d")
+
+    # Find active users who have email enabled
+    active_users = await db.users.find(
+        {"last_session_date": {"$gte": (now - timedelta(days=30)).strftime("%Y-%m-%d")}},
+        {"_id": 0, "user_id": 1, "streak_days": 1}
+    ).to_list(500)
+
+    sent = 0
+    for user in active_users:
+        user_id = user["user_id"]
+        try:
+            # Dedup: max 1 weekly summary per week
+            if await _notif_exists_today(db, user_id, "weekly_summary_email"):
+                continue
+
+            # Aggregate sessions from last 7 days
+            pipeline = [
+                {"$match": {"user_id": user_id, "completed": True, "completed_at": {"$gte": week_ago}}},
+                {"$group": {"_id": None, "count": {"$sum": 1}, "total_min": {"$sum": "$actual_duration"}}},
+            ]
+            agg = await db.sessions.aggregate(pipeline).to_list(1)
+            if not agg or agg[0]["count"] == 0:
+                continue  # No sessions last week — skip
+
+            sessions_count = agg[0]["count"]
+            total_minutes = agg[0]["total_min"]
+            streak_days = user.get("streak_days", 0)
+
+            subject, html = email_weekly_summary(sessions_count, streak_days, total_minutes)
+            await send_email_to_user(user_id, subject, html, email_category="weekly_summary")
+
+            # Mark as sent (reuse notification dedup mechanism)
+            await db.notifications.insert_one({
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": user_id,
+                "type": "weekly_summary_email",
+                "title": "Résumé hebdo envoyé",
+                "message": f"{sessions_count} sessions, {total_minutes} min",
+                "icon": "mail",
+                "read": True,  # Silent — no in-app badge
+                "created_at": now.isoformat(),
+            })
+            sent += 1
+
+        except Exception as e:
+            logger.warning(f"Weekly summary email failed for {user_id}: {e}")
+            continue
+
+    if sent > 0:
+        logger.info(f"Weekly summary emails sent: {sent}")
+
+
 async def notification_scheduler_loop(db):
     """Background loop that generates proactive + contextual notifications periodically."""
     # Wait 90 seconds after startup before first run
@@ -396,6 +468,11 @@ async def notification_scheduler_loop(db):
             await generate_contextual_instant_notifications(db)
         except Exception as e:
             logger.error(f"Contextual instant notification loop error: {e}")
+
+        try:
+            await _send_weekly_summary_emails(db)
+        except Exception as e:
+            logger.error(f"Weekly summary email error: {e}")
 
         # Run every 1 hour (micro-instants need more responsive timing)
         await asyncio.sleep(3600)

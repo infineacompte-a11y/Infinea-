@@ -12,6 +12,7 @@ from models import GroupCreate, GroupInvite, ShareCreate
 from config import limiter
 from helpers import send_push_to_user
 from services.moderation import check_content, sanitize_text
+from services.email_service import send_email_to_user, email_group_invite
 
 router = APIRouter()
 public_router = APIRouter()
@@ -194,6 +195,12 @@ async def invite_to_group(request: Request, group_id: str, body: GroupInvite, us
             )
         except Exception:
             pass  # Push is best-effort, never blocks
+        try:
+            inviter_name = user.get("display_name") or user.get("name", "Quelqu'un")
+            subject, html = email_group_invite(inviter_name, group["name"])
+            await send_email_to_user(invitee["user_id"], subject, html, email_category="social")
+        except Exception:
+            pass
 
     return {"message": "Invitation envoyée", "invite_id": invite["invite_id"]}
 

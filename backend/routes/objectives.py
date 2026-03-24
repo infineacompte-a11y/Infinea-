@@ -14,6 +14,7 @@ from models import ObjectiveCreate, ObjectiveUpdate
 from helpers import call_ai, AI_SYSTEM_MESSAGE
 from config import logger, limiter
 from services.event_tracker import track_event
+from services.email_service import send_email_to_user, email_milestone
 
 router = APIRouter()
 
@@ -386,6 +387,22 @@ async def complete_objective_step(request: Request, objective_id: str, user: dic
         adaptive_hint = "Tu progresses vite ! Les prochaines sessions seront plus stimulantes."
     elif performance == "abandoned":
         adaptive_hint = "Pas de souci. La prochaine session sera un peu plus douce."
+
+    # Email milestone — day milestones (7, 14, 30, 60, 90) + progress milestones (25%, 50%, 75%)
+    try:
+        obj_title = obj.get("title", "ton objectif")
+        progress_pct = round((completed_steps / max(total_steps, 1)) * 100)
+
+        if new_day in (7, 14, 30, 60, 90):
+            milestone_text = f"Jour {new_day} sur « {obj_title[:40]} » !"
+            subject, html = email_milestone(milestone_text)
+            await send_email_to_user(user["user_id"], subject, html, email_category="achievements")
+        elif progress_pct in (25, 50, 75):
+            milestone_text = f"{progress_pct}% de « {obj_title[:40]} » complété !"
+            subject, html = email_milestone(milestone_text)
+            await send_email_to_user(user["user_id"], subject, html, email_category="achievements")
+    except Exception:
+        pass
 
     return {
         "success": True,
