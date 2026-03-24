@@ -48,7 +48,7 @@ export default function CreateActionModal({ open, onOpenChange, onActionCreated 
   const handleSave = () => {
     // The action is already saved by the backend on creation
     toast.success("Action ajoutée à votre bibliothèque !");
-    onActionCreated?.();
+    onActionCreated?.(generatedAction);
     handleClose();
   };
 

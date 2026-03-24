@@ -162,6 +162,9 @@ async def startup_event():
     await db.groups.create_index([("members.user_id", 1), ("status", 1)])
     await db.micro_instant_outcomes.create_index([("user_id", 1), ("recorded_at", -1)])
     await db.micro_instant_outcomes.create_index("instant_id")
+    # Micro-actions library — fast category/filter lookups
+    await db.micro_actions.create_index("category")
+    await db.micro_actions.create_index([("category", 1), ("energy_level", 1)])
 
     # Indexes identifiés par audit CTO — collections à fort trafic
     await db.notifications.create_index([("user_id", 1), ("type", 1), ("created_at", -1)])
