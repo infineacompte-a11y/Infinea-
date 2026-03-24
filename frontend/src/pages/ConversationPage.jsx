@@ -177,7 +177,7 @@ export default function ConversationPage() {
     if (!other.user_id) return [];
     const suggestions = [];
     if (other.streak_days > 0) {
-      suggestions.push(`Bravo pour ton streak de ${other.streak_days} jours !`);
+      suggestions.push(`Bravo pour ton streak de ${other.streak_days} jour${other.streak_days > 1 ? "s" : ""} !`);
     }
     if (other.display_name) {
       suggestions.push(`Salut ${other.display_name.split(" ")[0]} ! Comment avances-tu ?`);
