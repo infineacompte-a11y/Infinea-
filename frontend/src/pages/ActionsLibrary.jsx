@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -125,26 +125,49 @@ export default function ActionsLibrary() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const actionsCache = useRef({});
 
-  useEffect(() => {
-    fetchActions();
-  }, []);
-
-  const fetchActions = async () => {
+  const fetchActions = useCallback(async (category) => {
+    const cacheKey = category || "all";
+    // Return cached results instantly if available
+    if (actionsCache.current[cacheKey]) {
+      setActions(actionsCache.current[cacheKey]);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
     try {
+      const params = new URLSearchParams({ limit: "500" });
+      if (category && category !== "all" && category !== "my_actions") {
+        params.set("category", category);
+      }
       const [actionsRes, customRes] = await Promise.all([
-        authFetch(`${API}/actions?limit=10000`),
-        authFetch(`${API}/actions/custom`).catch(() => null),
+        authFetch(`${API}/actions?${params}`),
+        actionsCache.current._custom !== undefined
+          ? Promise.resolve(null)
+          : authFetch(`${API}/actions/custom`).catch(() => null),
       ]);
       if (!actionsRes.ok) throw new Error("Erreur");
-      setActions(await actionsRes.json());
-      if (customRes?.ok) setCustomActions(await customRes.json());
+      const data = await actionsRes.json();
+      actionsCache.current[cacheKey] = data;
+      setActions(data);
+      if (customRes?.ok) {
+        const customData = await customRes.json();
+        actionsCache.current._custom = customData;
+        setCustomActions(customData);
+      } else if (actionsCache.current._custom) {
+        setCustomActions(actionsCache.current._custom);
+      }
     } catch (error) {
       toast.error("Impossible de charger les actions");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchActions(activeCategory);
+  }, [activeCategory, fetchActions]);
 
   const startSession = async (actionId) => {
     try {
@@ -171,13 +194,9 @@ export default function ActionsLibrary() {
     }
   };
 
-  const allActions = [...actions, ...customActions.map(a => ({ ...a, is_custom: true }))];
+  const allActions = [...actions, ...customActions.filter(a => activeCategory === "all" || a.category === activeCategory).map(a => ({ ...a, is_custom: true }))];
   const isMyActions = activeCategory === "my_actions";
-  const filteredActions = isMyActions
-    ? []
-    : activeCategory === "all"
-      ? allActions
-      : allActions.filter(a => a.category === activeCategory);
+  const filteredActions = isMyActions ? [] : allActions;
 
   // Group custom actions by category for "Mes actions" tab
   const groupedCustomActions = customActions.reduce((groups, action) => {
@@ -365,8 +384,8 @@ export default function ActionsLibrary() {
                 return (
                   <Card
                     key={action.action_id}
-                    className={`group action-card cursor-pointer border-l-[3px] ${categoryBorderColors[action.category] || "border-l-border"} hover:shadow-md hover:border-border/80 hover:-translate-y-0.5 active:translate-y-px transition-all duration-300 ease-out opacity-0 animate-fade-in ${isPremiumLocked ? "opacity-75" : ""}`}
-                    style={{ animationDelay: `${i * 50}ms`, animationFillMode: "forwards" }}
+                    className={`group action-card cursor-pointer border-l-[3px] ${categoryBorderColors[action.category] || "border-l-border"} hover:shadow-md hover:border-border/80 hover:-translate-y-0.5 active:translate-y-px transition-all duration-300 ease-out ${i < 8 ? "opacity-0 animate-fade-in" : ""} ${isPremiumLocked ? "opacity-75" : ""}`}
+                    style={i < 8 ? { animationDelay: `${i * 50}ms`, animationFillMode: "forwards" } : undefined}
                     onClick={() => startSession(action.action_id)}
                     data-testid={`action-${action.action_id}`}
                   >
@@ -437,7 +456,15 @@ export default function ActionsLibrary() {
       <CreateActionModal
         open={showCreateModal}
         onOpenChange={setShowCreateModal}
-        onActionCreated={fetchActions}
+        onActionCreated={(newAction) => {
+          if (newAction) {
+            setCustomActions(prev => [newAction, ...prev]);
+            actionsCache.current._custom = undefined;
+          } else {
+            actionsCache.current = {};
+            fetchActions(activeCategory);
+          }
+        }}
       />
     </div>
   );
