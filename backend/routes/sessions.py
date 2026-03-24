@@ -12,6 +12,7 @@ from auth import get_current_user
 from config import limiter, logger
 from models import SessionStart, SessionComplete
 from helpers import send_push_to_user
+from services.email_service import send_email_to_user, email_badge_earned
 from services.event_tracker import track_event
 from services.feedback_loop import record_signal
 from integrations.encryption import decrypt_token
@@ -315,6 +316,12 @@ async def complete_session(
             }
             await db.notifications.insert_one(notification)
             await send_push_to_user(user["user_id"], notification["title"], notification["message"], url="/notifications", tag="badge")
+            # Email for badge earned
+            try:
+                subject, html = email_badge_earned(badge["name"])
+                await send_email_to_user(user["user_id"], subject, html, email_category="achievements")
+            except Exception:
+                pass
 
         # Invalidate cached features (session data changed)
         from services.cache import cache_delete
