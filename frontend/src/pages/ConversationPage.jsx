@@ -318,6 +318,7 @@ export default function ConversationPage() {
                             content={msg.content}
                             mentions={msg.mentions}
                             currentUserId={myId}
+                            variant={isMine ? "dark" : "light"}
                           />
                         </p>
                       </div>
