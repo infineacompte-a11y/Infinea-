@@ -38,6 +38,7 @@ import NotFound from "@/pages/NotFound";
 import CoachFAB from "@/components/CoachFAB";
 import MicroInstantBanner from "@/components/MicroInstantBanner";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { identifyUser, resetAnalytics, track } from "@/lib/analytics";
 
 // In production on Vercel, REACT_APP_BACKEND_URL can be "" (empty) to use
 // same-origin /api/* calls which are proxied to the backend via vercel.json rewrites.
@@ -190,6 +191,7 @@ const AuthCallback = () => {
         }
 
         setUser(userData);
+        track("user_signed_up", { method: "google" });
         navigate("/dashboard", { state: { user: userData } });
       } catch (error) {
         console.error("OAuth network error:", error);
@@ -528,6 +530,13 @@ function AppRouter() {
 const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
 
+  // Identify user in PostHog whenever user state changes
+  useEffect(() => {
+    if (user) {
+      identifyUser(user);
+    }
+  }, [user]);
+
   const logout = async () => {
     try {
       const token = localStorage.getItem("infinea_token");
@@ -541,6 +550,7 @@ const AuthProvider = ({ children }) => {
     }
     localStorage.removeItem("infinea_token");
     localStorage.removeItem("infinea_refresh_token");
+    resetAnalytics();
     setUser(null);
   };
 

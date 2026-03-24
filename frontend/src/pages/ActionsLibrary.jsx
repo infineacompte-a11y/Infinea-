@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 import Sidebar from "@/components/Sidebar";
 import CreateActionModal from "@/components/CreateActionModal";
+import { trackSessionStarted, trackActionCreated } from "@/lib/analytics";
 
 const categoryIcons = {
   learning: BookOpen,
@@ -183,6 +184,7 @@ export default function ActionsLibrary() {
       }
 
       const data = await response.json();
+      trackSessionStarted(data.action_title, data.category);
       navigate(`/session/${data.session_id}`, { state: { session: data } });
     } catch (error) {
       if (error.message.includes("Premium")) {
@@ -458,6 +460,7 @@ export default function ActionsLibrary() {
         onOpenChange={setShowCreateModal}
         onActionCreated={(newAction) => {
           if (newAction) {
+            trackActionCreated(newAction);
             setCustomActions(prev => [newAction, ...prev]);
             actionsCache.current._custom = undefined;
           } else {

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { track } from "@/lib/analytics";
 import { Label } from "@/components/ui/label";
 import { Mail, Lock, User, ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -66,6 +67,7 @@ export default function RegisterPage() {
       }
 
       setUser(data);
+      track("user_signed_up", { method: "email" });
       toast.success("Compte créé avec succès !");
       navigate("/onboarding", { state: { user: data } });
     } catch (error) {
