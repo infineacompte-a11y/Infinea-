@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
+import SafetyMenu from "@/components/SafetyMenu";
 
 /**
  * PublicProfilePage — View another user's profile.
@@ -267,11 +268,23 @@ export default function PublicProfilePage() {
                     </button>
                   </div>
                   {!isOwnProfile && (
-                    <FollowButton
-                      userId={userId}
-                      initialFollowing={profile.is_following}
-                      onToggle={handleFollowToggle}
-                    />
+                    <div className="flex items-center gap-2">
+                      <FollowButton
+                        userId={userId}
+                        initialFollowing={profile.is_following}
+                        onToggle={handleFollowToggle}
+                      />
+                      <SafetyMenu
+                        userId={userId}
+                        targetType="user"
+                        targetId={userId}
+                        onBlockChange={(blocked) => {
+                          if (blocked) {
+                            window.location.href = "/community";
+                          }
+                        }}
+                      />
+                    </div>
                   )}
                   {isOwnProfile && (
                     <Link to="/profile">

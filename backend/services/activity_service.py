@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from database import db
+from services.moderation import get_blocked_ids
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,11 @@ async def get_feed(
     following_ids = [f["following_id"] for f in following_docs]
     # Include the user's own activities
     following_ids.append(user_id)
+
+    # Filter out blocked users
+    blocked_ids = await get_blocked_ids(user_id)
+    if blocked_ids:
+        following_ids = [fid for fid in following_ids if fid not in blocked_ids]
 
     query = {
         "user_id": {"$in": following_ids},

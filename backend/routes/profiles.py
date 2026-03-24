@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query, Request
 
 from database import db
 from auth import get_current_user
+from services.moderation import get_blocked_ids, check_content, sanitize_text
 
 router = APIRouter()
 
@@ -57,16 +58,20 @@ async def update_my_profile(
 
     # display_name
     if "display_name" in body:
-        dn = str(body["display_name"]).strip()
-        if not dn or len(dn) > DISPLAY_NAME_MAX:
+        dn = sanitize_text(str(body["display_name"]), max_length=DISPLAY_NAME_MAX)
+        if not dn:
             raise HTTPException(status_code=400, detail=f"Le nom doit faire entre 1 et {DISPLAY_NAME_MAX} caractères")
+        moderation = check_content(dn)
+        if not moderation["allowed"]:
+            raise HTTPException(status_code=400, detail=moderation["reason"])
         updates["display_name"] = dn
 
     # bio
     if "bio" in body:
-        bio = str(body["bio"]).strip()
-        if len(bio) > BIO_MAX:
-            raise HTTPException(status_code=400, detail=f"La bio ne doit pas dépasser {BIO_MAX} caractères")
+        bio = sanitize_text(str(body["bio"]), max_length=BIO_MAX)
+        moderation = check_content(bio)
+        if not moderation["allowed"]:
+            raise HTTPException(status_code=400, detail=moderation["reason"])
         updates["bio"] = bio
 
     # username change
@@ -165,6 +170,11 @@ async def search_users(
     """Search users by name, display_name, username, or email local part."""
     # Strip @ prefix if user searches "@john.doe"
     search_q = q.lstrip("@")
+
+    # Exclude blocked users from search
+    blocked_ids = await get_blocked_ids(user["user_id"])
+    exclude_ids = list(blocked_ids | {user["user_id"]})
+
     query = {
         "$or": [
             {"name": {"$regex": search_q, "$options": "i"}},
@@ -172,7 +182,7 @@ async def search_users(
             {"username": {"$regex": search_q, "$options": "i"}},
             {"email": {"$regex": f"^{search_q}", "$options": "i"}},
         ],
-        "user_id": {"$ne": user["user_id"]},
+        "user_id": {"$nin": exclude_ids},
     }
 
     users = await db.users.find(
@@ -226,6 +236,13 @@ async def get_user_profile(user_id: str, user: dict = Depends(get_current_user))
     # Privacy check
     privacy = target.get("privacy", {})
     is_self = user["user_id"] == user_id
+
+    # Block check: if either party blocked the other, deny access
+    if not is_self:
+        blocked_ids = await get_blocked_ids(user["user_id"])
+        if user_id in blocked_ids:
+            raise HTTPException(status_code=403, detail="Profil indisponible")
+
     if not is_self and privacy.get("profile_visible", True) is False:
         raise HTTPException(status_code=403, detail="Profil privé")
 
@@ -276,6 +293,11 @@ async def follow_user(user_id: str, user: dict = Depends(get_current_user)):
     target = await db.users.find_one({"user_id": user_id}, {"_id": 1})
     if not target:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    # Cannot follow a blocked/blocking user
+    blocked_ids = await get_blocked_ids(user["user_id"])
+    if user_id in blocked_ids:
+        raise HTTPException(status_code=403, detail="Action impossible")
 
     existing = await db.follows.find_one(
         {"follower_id": user["user_id"], "following_id": user_id}

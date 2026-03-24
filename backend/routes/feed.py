@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from database import db
 from auth import get_current_user
 from services.activity_service import get_feed, REACTION_TYPES
+from services.moderation import get_blocked_ids, check_content, sanitize_text
 
 router = APIRouter()
 
@@ -52,7 +53,12 @@ async def get_discover_feed(
     if limit > 50:
         limit = 50
 
+    # Filter out blocked users from discover
+    blocked_ids = await get_blocked_ids(user["user_id"])
+
     query = {"visibility": "public"}
+    if blocked_ids:
+        query["user_id"] = {"$nin": list(blocked_ids)}
     if cursor:
         query["created_at"] = {"$lt": cursor}
 
@@ -106,13 +112,17 @@ async def get_suggested_users(
     Suggest users to follow. Prioritizes users with recent activity
     and most followers. Instagram-style suggestions.
     """
-    # Get who the user already follows
+    # Get who the user already follows + blocked users
     following_docs = await db.follows.find(
         {"follower_id": user["user_id"], "status": "active"},
         {"following_id": 1},
     ).to_list(1000)
     following_ids = {f["following_id"] for f in following_docs}
     following_ids.add(user["user_id"])  # exclude self
+
+    # Also exclude blocked users from suggestions
+    blocked_ids = await get_blocked_ids(user["user_id"])
+    following_ids |= blocked_ids
 
     # Get users with recent activities (most active)
     pipeline = [
@@ -290,9 +300,14 @@ async def add_comment(
 ):
     """Add a comment to an activity."""
     body = await request.json()
-    content = str(body.get("content", "")).strip()
-    if not content or len(content) > 500:
+    content = sanitize_text(str(body.get("content", "")), max_length=500)
+    if not content:
         raise HTTPException(status_code=400, detail="Le commentaire doit faire entre 1 et 500 caractères")
+
+    # Moderation check
+    moderation = check_content(content)
+    if not moderation["allowed"]:
+        raise HTTPException(status_code=400, detail=moderation["reason"])
 
     activity = await db.activities.find_one({"activity_id": activity_id})
     if not activity:
@@ -362,15 +377,21 @@ async def get_comments(
     if not activity:
         raise HTTPException(status_code=404, detail="Activité introuvable")
 
+    # Filter out comments from blocked users
+    blocked_ids = await get_blocked_ids(user["user_id"])
+    comment_query = {"activity_id": activity_id}
+    if blocked_ids:
+        comment_query["user_id"] = {"$nin": list(blocked_ids)}
+
     comments = (
-        await db.comments.find({"activity_id": activity_id}, {"_id": 0})
+        await db.comments.find(comment_query, {"_id": 0})
         .sort("created_at", 1)
         .skip(skip)
         .limit(limit)
         .to_list(limit)
     )
 
-    total = await db.comments.count_documents({"activity_id": activity_id})
+    total = await db.comments.count_documents(comment_query)
     return {"comments": comments, "total": total}
 
 

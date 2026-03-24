@@ -34,6 +34,7 @@ import GroupDetailPage from "@/pages/GroupDetailPage";
 import SearchPage from "@/pages/SearchPage";
 import PublicProfilePage from "@/pages/PublicProfilePage";
 import CommunityFeedPage from "@/pages/CommunityFeedPage";
+import BlockedUsersPage from "@/pages/BlockedUsersPage";
 import NotFound from "@/pages/NotFound";
 import CoachFAB from "@/components/CoachFAB";
 import MicroInstantBanner from "@/components/MicroInstantBanner";
@@ -517,6 +518,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <PublicProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/blocked-users"
+        element={
+          <ProtectedRoute>
+            <BlockedUsersPage />
           </ProtectedRoute>
         }
       />

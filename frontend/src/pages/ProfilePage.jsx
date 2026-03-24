@@ -29,6 +29,10 @@ import {
   Check,
   Pencil,
   Loader2,
+  Shield,
+  Ban,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
@@ -42,6 +46,9 @@ export default function ProfilePage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({ display_name: "", username: "", bio: "" });
   const [editSaving, setEditSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   // Fetch social stats (followers/following counts)
   const fetchSocialStats = useCallback(async () => {
@@ -148,6 +155,30 @@ export default function ProfilePage() {
       toast.error("Erreur de connexion");
     } finally {
       setEditSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirm !== "SUPPRIMER") return;
+    setDeleting(true);
+    try {
+      const res = await authFetch(`${API}/account`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE_MY_ACCOUNT" }),
+      });
+      if (res.ok) {
+        toast.success("Compte supprimé. Au revoir.");
+        await logout();
+        navigate("/");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.detail || "Erreur lors de la suppression");
+      }
+    } catch {
+      toast.error("Erreur de connexion");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -407,7 +438,7 @@ export default function ProfilePage() {
             </Card>
 
             {/* Actions */}
-            <Card className="opacity-0 animate-fade-in" style={{ animationDelay: "350ms", animationFillMode: "forwards" }}>
+            <Card className="mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "350ms", animationFillMode: "forwards" }}>
               <CardContent className="p-4 space-y-1">
                 <Link to="/progress">
                   <Button
@@ -431,9 +462,90 @@ export default function ProfilePage() {
                 </Button>
               </CardContent>
             </Card>
+
+            {/* Security & Account */}
+            <Card className="opacity-0 animate-fade-in" style={{ animationDelay: "400ms", animationFillMode: "forwards" }}>
+              <CardHeader>
+                <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-muted-foreground" />
+                  Sécurité du compte
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1">
+                <Link to="/blocked-users">
+                  <Button
+                    variant="ghost"
+                    className="group w-full justify-start gap-3 h-12 rounded-xl"
+                  >
+                    <Ban className="w-5 h-5 text-muted-foreground" />
+                    <span className="flex-1 text-left">Utilisateurs bloqués</span>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                </Link>
+                <Button
+                  variant="ghost"
+                  onClick={() => setDeleteOpen(true)}
+                  className="group w-full justify-start gap-3 h-12 rounded-xl text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="w-5 h-5" />
+                  <span className="flex-1 text-left">Supprimer mon compte</span>
+                  <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </main>
+
+      {/* Delete Account Dialog */}
+      <Dialog open={deleteOpen} onOpenChange={(open) => { setDeleteOpen(open); if (!open) setDeleteConfirm(""); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-sans font-semibold tracking-tight flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              Supprimer mon compte
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20">
+              <p className="text-sm text-destructive font-medium mb-1">
+                Cette action est irréversible.
+              </p>
+              <p className="text-xs text-destructive/80">
+                Toutes vos données seront définitivement supprimées : profil, sessions,
+                objectifs, routines, badges, commentaires, groupes, et abonnements.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Tapez <span className="font-mono font-bold">SUPPRIMER</span> pour confirmer</Label>
+              <Input
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                placeholder="SUPPRIMER"
+                className="font-mono"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() => setDeleteOpen(false)}
+              >
+                Annuler
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1 rounded-xl"
+                onClick={handleDeleteAccount}
+                disabled={deleting || deleteConfirm !== "SUPPRIMER"}
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Supprimer définitivement
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Profile Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
