@@ -123,3 +123,30 @@ async def get_blocked_ids(user_id: str) -> Set[str]:
             blocked_ids.add(b["blocker_id"])
 
     return blocked_ids
+
+
+# ── Mention extraction ──
+
+MENTION_REGEX = re.compile(r'(?<!\w)@(\w{3,20})(?!\w)')
+
+
+async def extract_mentions(content: str, author_id: str, blocked_ids: set) -> list:
+    """
+    Extract valid @username mentions from content.
+    Returns list of {"user_id": str, "username": str}.
+    Excludes: self-mentions, blocked users, non-existent usernames.
+    """
+    raw_usernames = list(dict.fromkeys(MENTION_REGEX.findall(content)))
+    if not raw_usernames:
+        return []
+
+    users = await db.users.find(
+        {"username": {"$in": raw_usernames}},
+        {"_id": 0, "user_id": 1, "username": 1},
+    ).to_list(len(raw_usernames))
+
+    return [
+        {"user_id": u["user_id"], "username": u["username"]}
+        for u in users
+        if u["user_id"] != author_id and u["user_id"] not in blocked_ids
+    ]
