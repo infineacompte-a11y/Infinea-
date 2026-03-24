@@ -39,6 +39,125 @@ async def get_activity_feed(
     return await get_feed(user_id=user["user_id"], cursor=cursor, limit=limit)
 
 
+@router.get("/feed/discover")
+async def get_discover_feed(
+    user: dict = Depends(get_current_user),
+    cursor: str = None,
+    limit: int = 20,
+):
+    """
+    Discover feed: public activities from ALL users.
+    Instagram Explore equivalent — always has content, even for new users.
+    """
+    if limit > 50:
+        limit = 50
+
+    query = {"visibility": "public"}
+    if cursor:
+        query["created_at"] = {"$lt": cursor}
+
+    activities = (
+        await db.activities.find(query, {"_id": 0})
+        .sort("created_at", -1)
+        .limit(limit + 1)
+        .to_list(limit + 1)
+    )
+
+    has_more = len(activities) > limit
+    if has_more:
+        activities = activities[:limit]
+
+    # Enrich with user info
+    if activities:
+        enriched_user_ids = list({a["user_id"] for a in activities})
+        users = await db.users.find(
+            {"user_id": {"$in": enriched_user_ids}},
+            {"_id": 0, "user_id": 1, "name": 1, "display_name": 1,
+             "username": 1, "avatar_url": 1, "picture": 1},
+        ).to_list(len(enriched_user_ids))
+        user_map = {u["user_id"]: u for u in users}
+
+        for activity in activities:
+            u = user_map.get(activity["user_id"], {})
+            activity["user_name"] = u.get("display_name") or u.get("name", "Utilisateur")
+            activity["user_username"] = u.get("username")
+            activity["user_avatar"] = u.get("avatar_url") or u.get("picture")
+
+        # Check current user's reactions
+        activity_ids = [a["activity_id"] for a in activities]
+        user_reactions = await db.reactions.find(
+            {"activity_id": {"$in": activity_ids}, "user_id": user["user_id"]},
+            {"_id": 0, "activity_id": 1, "reaction_type": 1},
+        ).to_list(len(activity_ids))
+        reaction_map = {r["activity_id"]: r["reaction_type"] for r in user_reactions}
+        for activity in activities:
+            activity["user_reaction"] = reaction_map.get(activity["activity_id"])
+
+    next_cursor = activities[-1]["created_at"] if activities and has_more else None
+    return {"activities": activities, "next_cursor": next_cursor, "has_more": has_more}
+
+
+@router.get("/feed/suggested-users")
+async def get_suggested_users(
+    user: dict = Depends(get_current_user),
+    limit: int = 15,
+):
+    """
+    Suggest users to follow. Prioritizes users with recent activity
+    and most followers. Instagram-style suggestions.
+    """
+    # Get who the user already follows
+    following_docs = await db.follows.find(
+        {"follower_id": user["user_id"], "status": "active"},
+        {"following_id": 1},
+    ).to_list(1000)
+    following_ids = {f["following_id"] for f in following_docs}
+    following_ids.add(user["user_id"])  # exclude self
+
+    # Get users with recent activities (most active)
+    pipeline = [
+        {"$match": {"user_id": {"$nin": list(following_ids)}, "visibility": "public"}},
+        {"$group": {
+            "_id": "$user_id",
+            "activity_count": {"$sum": 1},
+            "last_active": {"$max": "$created_at"},
+        }},
+        {"$sort": {"activity_count": -1, "last_active": -1}},
+        {"$limit": limit},
+    ]
+    active_users = await db.activities.aggregate(pipeline).to_list(limit)
+
+    if not active_users:
+        # Fallback: recent users who aren't followed
+        users = await db.users.find(
+            {"user_id": {"$nin": list(following_ids)}},
+            {"_id": 0, "user_id": 1, "name": 1, "display_name": 1,
+             "username": 1, "avatar_url": 1, "picture": 1, "subscription_tier": 1},
+        ).sort("created_at", -1).limit(limit).to_list(limit)
+    else:
+        user_ids = [u["_id"] for u in active_users]
+        users = await db.users.find(
+            {"user_id": {"$in": user_ids}},
+            {"_id": 0, "user_id": 1, "name": 1, "display_name": 1,
+             "username": 1, "avatar_url": 1, "picture": 1, "subscription_tier": 1},
+        ).to_list(len(user_ids))
+
+    # Get follower counts
+    result = []
+    for u in users:
+        fc = await db.follows.count_documents({"following_id": u["user_id"], "status": "active"})
+        result.append({
+            "user_id": u["user_id"],
+            "display_name": u.get("display_name") or u.get("name", "Utilisateur"),
+            "username": u.get("username"),
+            "avatar_url": u.get("avatar_url") or u.get("picture"),
+            "subscription_tier": u.get("subscription_tier", "free"),
+            "followers_count": fc,
+        })
+
+    return {"users": result}
+
+
 @router.get("/feed/own")
 async def get_own_activities(
     user: dict = Depends(get_current_user),

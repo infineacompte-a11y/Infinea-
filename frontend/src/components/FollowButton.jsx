@@ -12,7 +12,7 @@ import { API, authFetch } from "@/App";
  * - userId: string — target user ID
  * - initialFollowing: boolean — whether the current user already follows this user
  * - onToggle?: (isFollowing: boolean) => void — callback after toggle
- * - size?: "sm" | "default" — button size
+ * - size?: "xs" | "sm" | "default" — button size
  */
 export default function FollowButton({ userId, initialFollowing = false, onToggle, size = "default" }) {
   const [isFollowing, setIsFollowing] = useState(initialFollowing);
@@ -50,40 +50,43 @@ export default function FollowButton({ userId, initialFollowing = false, onToggl
     }
   };
 
-  const isSmall = size === "sm";
+  const isXs = size === "xs";
+  const isSmall = size === "sm" || isXs;
+  const iconClass = isXs ? "w-3 h-3" : isSmall ? "w-3.5 h-3.5" : "w-4 h-4";
+  const textClass = isXs ? "text-[10px]" : isSmall ? "text-xs" : "text-sm";
 
   if (isFollowing) {
     return (
       <Button
         variant="outline"
-        size={isSmall ? "sm" : "default"}
+        size="sm"
         onClick={handleToggle}
         disabled={isLoading}
-        className="gap-1.5 rounded-xl border-[#459492]/30 text-[#459492] hover:text-[#E48C75] hover:border-[#E48C75]/30 hover:bg-[#E48C75]/5 transition-all duration-200"
+        className={`gap-1 rounded-xl border-[#459492]/30 text-[#459492] hover:text-[#E48C75] hover:border-[#E48C75]/30 hover:bg-[#E48C75]/5 transition-all duration-200 ${isXs ? "h-7 px-2.5" : ""}`}
       >
         {isLoading ? (
-          <Loader2 className={`${isSmall ? "w-3.5 h-3.5" : "w-4 h-4"} animate-spin`} />
+          <Loader2 className={`${iconClass} animate-spin`} />
         ) : (
-          <UserCheck className={isSmall ? "w-3.5 h-3.5" : "w-4 h-4"} />
+          <UserCheck className={iconClass} />
         )}
-        <span className={isSmall ? "text-xs" : "text-sm"}>Suivi</span>
+        <span className={textClass}>Suivi</span>
       </Button>
     );
   }
 
   return (
     <Button
-      size={isSmall ? "sm" : "default"}
+      size="sm"
       onClick={handleToggle}
       disabled={isLoading}
-      className="gap-1.5 rounded-xl bg-gradient-to-r from-[#459492] to-[#55B3AE] hover:from-[#275255] hover:to-[#459492] text-white border-0 shadow-md hover:shadow-lg transition-all duration-200 btn-press"
+      className={`gap-1 rounded-xl bg-gradient-to-r from-[#459492] to-[#55B3AE] hover:from-[#275255] hover:to-[#459492] text-white border-0 shadow-md hover:shadow-lg transition-all duration-200 btn-press ${isXs ? "h-7 px-2.5" : ""}`}
     >
       {isLoading ? (
-        <Loader2 className={`${isSmall ? "w-3.5 h-3.5" : "w-4 h-4"} animate-spin`} />
+        <Loader2 className={`${iconClass} animate-spin`} />
       ) : (
-        <UserPlus className={isSmall ? "w-3.5 h-3.5" : "w-4 h-4"} />
+        <UserPlus className={iconClass} />
       )}
-      <span className={isSmall ? "text-xs" : "text-sm"}>Suivre</span>
+      <span className={textClass}>Suivre</span>
     </Button>
   );
 }
