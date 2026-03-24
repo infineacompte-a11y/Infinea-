@@ -282,6 +282,50 @@ async def get_user_profile(user_id: str, user: dict = Depends(get_current_user))
     }
 
 
+# ============== USER ACTIVITY TIMELINE ==============
+
+@router.get("/users/{user_id}/activities")
+async def get_user_activities(
+    user_id: str,
+    user: dict = Depends(get_current_user),
+    limit: int = Query(10, ge=1, le=30),
+):
+    """Get a user's recent public activities for their profile timeline."""
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 1, "privacy": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    is_self = user["user_id"] == user_id
+
+    # Block check
+    if not is_self:
+        blocked_ids = await get_blocked_ids(user["user_id"])
+        if user_id in blocked_ids:
+            raise HTTPException(status_code=403, detail="Profil indisponible")
+
+    # Visibility filter: self sees all, others see public + followers (if following)
+    if is_self:
+        query = {"user_id": user_id}
+    else:
+        # Check if current user follows the target
+        is_follower = await db.follows.find_one(
+            {"follower_id": user["user_id"], "following_id": user_id, "status": "active"}
+        )
+        if is_follower:
+            query = {"user_id": user_id, "visibility": {"$in": ["public", "followers"]}}
+        else:
+            query = {"user_id": user_id, "visibility": "public"}
+
+    activities = (
+        await db.activities.find(query, {"_id": 0})
+        .sort("created_at", -1)
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    return {"activities": activities}
+
+
 # ============== FOLLOW / UNFOLLOW ==============
 
 @router.post("/users/{user_id}/follow")
@@ -364,6 +408,19 @@ async def get_followers(user_id: str, user: dict = Depends(get_current_user)):
     ).to_list(200)
     my_follows = {f["following_id"] for f in follow_docs}
 
+    # Check which ones follow the current user back (for "te suit" indicator)
+    follows_me = set()
+    if user["user_id"] == user_id:
+        # Viewing own followers — they all follow me by definition
+        follows_me = set(follower_ids)
+    else:
+        follows_me_docs = await db.follows.find(
+            {"following_id": user["user_id"], "status": "active",
+             "follower_id": {"$in": follower_ids}},
+            {"_id": 0, "follower_id": 1},
+        ).to_list(200)
+        follows_me = {f["follower_id"] for f in follows_me_docs}
+
     results = []
     for u in users:
         results.append({
@@ -372,6 +429,7 @@ async def get_followers(user_id: str, user: dict = Depends(get_current_user)):
             "username": u.get("username"),
             "avatar_url": u.get("avatar_url") or u.get("picture"),
             "is_following": u["user_id"] in my_follows,
+            "follows_back": u["user_id"] in follows_me,
         })
 
     return {"followers": results}
@@ -407,6 +465,13 @@ async def get_following(user_id: str, user: dict = Depends(get_current_user)):
     else:
         my_follows = set(following_ids)
 
+    # Check which ones follow the profile owner back
+    follows_back_docs = await db.follows.find(
+        {"follower_id": {"$in": following_ids}, "following_id": user_id, "status": "active"},
+        {"_id": 0, "follower_id": 1},
+    ).to_list(200)
+    follows_back_set = {f["follower_id"] for f in follows_back_docs}
+
     results = []
     for u in users:
         results.append({
@@ -415,6 +480,7 @@ async def get_following(user_id: str, user: dict = Depends(get_current_user)):
             "username": u.get("username"),
             "avatar_url": u.get("avatar_url") or u.get("picture"),
             "is_following": u["user_id"] in my_follows,
+            "follows_back": u["user_id"] in follows_back_set,
         })
 
     return {"following": results}

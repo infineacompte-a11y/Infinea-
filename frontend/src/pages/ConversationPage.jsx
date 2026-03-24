@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Sidebar from "@/components/Sidebar";
 import SafetyMenu from "@/components/SafetyMenu";
-import { ArrowLeft, Send, Loader2, MessageCircle } from "lucide-react";
+import { ArrowLeft, Send, Loader2, MessageCircle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
 import { sanitize } from "@/lib/sanitize";
@@ -172,6 +172,22 @@ export default function ConversationPage() {
   const other = conversation?.other_user || {};
   const myId = currentUser?.user_id;
 
+  // AI suggestions based on other user's profile
+  const aiSuggestions = (() => {
+    if (!other.user_id) return [];
+    const suggestions = [];
+    if (other.streak_days > 0) {
+      suggestions.push(`Bravo pour ton streak de ${other.streak_days} jours !`);
+    }
+    if (other.display_name) {
+      suggestions.push(`Salut ${other.display_name.split(" ")[0]} ! Comment avances-tu ?`);
+    }
+    if (suggestions.length === 0) {
+      suggestions.push("Salut ! Tu travailles sur quoi en ce moment ?");
+    }
+    return suggestions;
+  })();
+
   return (
     <div className="min-h-screen app-bg-mesh">
       <Sidebar />
@@ -244,10 +260,29 @@ export default function ConversationPage() {
               </div>
             ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <MessageCircle className="w-10 h-10 text-muted-foreground/30 mb-3" />
-                <p className="text-muted-foreground text-sm">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-4 ring-1 ring-primary/10">
+                  <MessageCircle className="w-7 h-7 text-primary" />
+                </div>
+                <p className="text-muted-foreground text-sm mb-4">
                   Envoyez le premier message
                 </p>
+                {aiSuggestions.length > 0 && (
+                  <div className="flex flex-col gap-2 w-full max-w-xs">
+                    <div className="flex items-center justify-center gap-1.5 text-xs text-primary/60 mb-1">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Suggestions</span>
+                    </div>
+                    {aiSuggestions.map((s, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setMessageText(s)}
+                        className="text-xs text-left px-3 py-2 rounded-xl bg-primary/5 hover:bg-primary/10 text-foreground/70 hover:text-foreground transition-colors border border-primary/10"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               messages.map((msg, i) => {
@@ -288,6 +323,21 @@ export default function ConversationPage() {
         {/* Input bar */}
         <div className="shrink-0 border-t border-border/30 bg-background/80 backdrop-blur-sm px-4 lg:px-8 py-3">
           <div className="max-w-3xl mx-auto">
+            {/* AI quick suggestions — visible when input empty and conversation has few messages */}
+            {!messageText && messages.length > 0 && messages.length <= 3 && aiSuggestions.length > 0 && (
+              <div className="flex items-center gap-2 mb-2 overflow-x-auto scrollbar-thin">
+                <Sparkles className="w-3.5 h-3.5 text-primary/50 shrink-0" />
+                {aiSuggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setMessageText(s)}
+                    className="text-[11px] whitespace-nowrap px-2.5 py-1 rounded-full bg-primary/5 hover:bg-primary/10 text-foreground/60 hover:text-foreground transition-colors border border-primary/10 shrink-0"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
             <form onSubmit={handleSend} className="flex items-center gap-2">
               <Input
                 value={messageText}

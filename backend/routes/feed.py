@@ -202,6 +202,26 @@ async def get_own_activities(
     }
 
 
+# ============== DELETE ACTIVITY ==============
+
+@router.delete("/activities/{activity_id}")
+async def delete_activity(activity_id: str, user: dict = Depends(get_current_user)):
+    """Delete own activity and cascade-delete associated reactions and comments."""
+    activity = await db.activities.find_one({"activity_id": activity_id})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activité introuvable")
+
+    if activity["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres activités")
+
+    # Cascade delete: reactions + comments
+    await db.reactions.delete_many({"activity_id": activity_id})
+    await db.comments.delete_many({"activity_id": activity_id})
+    await db.activities.delete_one({"activity_id": activity_id})
+
+    return {"message": "Activité supprimée"}
+
+
 # ============== REACTIONS ==============
 
 @router.post("/activities/{activity_id}/react")

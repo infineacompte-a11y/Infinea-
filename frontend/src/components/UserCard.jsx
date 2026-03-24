@@ -11,7 +11,7 @@ import FollowButton from "@/components/FollowButton";
  * Pattern: Instagram user suggestion card + Strava athlete summary.
  *
  * Props:
- * - user: { user_id, name, picture?, bio?, subscription_tier?, streak_days?, is_following? }
+ * - user: { user_id, name, picture?, bio?, subscription_tier?, streak_days?, is_following?, follows_back? }
  * - showFollow?: boolean — show follow/unfollow button (default true)
  * - currentUserId?: string — to hide follow button on own card
  */
@@ -53,9 +53,16 @@ export default function UserCard({ user, showFollow = true, currentUserId }) {
               </div>
             </Link>
             {user.username ? (
-              <p className="text-xs text-muted-foreground truncate mt-0.5">
-                @{user.username}
-              </p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <p className="text-xs text-muted-foreground truncate">
+                  @{user.username}
+                </p>
+                {user.follows_back && !isOwnCard && (
+                  <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 rounded-md shrink-0">
+                    Te suit
+                  </Badge>
+                )}
+              </div>
             ) : user.bio ? (
               <p className="text-xs text-muted-foreground truncate mt-0.5">
                 {user.bio}

@@ -151,7 +151,7 @@ function SuggestedUsers({ currentUserId }) {
 }
 
 // ── Single Activity Card (Instagram-style) ──
-function ActivityCard({ activity, currentUserId, onReactionChange }) {
+function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
   const config = ACTIVITY_CONFIG[activity.type] || ACTIVITY_CONFIG.session_completed;
   const Icon = config.icon;
   const [showComments, setShowComments] = useState(false);
@@ -265,7 +265,17 @@ function ActivityCard({ activity, currentUserId, onReactionChange }) {
               <span className="text-[11px] text-muted-foreground/50 ml-auto shrink-0">
                 {timeAgo(activity.created_at)}
               </span>
-              {activity.user_id !== currentUserId && (
+              {activity.user_id === currentUserId ? (
+                <button
+                  onClick={() => {
+                    if (window.confirm("Supprimer cette activité ?")) onDelete?.(activity.activity_id);
+                  }}
+                  className="text-muted-foreground/40 hover:text-destructive transition-colors p-1"
+                  title="Supprimer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              ) : (
                 <SafetyMenu
                   userId={activity.user_id}
                   targetType="activity"
@@ -510,6 +520,21 @@ export default function CommunityFeedPage() {
     return () => observer.disconnect();
   }, [hasMore, loadingMore, cursor, tab, fetchFeed]);
 
+  // Delete own activity
+  const handleDeleteActivity = async (activityId) => {
+    try {
+      const res = await authFetch(`${API}/activities/${activityId}`, { method: "DELETE" });
+      if (res.ok) {
+        setActivities((prev) => prev.filter((a) => a.activity_id !== activityId));
+        toast.success("Activité supprimée");
+      } else {
+        toast.error("Erreur lors de la suppression");
+      }
+    } catch {
+      toast.error("Erreur de connexion");
+    }
+  };
+
   // Optimistic reaction update
   const handleReactionChange = (activityId, reactionType, serverData) => {
     setActivities((prev) =>
@@ -681,6 +706,7 @@ export default function CommunityFeedPage() {
                       activity={activity}
                       currentUserId={user?.user_id}
                       onReactionChange={handleReactionChange}
+                      onDelete={handleDeleteActivity}
                     />
                   </div>
                 ))}
