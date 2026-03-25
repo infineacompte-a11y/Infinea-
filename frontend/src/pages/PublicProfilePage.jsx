@@ -25,10 +25,24 @@ import {
   Zap,
   Trophy,
   Activity,
+  UserCheck,
+  Circle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
 import SafetyMenu from "@/components/SafetyMenu";
+
+// ── Active status helper (Instagram/Discord benchmark) ──
+function activeStatus(lastActive) {
+  if (!lastActive) return null;
+  const diff = Date.now() - new Date(lastActive).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 5) return { label: "En ligne", color: "#22c55e" };
+  if (minutes < 60) return { label: `Actif il y a ${minutes} min`, color: "#f59e0b" };
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return { label: `Actif il y a ${hours}h`, color: null };
+  return null; // > 24h — don't show
+}
 
 /**
  * PublicProfilePage — View another user's profile.
@@ -268,6 +282,32 @@ export default function PublicProfilePage() {
                   <p className="text-white/50 text-sm opacity-0 animate-fade-in" style={{ animationDelay: "75ms" }}>
                     @{profile.username}
                   </p>
+                )}
+                {/* Mutual follow badge + active status */}
+                {!isOwnProfile && (
+                  <div className="flex items-center gap-2 mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "88ms" }}>
+                    {profile.is_following && profile.follows_you && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-300/90 bg-emerald-400/15 px-2 py-0.5 rounded-full">
+                        <UserCheck className="w-3 h-3" />
+                        Suivi mutuel
+                      </span>
+                    )}
+                    {!profile.is_following && profile.follows_you && (
+                      <span className="text-[11px] text-white/40">
+                        Vous suit
+                      </span>
+                    )}
+                    {(() => {
+                      const status = activeStatus(profile.last_active);
+                      if (!status) return null;
+                      return (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-white/50">
+                          {status.color && <Circle className="w-2 h-2 fill-current" style={{ color: status.color }} />}
+                          {status.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
                 )}
                 {profile.bio && (
                   <p className="text-white/60 text-sm mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>

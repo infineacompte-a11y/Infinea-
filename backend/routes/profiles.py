@@ -497,13 +497,20 @@ async def get_user_profile(user_id: str, user: dict = Depends(get_current_user))
         {"follower_id": user_id, "status": "active"}
     )
 
-    # Check if current user follows this person
+    # Check follow relationship (bidirectional for mutual detection)
     is_following = False
+    follows_you = False
     if not is_self:
-        follow_doc = await db.follows.find_one(
-            {"follower_id": user["user_id"], "following_id": user_id, "status": "active"}
+        i_follow, they_follow = await asyncio.gather(
+            db.follows.find_one(
+                {"follower_id": user["user_id"], "following_id": user_id, "status": "active"}
+            ),
+            db.follows.find_one(
+                {"follower_id": user_id, "following_id": user["user_id"], "status": "active"}
+            ),
         )
-        is_following = follow_doc is not None
+        is_following = i_follow is not None
+        follows_you = they_follow is not None
 
     show_stats = is_self or privacy.get("show_stats", True)
     show_badges = is_self or privacy.get("show_badges", True)
@@ -519,6 +526,8 @@ async def get_user_profile(user_id: str, user: dict = Depends(get_current_user))
         "followers_count": followers_count,
         "following_count": following_count,
         "is_following": is_following,
+        "follows_you": follows_you,
+        "last_active": target.get("last_active") if not is_self else None,
         "streak_days": target.get("streak_days", 0) if show_stats else None,
         "total_time_invested": target.get("total_time_invested", 0) if show_stats else None,
         "badges": target.get("badges", []) if show_badges else [],

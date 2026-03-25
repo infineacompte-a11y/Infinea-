@@ -13,6 +13,7 @@ Refresh token rotation pattern (benchmark: Auth0 / Supabase):
 
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+import asyncio
 import secrets
 import jwt
 import bcrypt
@@ -164,6 +165,7 @@ async def get_current_user(request: Request) -> dict:
             {"_id": 0}
         )
         if user:
+            _touch_last_active(user)
             return user
 
     # Try JWT token
@@ -175,7 +177,34 @@ async def get_current_user(request: Request) -> dict:
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    _touch_last_active(user)
     return user
+
+
+def _touch_last_active(user: dict):
+    """Fire-and-forget last_active update, throttled to max once per 2 minutes."""
+    now = datetime.now(timezone.utc)
+    last = user.get("last_active")
+    if last:
+        if isinstance(last, str):
+            last = datetime.fromisoformat(last)
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        if (now - last).total_seconds() < 120:
+            return  # Skip — updated less than 2 min ago
+    iso = now.isoformat()
+    user["last_active"] = iso
+    asyncio.create_task(_do_touch(user["user_id"], iso))
+
+
+async def _do_touch(user_id: str, iso: str):
+    try:
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"last_active": iso}},
+        )
+    except Exception:
+        pass  # Non-blocking, silent fail
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
