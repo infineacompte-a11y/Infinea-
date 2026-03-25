@@ -59,6 +59,77 @@ const SMART_ICON_COLOR_MAP = {
   coach_tip: "text-[#459492] bg-[#459492]/40",
 };
 
+/**
+ * Group similar notifications (Instagram pattern: "Sam et 3 autres ont réagi").
+ * Groups by type + target within the same day.
+ * Only groupable types: reaction, comment, new_follower.
+ */
+const GROUPABLE_TYPES = new Set(["reaction", "comment", "new_follower"]);
+
+const GROUP_VERBS = {
+  reaction: "ont réagi à ton activité",
+  comment: "ont commenté ton activité",
+  new_follower: "ont commencé à te suivre",
+};
+
+function getNotifPrimaryName(notif) {
+  const d = notif.data || {};
+  return d.reactor_name || d.commenter_name || d.follower_name || d.user_name || "";
+}
+
+function groupSimilarNotifications(notifications) {
+  const grouped = [];
+  const groupMap = new Map();
+
+  for (const notif of notifications) {
+    if (!GROUPABLE_TYPES.has(notif.type)) {
+      grouped.push(notif);
+      continue;
+    }
+
+    const day = new Date(notif.created_at).toDateString();
+    const targetId = notif.data?.activity_id || "";
+    const groupKey = notif.type === "new_follower"
+      ? `follower:${day}`
+      : `${notif.type}:${targetId}:${day}`;
+
+    if (groupMap.has(groupKey)) {
+      const idx = groupMap.get(groupKey);
+      grouped[idx]._groupCount = (grouped[idx]._groupCount || 1) + 1;
+      const name = getNotifPrimaryName(notif);
+      if (name && !grouped[idx]._groupNames.includes(name)) {
+        grouped[idx]._groupNames.push(name);
+      }
+    } else {
+      groupMap.set(groupKey, grouped.length);
+      const primaryName = getNotifPrimaryName(notif);
+      grouped.push({
+        ...notif,
+        _groupCount: 1,
+        _primaryName: primaryName,
+        _groupNames: primaryName ? [primaryName] : [],
+      });
+    }
+  }
+
+  return grouped;
+}
+
+function getGroupedMessage(notif) {
+  if (!notif._groupCount || notif._groupCount <= 1) return notif.message;
+  const others = notif._groupCount - 1;
+  const verb = GROUP_VERBS[notif.type] || "ont interagi";
+  return `${notif._primaryName} et ${others} autre${others > 1 ? "s" : ""} ${verb}`;
+}
+
+function getGroupedTitle(notif) {
+  if (!notif._groupCount || notif._groupCount <= 1) return notif.title;
+  if (notif.type === "reaction") return `${notif._groupCount} réactions`;
+  if (notif.type === "comment") return `${notif._groupCount} commentaires`;
+  if (notif.type === "new_follower") return `${notif._groupCount} nouveaux followers`;
+  return notif.title;
+}
+
 /** Group notifications by date label */
 function groupByDate(notifications) {
   const groups = {};
@@ -217,7 +288,10 @@ export default function NotificationsPage() {
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
-  const groupedNotifications = useMemo(() => groupByDate(notifications), [notifications]);
+  const groupedNotifications = useMemo(
+    () => groupByDate(groupSimilarNotifications(notifications)),
+    [notifications]
+  );
 
   const NOTIF_TYPE_MAP = {
     reaction:              { icon: Heart,          color: "#E48C75" },
@@ -452,8 +526,18 @@ export default function NotificationsPage() {
                                   />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="font-medium text-sm">{notif.title}</p>
-                                  <p className="text-xs text-muted-foreground mt-0.5">{notif.message}</p>
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="font-medium text-sm">{getGroupedTitle(notif)}</p>
+                                    {notif._groupCount > 1 && (
+                                      <span
+                                        className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full tabular-nums"
+                                        style={{ backgroundColor: `${accent}20`, color: accent }}
+                                      >
+                                        {notif._groupCount}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-0.5">{getGroupedMessage(notif)}</p>
                                   <p className="text-[10px] text-muted-foreground/60 mt-1 tabular-nums">
                                     {new Date(notif.created_at).toLocaleString("fr-FR")}
                                   </p>
