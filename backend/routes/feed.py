@@ -10,8 +10,11 @@ Design:
 - Benchmarked: Strava's feed UX, LinkedIn's engagement model.
 """
 
+import asyncio
+import math
 import uuid
-from datetime import datetime, timezone
+from collections import defaultdict
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, HTTPException, Depends, Request
 
@@ -110,64 +113,323 @@ async def get_suggested_users(
     user: dict = Depends(get_current_user),
     limit: int = 15,
 ):
+    """Multi-signal user recommendation engine.
+
+    Architecture — 5-signal scoring (benchmarked: LinkedIn People You May Know,
+    Instagram Suggestions, Twitter Who to Follow, Strava Suggested Athletes):
+
+    Signal 1 — MUTUAL CONNECTIONS (weight: 500/mutual)
+        Friends-of-friends. Strongest social signal. LinkedIn's PYMK is built
+        primarily on this. Each mutual connection = high probability of relevance.
+
+    Signal 2 — SHARED OBJECTIVES (weight: 300/match)
+        Users working on same objective categories (learning, productivity, well_being).
+        Unique to InFinea — no other platform can match on learning goals.
+        Bonus: exact same objective title = 200 extra.
+
+    Signal 3 — GROUP AFFINITY (weight: 250/shared group)
+        Users in the same groups. Strong interest signal — they already chose
+        to join the same community.
+
+    Signal 4 — ENGAGEMENT QUALITY (weight: 0-400)
+        Composite of: activity count (recency-weighted), streak days, total time.
+        Filters out ghost accounts. Rewards committed users.
+
+    Signal 5 — FOLLOWS YOU (weight: 350)
+        If someone already follows the current user, they're a high-intent
+        candidate. Instagram surfaces these prominently.
+
+    Post-scoring:
+    - Privacy filter: exclude users with profile_visible=False
+    - Diversity: cap same-category users to prevent filter bubbles
+    - Recency bonus: users active in last 7 days get +100
+    - Each result includes `reason` for frontend context display
     """
-    Suggest users to follow. Prioritizes users with recent activity
-    and most followers. Instagram-style suggestions.
-    """
-    # Get who the user already follows + blocked users
-    following_docs = await db.follows.find(
-        {"follower_id": user["user_id"], "status": "active"},
-        {"following_id": 1},
-    ).to_list(1000)
-    following_ids = {f["following_id"] for f in following_docs}
-    following_ids.add(user["user_id"])  # exclude self
+    my_id = user["user_id"]
+    if limit > 30:
+        limit = 30
 
-    # Also exclude blocked users from suggestions
-    blocked_ids = await get_blocked_ids(user["user_id"])
-    following_ids |= blocked_ids
+    # ── Phase 1: Gather exclusions (parallel) ──
+    following_docs, blocked_ids = await asyncio.gather(
+        db.follows.find(
+            {"follower_id": my_id, "status": "active"}, {"following_id": 1}
+        ).to_list(5000),
+        get_blocked_ids(my_id),
+    )
+    exclude_ids = {f["following_id"] for f in following_docs}
+    exclude_ids.add(my_id)
+    exclude_ids |= blocked_ids
+    exclude_list = list(exclude_ids)
 
-    # Get users with recent activities (most active)
-    pipeline = [
-        {"$match": {"user_id": {"$nin": list(following_ids)}, "visibility": "public"}},
-        {"$group": {
-            "_id": "$user_id",
-            "activity_count": {"$sum": 1},
-            "last_active": {"$max": "$created_at"},
-        }},
-        {"$sort": {"activity_count": -1, "last_active": -1}},
-        {"$limit": limit},
-    ]
-    active_users = await db.activities.aggregate(pipeline).to_list(limit)
+    # ── Phase 2: Gather signals (parallel — 5 queries) ──
 
-    if not active_users:
-        # Fallback: recent users who aren't followed
-        users = await db.users.find(
-            {"user_id": {"$nin": list(following_ids)}},
-            {"_id": 0, "user_id": 1, "name": 1, "display_name": 1,
-             "username": 1, "avatar_url": 1, "picture": 1, "subscription_tier": 1},
-        ).sort("created_at", -1).limit(limit).to_list(limit)
-    else:
-        user_ids = [u["_id"] for u in active_users]
-        users = await db.users.find(
-            {"user_id": {"$in": user_ids}},
-            {"_id": 0, "user_id": 1, "name": 1, "display_name": 1,
-             "username": 1, "avatar_url": 1, "picture": 1, "subscription_tier": 1},
-        ).to_list(len(user_ids))
+    # 2a. Who I follow (for mutual connection calc)
+    my_following_ids = {f["following_id"] for f in following_docs}
 
-    # Get follower counts
-    result = []
-    for u in users:
-        fc = await db.follows.count_documents({"following_id": u["user_id"], "status": "active"})
-        result.append({
-            "user_id": u["user_id"],
+    # 2b. Who follows me but I don't follow back
+    async def fetch_followers_not_followed():
+        docs = await db.follows.find(
+            {"following_id": my_id, "status": "active", "follower_id": {"$nin": exclude_list}},
+            {"follower_id": 1},
+        ).to_list(500)
+        return {d["follower_id"] for d in docs}
+
+    # 2c. Friends of friends (mutual connections)
+    async def fetch_friends_of_friends():
+        """For each person I follow, find who they follow (that I don't)."""
+        if not my_following_ids:
+            return defaultdict(set)
+        fof_docs = await db.follows.find(
+            {
+                "follower_id": {"$in": list(my_following_ids)},
+                "following_id": {"$nin": exclude_list},
+                "status": "active",
+            },
+            {"follower_id": 1, "following_id": 1},
+        ).to_list(10000)
+        # Map: candidate_id → set of mutual connection ids
+        mutual_map = defaultdict(set)
+        for d in fof_docs:
+            mutual_map[d["following_id"]].add(d["follower_id"])
+        return mutual_map
+
+    # 2d. My objectives (for category + title matching)
+    async def fetch_my_objectives():
+        docs = await db.objectives.find(
+            {"user_id": my_id, "status": {"$in": ["active", "completed"]}},
+            {"category": 1, "title": 1},
+        ).to_list(50)
+        return docs
+
+    # 2e. My groups (for group affinity)
+    async def fetch_my_groups():
+        docs = await db.groups.find(
+            {"members.user_id": my_id, "status": "active"},
+            {"group_id": 1, "members.user_id": 1},
+        ).to_list(50)
+        return docs
+
+    followers_set, mutual_map, my_objectives, my_groups = await asyncio.gather(
+        fetch_followers_not_followed(),
+        fetch_friends_of_friends(),
+        fetch_my_objectives(),
+        fetch_my_groups(),
+    )
+
+    # ── Phase 3: Build candidate pool ──
+    # Merge candidates from all signal sources
+    candidate_ids = set()
+    candidate_ids |= set(mutual_map.keys())  # friends of friends
+    candidate_ids |= followers_set            # people who follow me
+
+    # Add users with shared objectives
+    my_categories = {o.get("category") for o in my_objectives if o.get("category")}
+    my_titles = {o.get("title", "").lower().strip() for o in my_objectives if o.get("title")}
+    shared_obj_map = defaultdict(lambda: {"categories": set(), "exact_titles": set()})
+
+    if my_categories:
+        obj_docs = await db.objectives.find(
+            {
+                "user_id": {"$nin": exclude_list},
+                "category": {"$in": list(my_categories)},
+                "status": {"$in": ["active", "completed"]},
+            },
+            {"user_id": 1, "category": 1, "title": 1},
+        ).to_list(2000)
+        for o in obj_docs:
+            uid = o["user_id"]
+            candidate_ids.add(uid)
+            if o.get("category"):
+                shared_obj_map[uid]["categories"].add(o["category"])
+            if o.get("title") and o["title"].lower().strip() in my_titles:
+                shared_obj_map[uid]["exact_titles"].add(o["title"])
+
+    # Add users from shared groups
+    my_group_members = defaultdict(int)  # user_id → number of shared groups
+    for g in my_groups:
+        for m in g.get("members", []):
+            mid = m.get("user_id") or m
+            if mid not in exclude_ids:
+                candidate_ids.add(mid)
+                my_group_members[mid] += 1
+
+    # Fallback: if fewer than limit*2 candidates, add recently active users
+    if len(candidate_ids) < limit * 2:
+        pipeline = [
+            {"$match": {"user_id": {"$nin": exclude_list}, "visibility": "public"}},
+            {"$group": {"_id": "$user_id", "count": {"$sum": 1}, "last": {"$max": "$created_at"}}},
+            {"$sort": {"count": -1, "last": -1}},
+            {"$limit": limit * 3},
+        ]
+        fallback = await db.activities.aggregate(pipeline).to_list(limit * 3)
+        for f in fallback:
+            candidate_ids.add(f["_id"])
+
+    candidate_ids -= exclude_ids  # Safety: re-exclude
+    if not candidate_ids:
+        return {"users": []}
+
+    # ── Phase 4: Fetch candidate user docs + activity stats (parallel) ──
+    candidate_list = list(candidate_ids)
+
+    async def fetch_users():
+        return await db.users.find(
+            {"user_id": {"$in": candidate_list}},
+            {
+                "_id": 0, "user_id": 1, "name": 1, "display_name": 1,
+                "username": 1, "avatar_url": 1, "picture": 1,
+                "subscription_tier": 1, "streak_days": 1,
+                "total_time_invested": 1, "last_active": 1,
+                "privacy": 1, "created_at": 1,
+            },
+        ).to_list(len(candidate_list))
+
+    async def fetch_activity_stats():
+        pipeline = [
+            {"$match": {"user_id": {"$in": candidate_list}, "visibility": "public"}},
+            {"$group": {
+                "_id": "$user_id",
+                "activity_count": {"$sum": 1},
+                "last_activity": {"$max": "$created_at"},
+            }},
+        ]
+        return await db.activities.aggregate(pipeline).to_list(len(candidate_list))
+
+    async def fetch_follower_counts():
+        pipeline = [
+            {"$match": {"following_id": {"$in": candidate_list}, "status": "active"}},
+            {"$group": {"_id": "$following_id", "count": {"$sum": 1}}},
+        ]
+        return await db.follows.aggregate(pipeline).to_list(len(candidate_list))
+
+    user_docs, activity_stats, follower_counts = await asyncio.gather(
+        fetch_users(), fetch_activity_stats(), fetch_follower_counts(),
+    )
+
+    users_by_id = {u["user_id"]: u for u in user_docs}
+    activity_by_id = {a["_id"]: a for a in activity_stats}
+    followers_by_id = {f["_id"]: f["count"] for f in follower_counts}
+
+    # ── Phase 5: Score each candidate ──
+    now = datetime.now(timezone.utc)
+    seven_days_ago = (now - timedelta(days=7)).isoformat()
+
+    scored = []
+    for uid in candidate_ids:
+        u = users_by_id.get(uid)
+        if not u:
+            continue
+
+        # Privacy filter
+        privacy = u.get("privacy", {})
+        if privacy.get("profile_visible") is False:
+            continue
+
+        score = 0
+        reasons = []
+
+        # Signal 1: Mutual connections (500 per mutual, capped at 2500)
+        mutuals = mutual_map.get(uid, set())
+        mutual_count = len(mutuals)
+        if mutual_count > 0:
+            score += min(mutual_count * 500, 2500)
+            reasons.append(("mutual", mutual_count))
+
+        # Signal 2: Shared objectives (300 per category match + 200 exact title bonus)
+        obj_data = shared_obj_map.get(uid)
+        if obj_data:
+            shared_cats = obj_data["categories"] & my_categories
+            shared_titles = obj_data["exact_titles"]
+            if shared_cats:
+                score += len(shared_cats) * 300
+                reasons.append(("objectives", len(shared_cats)))
+            if shared_titles:
+                score += len(shared_titles) * 200
+                reasons.append(("same_goal", list(shared_titles)[0]))
+
+        # Signal 3: Group affinity (250 per shared group, capped at 750)
+        group_count = my_group_members.get(uid, 0)
+        if group_count > 0:
+            score += min(group_count * 250, 750)
+            reasons.append(("group", group_count))
+
+        # Signal 4: Engagement quality (0-400)
+        stats = activity_by_id.get(uid, {})
+        activity_count = stats.get("activity_count", 0)
+        streak = u.get("streak_days", 0)
+        total_time = u.get("total_time_invested", 0)
+
+        # Activity count score: log scale, max 150
+        engagement = min(math.log2(max(activity_count, 1) + 1) * 30, 150)
+        # Streak bonus: max 150
+        engagement += min(streak * 5, 150)
+        # Total time bonus: max 100
+        engagement += min(total_time * 0.1, 100)
+        score += engagement
+
+        # Signal 5: Follows you (350)
+        if uid in followers_set:
+            score += 350
+            if not reasons or reasons[0][0] != "mutual":
+                reasons.insert(0, ("follows_you", True))
+
+        # Recency bonus: active in last 7 days → +100
+        last_activity = stats.get("last_activity", "")
+        if last_activity and last_activity > seven_days_ago:
+            score += 100
+
+        # Determine primary reason for frontend display
+        if reasons:
+            primary = reasons[0]
+        elif activity_count > 0:
+            primary = ("active", activity_count)
+        else:
+            primary = ("new_user", True)
+
+        scored.append({
+            "user_id": uid,
             "display_name": u.get("display_name") or u.get("name", "Utilisateur"),
             "username": u.get("username"),
             "avatar_url": u.get("avatar_url") or u.get("picture"),
             "subscription_tier": u.get("subscription_tier", "free"),
-            "followers_count": fc,
+            "followers_count": followers_by_id.get(uid, 0),
+            "streak_days": streak,
+            "mutual_count": mutual_count,
+            "reason": primary[0],
+            "reason_detail": primary[1],
+            "_score": score,
         })
 
-    return {"users": result}
+    # ── Phase 6: Sort + diversity + limit ──
+    scored.sort(key=lambda x: x["_score"], reverse=True)
+
+    # Diversity: prevent filter bubble — cap same reason_type to 60% of results
+    max_per_reason = max(int(limit * 0.6), 3)
+    reason_counts = defaultdict(int)
+    final = []
+    overflow = []
+    for s in scored:
+        r = s["reason"]
+        if reason_counts[r] < max_per_reason:
+            final.append(s)
+            reason_counts[r] += 1
+        else:
+            overflow.append(s)
+        if len(final) >= limit:
+            break
+
+    # Fill remaining slots from overflow
+    if len(final) < limit:
+        for s in overflow:
+            final.append(s)
+            if len(final) >= limit:
+                break
+
+    # Remove internal score from response
+    for s in final:
+        s.pop("_score", None)
+
+    return {"users": final}
 
 
 @router.get("/feed/own")
