@@ -338,7 +338,7 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
               onClick={() => setReactionsDetailOpen(true)}
               className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors mr-1"
             >
-              {totalReactions} r\u00e9action{totalReactions > 1 ? "s" : ""}
+              {totalReactions} réaction{totalReactions > 1 ? "s" : ""}
             </button>
           )}
 

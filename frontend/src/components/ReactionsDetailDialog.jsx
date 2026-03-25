@@ -91,7 +91,7 @@ export default function ReactionsDetailDialog({
       <DialogContent className="sm:max-w-sm max-h-[70vh] bg-card border-border p-0 overflow-hidden">
         <DialogHeader className="px-5 pt-5 pb-0">
           <DialogTitle className="font-sans font-semibold tracking-tight text-base">
-            R\u00e9actions
+            Réactions
             {totalCount > 0 && (
               <span className="text-muted-foreground font-normal ml-1.5 text-sm">
                 {totalCount}
@@ -141,7 +141,7 @@ export default function ReactionsDetailDialog({
             </div>
           ) : filtered.length === 0 ? (
             <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
-              Aucune r\u00e9action
+              Aucune réaction
             </div>
           ) : (
             <div className="space-y-0.5 pt-2">
