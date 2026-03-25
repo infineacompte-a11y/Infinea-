@@ -7,7 +7,7 @@ import Sidebar from "@/components/Sidebar";
 import SafetyMenu from "@/components/SafetyMenu";
 import MentionInput from "@/components/MentionInput";
 import MentionText from "@/components/MentionText";
-import { ArrowLeft, Send, Loader2, MessageCircle, Sparkles } from "lucide-react";
+import { ArrowLeft, Send, Loader2, MessageCircle, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
 import { sanitize } from "@/lib/sanitize";
@@ -173,6 +173,21 @@ export default function ConversationPage() {
     }
   };
 
+  // Delete own message
+  const handleDeleteMessage = async (messageId) => {
+    try {
+      const res = await authFetch(`${API}/messages/${messageId}`, { method: "DELETE" });
+      if (res.ok) {
+        setMessages((prev) => prev.filter((m) => m.message_id !== messageId));
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || "Impossible de supprimer");
+      }
+    } catch {
+      toast.error("Erreur de connexion");
+    }
+  };
+
   const other = conversation?.other_user || {};
   const myId = currentUser?.user_id;
 
@@ -305,7 +320,16 @@ export default function ConversationPage() {
                         </span>
                       </div>
                     )}
-                    <div className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+                    <div className={`group flex items-end gap-1 ${isMine ? "justify-end" : "justify-start"}`}>
+                      {isMine && (
+                        <button
+                          onClick={() => handleDeleteMessage(msg.message_id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 p-1 rounded-full hover:bg-destructive/10 text-muted-foreground/50 hover:text-destructive mb-0.5"
+                          title="Supprimer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
                       <div
                         className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
                           isMine
