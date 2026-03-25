@@ -518,6 +518,7 @@ export default function ChallengesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedChallenge, setSelectedChallenge] = useState(null);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   const fetchMine = useCallback(async () => {
     try {
@@ -531,13 +532,15 @@ export default function ChallengesPage() {
 
   const fetchDiscover = useCallback(async () => {
     try {
-      const res = await authFetch(`${API}/challenges/discover?limit=20`);
+      const params = new URLSearchParams({ limit: "20" });
+      if (categoryFilter && categoryFilter !== "all") params.set("category", categoryFilter);
+      const res = await authFetch(`${API}/challenges/discover?${params}`);
       if (res.ok) {
         const data = await res.json();
         setDiscoverChallenges(data.challenges || []);
       }
     } catch { /* silent */ }
-  }, []);
+  }, [categoryFilter]);
 
   const fetchInvites = useCallback(async () => {
     try {
@@ -780,6 +783,23 @@ export default function ChallengesPage() {
             {/* ── Discover Tab ── */}
             {!isLoading && activeTab === "discover" && (
               <div className="opacity-0 animate-fade-in" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
+                {/* Category filter pills */}
+                <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1 scrollbar-hide">
+                  {[{ key: "all", label: "Tous" }, ...Object.entries(CATEGORY_LABELS).map(([k, v]) => ({ key: k, label: v }))].map((cat) => (
+                    <button
+                      key={cat.key}
+                      onClick={() => setCategoryFilter(cat.key)}
+                      className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                        categoryFilter === cat.key
+                          ? "bg-primary text-white shadow-sm"
+                          : "bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+
                 {discoverChallenges.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-4 ring-1 ring-primary/10">

@@ -172,6 +172,7 @@ async def startup_event():
 
     # Indexes identifiés par audit CTO — collections à fort trafic
     await db.notifications.create_index([("user_id", 1), ("type", 1), ("created_at", -1)])
+    await db.notifications.create_index("created_at", expireAfterSeconds=90 * 24 * 3600)
     await db.user_sessions_history.create_index([("user_id", 1), ("started_at", -1)])
     await db.user_sessions_history.create_index("session_id", unique=True)
     await db.users.create_index("user_id", unique=True)
