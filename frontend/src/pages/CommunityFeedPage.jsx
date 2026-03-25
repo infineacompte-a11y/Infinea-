@@ -28,6 +28,7 @@ import {
   Pencil,
   Check,
   X,
+  Heart,
 } from "lucide-react";
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
@@ -399,6 +400,28 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
     }
   };
 
+  // ── Like comment (Instagram benchmark — heart toggle) ──
+  const handleLikeComment = async (commentId, parentId = null) => {
+    try {
+      const res = await authFetch(`${API}/comments/${commentId}/like`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        const updater = (c) =>
+          c.comment_id === commentId
+            ? { ...c, like_count: data.like_count, liked_by_me: data.liked }
+            : c;
+        if (parentId) {
+          setExpandedReplies((prev) => ({
+            ...prev,
+            [parentId]: (prev[parentId] || []).map(updater),
+          }));
+        } else {
+          setComments((prev) => prev.map(updater));
+        }
+      }
+    } catch { /* silent */ }
+  };
+
   return (
     <Card className="overflow-hidden hover:shadow-md transition-shadow duration-300">
       <CardContent className="p-4">
@@ -602,6 +625,15 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
                           >
                             Répondre
                           </button>
+                          <button
+                            onClick={() => handleLikeComment(c.comment_id)}
+                            className={`flex items-center gap-0.5 text-[10px] transition-colors ${
+                              c.liked_by_me ? "text-[#E48C75] font-medium" : "text-muted-foreground hover:text-[#E48C75]"
+                            }`}
+                          >
+                            <Heart className={`w-3 h-3 ${c.liked_by_me ? "fill-current" : ""}`} />
+                            {(c.like_count || 0) > 0 && <span className="tabular-nums">{c.like_count}</span>}
+                          </button>
                         </div>
                       </>
                     )}
@@ -720,6 +752,15 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
                                   className="text-[10px] font-medium text-muted-foreground hover:text-primary transition-colors"
                                 >
                                   Répondre
+                                </button>
+                                <button
+                                  onClick={() => handleLikeComment(reply.comment_id, c.comment_id)}
+                                  className={`flex items-center gap-0.5 text-[10px] transition-colors ${
+                                    reply.liked_by_me ? "text-[#E48C75] font-medium" : "text-muted-foreground hover:text-[#E48C75]"
+                                  }`}
+                                >
+                                  <Heart className={`w-3 h-3 ${reply.liked_by_me ? "fill-current" : ""}`} />
+                                  {(reply.like_count || 0) > 0 && <span className="tabular-nums">{reply.like_count}</span>}
                                 </button>
                               </div>
                             </>

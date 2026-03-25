@@ -351,6 +351,7 @@ export default function NotificationsPage() {
     group_invite:          { icon: Users,          color: "#459492" },
     group_member_joined:   { icon: UserCheck,      color: "#5DB786" },
     reminder:              { icon: Clock,          color: null },
+    comment_like:          { icon: Heart,          color: "#E48C75" },
   };
 
   const getNotifMeta = (type) => NOTIF_TYPE_MAP[type] || { icon: Bell, color: null };
