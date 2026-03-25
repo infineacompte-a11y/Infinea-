@@ -104,15 +104,42 @@ async def get_unread_notification_count(
 @router.get("/notifications")
 async def get_user_notifications(
     user: dict = Depends(get_current_user),
-    limit: int = 20
+    limit: int = 50,
+    type: str | None = None,
 ):
-    """Get user's notifications"""
+    """Get user's notifications, optionally filtered by type."""
+    query = {"user_id": user["user_id"]}
+    if type:
+        query["type"] = type
+
     notifications = await db.notifications.find(
-        {"user_id": user["user_id"]},
-        {"_id": 0}
+        query, {"_id": 0}
     ).sort("created_at", -1).limit(limit).to_list(limit)
 
     return notifications
+
+@router.delete("/notifications/read")
+async def delete_read_notifications(user: dict = Depends(get_current_user)):
+    """Bulk-delete all read notifications for the current user."""
+    result = await db.notifications.delete_many(
+        {"user_id": user["user_id"], "read": True}
+    )
+    return {"deleted_count": result.deleted_count}
+
+
+@router.delete("/notifications/{notification_id}")
+async def delete_notification(
+    notification_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Delete a single notification (ownership enforced)."""
+    result = await db.notifications.delete_one(
+        {"notification_id": notification_id, "user_id": user["user_id"]}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"deleted": True}
+
 
 @router.post("/notifications/mark-read")
 async def mark_notifications_read(

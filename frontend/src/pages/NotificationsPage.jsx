@@ -28,6 +28,9 @@ import {
   Mail,
   UserCheck,
   Users,
+  Trash2,
+  Filter,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
@@ -162,6 +165,7 @@ export default function NotificationsPage() {
   const [isSmartLoading, setIsSmartLoading] = useState(true);
   const [isPushSupported, setIsPushSupported] = useState(false);
   const [isPushEnabled, setIsPushEnabled] = useState(false);
+  const [filterType, setFilterType] = useState(null);
 
   useEffect(() => {
     if ("serviceWorker" in navigator && "PushManager" in window) {
@@ -287,11 +291,53 @@ export default function NotificationsPage() {
     }
   };
 
+  const handleDeleteNotification = async (notificationId) => {
+    try {
+      const res = await authFetch(`${API}/notifications/${notificationId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setNotifications((prev) => prev.filter((n) => n.notification_id !== notificationId));
+        toast.success("Notification supprimée");
+      }
+    } catch {
+      toast.error("Erreur de suppression");
+    }
+  };
+
+  const handleDeleteRead = async () => {
+    try {
+      const res = await authFetch(`${API}/notifications/read`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setNotifications((prev) => prev.filter((n) => !n.read));
+        toast.success("Notifications lues supprimées");
+      }
+    } catch {
+      toast.error("Erreur de suppression");
+    }
+  };
+
   const unreadCount = notifications.filter((n) => !n.read).length;
-  const groupedNotifications = useMemo(
-    () => groupByDate(groupSimilarNotifications(notifications)),
-    [notifications]
+  const readCount = notifications.filter((n) => n.read).length;
+
+  const filteredNotifications = useMemo(
+    () => (filterType ? notifications.filter((n) => n.type === filterType) : notifications),
+    [notifications, filterType]
   );
+  const groupedNotifications = useMemo(
+    () => groupByDate(groupSimilarNotifications(filteredNotifications)),
+    [filteredNotifications]
+  );
+
+  const FILTER_CHIPS = [
+    { key: null, label: "Tout" },
+    { key: "reaction", label: "Réactions", icon: Heart },
+    { key: "comment", label: "Commentaires", icon: MessageCircle },
+    { key: "mention", label: "Mentions", icon: AtSign },
+    { key: "new_follower", label: "Followers", icon: UserPlus },
+  ];
 
   const NOTIF_TYPE_MAP = {
     reaction:              { icon: Heart,          color: "#E48C75" },
@@ -452,12 +498,44 @@ export default function NotificationsPage() {
           {/* ─── Tab: Notification History ─── */}
           {activeTab === "history" && (
             <div className="opacity-0 animate-fade-in" style={{ animationDelay: "300ms", animationFillMode: "forwards" }}>
-              {unreadCount > 0 && (
-                <div className="flex justify-end mb-3">
-                  <Button variant="outline" size="sm" onClick={handleMarkAllRead} className="gap-1.5 text-xs rounded-xl transition-all duration-200 btn-press">
-                    <Check className="w-3.5 h-3.5" />
-                    Tout marquer lu
-                  </Button>
+              {/* Filter chips */}
+              <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1 scrollbar-hide">
+                <Filter className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                {FILTER_CHIPS.map((chip) => {
+                  const ChipIcon = chip.icon;
+                  const isActive = filterType === chip.key;
+                  return (
+                    <button
+                      key={chip.key ?? "all"}
+                      onClick={() => setFilterType(chip.key)}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 ${
+                        isActive
+                          ? "bg-[#459492] text-white shadow-sm"
+                          : "bg-muted/40 text-muted-foreground hover:bg-muted/60"
+                      }`}
+                    >
+                      {ChipIcon && <ChipIcon className="w-3 h-3" />}
+                      {chip.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Action buttons */}
+              {(unreadCount > 0 || readCount > 0) && (
+                <div className="flex justify-end gap-2 mb-3">
+                  {unreadCount > 0 && (
+                    <Button variant="outline" size="sm" onClick={handleMarkAllRead} className="gap-1.5 text-xs rounded-xl transition-all duration-200 btn-press">
+                      <Check className="w-3.5 h-3.5" />
+                      Tout marquer lu
+                    </Button>
+                  )}
+                  {readCount > 0 && (
+                    <Button variant="outline" size="sm" onClick={handleDeleteRead} className="gap-1.5 text-xs rounded-xl transition-all duration-200 btn-press text-muted-foreground hover:text-destructive hover:border-destructive/30">
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Supprimer les lues
+                    </Button>
+                  )}
                 </div>
               )}
 
@@ -542,12 +620,24 @@ export default function NotificationsPage() {
                                     {new Date(notif.created_at).toLocaleString("fr-FR")}
                                   </p>
                                 </div>
-                                {!notif.read && (
-                                  <div
-                                    className="w-2 h-2 rounded-full shrink-0 mt-2 animate-pulse"
-                                    style={{ backgroundColor: accent }}
-                                  />
-                                )}
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {!notif.read && (
+                                    <div
+                                      className="w-2 h-2 rounded-full animate-pulse"
+                                      style={{ backgroundColor: accent }}
+                                    />
+                                  )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteNotification(notif.notification_id);
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all duration-200"
+                                    title="Supprimer"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           );
