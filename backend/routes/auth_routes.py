@@ -393,8 +393,16 @@ async def get_me(user: dict = Depends(get_current_user)):
         "subscription_tier": user.get("subscription_tier", "free"),
         "total_time_invested": user.get("total_time_invested", 0),
         "streak_days": user.get("streak_days", 0),
-        "user_profile": user.get("user_profile")
+        "user_profile": user.get("user_profile"),
+        "is_admin": _is_admin(user),
     }
+
+
+def _is_admin(user: dict) -> bool:
+    """Check if user email is in ADMIN_EMAILS env var."""
+    raw = os.environ.get("ADMIN_EMAILS", "")
+    emails = [e.strip().lower() for e in raw.split(",") if e.strip()]
+    return user.get("email", "").lower() in emails
 
 @router.post("/auth/logout")
 async def logout(request: Request, response: Response):
