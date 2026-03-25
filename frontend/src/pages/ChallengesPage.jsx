@@ -35,6 +35,7 @@ import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 import Sidebar from "@/components/Sidebar";
 import InviteChallengeDialog from "@/components/InviteChallengeDialog";
+import CreateChallengeDialog from "@/components/CreateChallengeDialog";
 
 // ── Icon mapping ──
 const ICON_MAP = {
@@ -386,7 +387,7 @@ function ChallengeDetail({ challengeId, onBack, currentUserId }) {
 }
 
 // ── Template picker dialog ──
-function TemplateDialog({ open, onOpenChange, onLaunch }) {
+function TemplateDialog({ open, onOpenChange, onLaunch, onCustom }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [launching, setLaunching] = useState(null);
@@ -449,10 +450,29 @@ function TemplateDialog({ open, onOpenChange, onLaunch }) {
           </div>
         ) : (
           <div className="space-y-5 pt-2">
+            {/* Custom challenge CTA */}
+            {onCustom && (
+              <button
+                onClick={() => { onOpenChange(false); onCustom(); }}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-dashed border-primary/30 bg-primary/[0.03] hover:bg-primary/[0.06] transition-all text-left"
+              >
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Plus className="w-4 h-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Cr\u00e9er un d\u00e9fi personnalis\u00e9</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    D\u00e9finissez vos propres objectifs, dur\u00e9e et r\u00e8gles
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+              </button>
+            )}
+
             {[
-              { key: "duo", label: "Duo", desc: "À deux, haute responsabilité" },
-              { key: "group", label: "Groupe", desc: "3-10 personnes, dynamique d'équipe" },
-              { key: "community", label: "Communauté", desc: "Ouvert à tous, objectif collectif" },
+              { key: "duo", label: "Duo", desc: "\u00c0 deux, haute responsabilit\u00e9" },
+              { key: "group", label: "Groupe", desc: "3-10 personnes, dynamique d'\u00e9quipe" },
+              { key: "community", label: "Communaut\u00e9", desc: "Ouvert \u00e0 tous, objectif collectif" },
             ].map((section) => (
               <div key={section.key}>
                 <div className="mb-2">
@@ -518,6 +538,7 @@ export default function ChallengesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedChallenge, setSelectedChallenge] = useState(null);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("all");
 
   const fetchMine = useCallback(async () => {
@@ -581,7 +602,16 @@ export default function ChallengesPage() {
 
   const handleTemplateLaunch = (challenge) => {
     fetchMine();
-    // Open detail view immediately so user can invite friends
+    if (challenge?.challenge_id) {
+      setSelectedChallenge(challenge.challenge_id);
+    } else {
+      setActiveTab("mine");
+    }
+  };
+
+  const handleCustomCreated = (challenge) => {
+    fetchMine();
+    fetchDiscover();
     if (challenge?.challenge_id) {
       setSelectedChallenge(challenge.challenge_id);
     } else {
@@ -734,10 +764,16 @@ export default function ChallengesPage() {
                     <p className="text-sm text-muted-foreground max-w-xs mb-4">
                       Lancez un défi depuis un template ou rejoignez un défi communautaire.
                     </p>
-                    <Button onClick={() => setTemplateOpen(true)} className="rounded-xl gap-2">
-                      <Plus className="w-4 h-4" />
-                      Lancer un défi
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button onClick={() => setTemplateOpen(true)} className="rounded-xl gap-2">
+                        <Play className="w-4 h-4" />
+                        Templates
+                      </Button>
+                      <Button variant="outline" onClick={() => setCreateOpen(true)} className="rounded-xl gap-2">
+                        <Plus className="w-4 h-4" />
+                        Personnalis\u00e9
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-6">
@@ -837,6 +873,14 @@ export default function ChallengesPage() {
         open={templateOpen}
         onOpenChange={setTemplateOpen}
         onLaunch={handleTemplateLaunch}
+        onCustom={() => setCreateOpen(true)}
+      />
+
+      {/* Custom challenge creation dialog */}
+      <CreateChallengeDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={handleCustomCreated}
       />
     </div>
   );
