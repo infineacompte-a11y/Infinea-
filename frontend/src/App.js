@@ -21,6 +21,7 @@ import JournalPage from "@/pages/JournalPage";
 import NotesPage from "@/pages/NotesPage";
 import OnboardingPage from "@/pages/OnboardingPage";
 import ChallengesPage from "@/pages/ChallengesPage";
+import LeaderboardPage from "@/pages/LeaderboardPage";
 import ObjectivesPage from "@/pages/ObjectivesPage";
 import ObjectiveDetailPage from "@/pages/ObjectiveDetailPage";
 import RoutinesPage from "@/pages/RoutinesPage";
@@ -432,6 +433,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ChallengesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/leaderboard"
+        element={
+          <ProtectedRoute>
+            <LeaderboardPage />
           </ProtectedRoute>
         }
       />

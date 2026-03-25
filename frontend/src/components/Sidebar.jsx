@@ -25,6 +25,7 @@ import {
   Activity,
   Search,
   MessageCircle,
+  Medal,
 } from "lucide-react";
 import InFineaLogo from "@/components/InFineaLogo";
 import { API, authFetch, useAuth } from "@/App";
@@ -126,6 +127,7 @@ const navGroups = [
       { to: "/search", label: "Rechercher", icon: Search },
       { to: "/groups", label: "Groupes", icon: Users },
       { to: "/challenges", label: "Défis", icon: Trophy },
+      { to: "/leaderboard", label: "Classement", icon: Medal },
     ],
   },
   {
