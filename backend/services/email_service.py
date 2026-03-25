@@ -46,6 +46,7 @@ async def send_email_to_user(
             Used to check granular preferences.
     """
     if not RESEND_API_KEY:
+        logger.debug(f"Email skipped for {user_id}: RESEND_API_KEY not set")
         return
 
     try:
@@ -54,6 +55,7 @@ async def send_email_to_user(
             {"_id": 0, "email": 1, "display_name": 1},
         )
         if not user or not user.get("email"):
+            logger.info(f"Email skipped for {user_id}: no email address in user doc")
             return
 
         # Check email preferences
@@ -61,24 +63,30 @@ async def send_email_to_user(
         if prefs:
             # Master toggle
             if not prefs.get("email_notifications", True):
+                logger.info(f"Email skipped for {user_id}: master email toggle off")
                 return
             # Granular toggles
             category_key = f"email_{email_category}"
             if not prefs.get(category_key, True):
+                logger.info(f"Email skipped for {user_id}: {category_key} toggle off")
                 return
 
         import resend
         resend.api_key = RESEND_API_KEY
-        resend.Emails.send({
+
+        email_to = user["email"]
+        logger.info(f"Email sending to {email_to[:3]}***@{email_to.split('@')[-1]} | {subject}")
+
+        result = resend.Emails.send({
             "from": FROM_EMAIL,
-            "to": [user["email"]],
+            "to": [email_to],
             "subject": subject,
             "html": html,
         })
-        logger.info(f"Email sent to {user_id}: {subject}")
+        logger.info(f"Email sent to {user_id}: {subject} (resend_id={getattr(result, 'id', 'N/A')})")
 
     except Exception as e:
-        logger.warning(f"Email failed for {user_id}: {e}")
+        logger.exception(f"Email failed for {user_id}: {e}")
 
 
 # ── Branded HTML template ──
