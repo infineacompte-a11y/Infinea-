@@ -130,6 +130,7 @@ async def login(request: Request, user_data: UserLogin, response: Response):
         "picture": user.get("picture"),
         "subscription_tier": user.get("subscription_tier", "free"),
         "user_profile": user.get("user_profile"),
+        "is_admin": _is_admin(user),
         "token": token,
         "refresh_token": refresh,
     }
@@ -375,6 +376,7 @@ async def process_oauth_session(request: Request, response: Response):
         "picture": user.get("picture"),
         "subscription_tier": user.get("subscription_tier", "free"),
         "user_profile": user.get("user_profile"),
+        "is_admin": _is_admin(user),
         "token": jwt_token,
         "refresh_token": refresh,
     }
