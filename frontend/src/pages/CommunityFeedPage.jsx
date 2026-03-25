@@ -21,6 +21,7 @@ import {
   Crown,
   UserPlus,
   Flag,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
@@ -495,6 +496,7 @@ export default function CommunityFeedPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [cursor, setCursor] = useState(null);
   const [hasMore, setHasMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const sentinelRef = useRef(null);
 
   const fetchFeed = useCallback(async (cursorVal = null, feedTab = "feed") => {
@@ -562,6 +564,16 @@ export default function CommunityFeedPage() {
     }
   };
 
+  // Manual refresh
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setActivities([]);
+    setCursor(null);
+    setHasMore(false);
+    await fetchFeed(null, tab);
+    setRefreshing(false);
+  };
+
   // Optimistic reaction update
   const handleReactionChange = (activityId, reactionType, serverData) => {
     setActivities((prev) =>
@@ -591,12 +603,24 @@ export default function CommunityFeedPage() {
         {/* Dark Header */}
         <div className="section-dark-header px-4 lg:px-8 pt-8 lg:pt-10 pb-4">
           <div className="max-w-2xl mx-auto">
-            <h1 className="text-display text-3xl lg:text-4xl font-semibold text-white opacity-0 animate-fade-in">
-              Communauté
-            </h1>
-            <p className="text-white/60 text-sm mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
-              Suivez la progression de vos amis et découvrez la communauté
-            </p>
+            <div className="flex items-center justify-between opacity-0 animate-fade-in" style={{ animationFillMode: "forwards" }}>
+              <div>
+                <h1 className="text-display text-3xl lg:text-4xl font-semibold text-white">
+                  Communauté
+                </h1>
+                <p className="text-white/60 text-sm mt-1">
+                  Suivez la progression de vos amis et découvrez la communauté
+                </p>
+              </div>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing || loading}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all duration-200 disabled:opacity-40 shrink-0"
+                title="Actualiser le fil"
+              >
+                <RefreshCw className={`w-4 h-4 text-white ${refreshing ? "animate-spin" : ""}`} />
+              </button>
+            </div>
 
             {/* Tab bar — Instagram style */}
             <div className="flex gap-1 mt-5 bg-white/10 rounded-xl p-1 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
