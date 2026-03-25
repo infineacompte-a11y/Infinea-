@@ -89,14 +89,24 @@ async def get_feed(
     limit: int = 20,
 ) -> dict:
     """
-    Get the user's activity feed (fan-out on read).
+    Get the user's ranked activity feed (fan-out on read + intelligent ranking).
 
-    Cursor-based pagination using created_at for consistent results
-    even when new activities are inserted (no skipped/duplicate items).
+    Flow:
+    1. Fetch a larger pool of chronological activities (POOL_MULTIPLIER × limit).
+    2. Pass the pool through the feed ranking engine (affinity, quality,
+       type weight, freshness, contextual boost, diversity).
+    3. Return the top `limit` activities, ranked by composite score.
+    4. Cursor advances past the full pool (not just returned items), so
+       the next page ranks a fresh window of content.
+
+    This transforms a simple chronological feed into a curated experience
+    where the most engaging, relevant, and motivating content surfaces first.
 
     Returns:
         {activities: [...], next_cursor: str|None, has_more: bool}
     """
+    from services.feed_ranking_engine import rank_feed, POOL_MULTIPLIER
+
     # Get who this user follows
     following_docs = await db.follows.find(
         {"follower_id": user_id, "status": "active"},
@@ -120,16 +130,32 @@ async def get_feed(
     if cursor:
         query["created_at"] = {"$lt": cursor}
 
-    activities = (
+    # Fetch a larger pool for ranking depth.
+    # We fetch POOL_MULTIPLIER × limit, rank the pool, then return top `limit`.
+    pool_size = limit * POOL_MULTIPLIER
+
+    pool = (
         await db.activities.find(query, {"_id": 0})
         .sort("created_at", -1)
-        .limit(limit + 1)
-        .to_list(limit + 1)
+        .limit(pool_size + 1)
+        .to_list(pool_size + 1)
     )
 
-    has_more = len(activities) > limit
+    has_more = len(pool) > pool_size
     if has_more:
-        activities = activities[:limit]
+        pool = pool[:pool_size]
+
+    # Rank the pool — the engine scores each activity on 6 signals
+    # and returns them sorted by composite score.
+    if len(pool) > 1:
+        try:
+            pool = await rank_feed(pool, viewer_id=user_id)
+        except Exception:
+            logger.exception("Feed ranking failed — falling back to chronological")
+            # Graceful degradation: if ranking fails, chronological still works
+
+    # Take top `limit` activities from the ranked pool
+    activities = pool[:limit]
 
     # Enrich with user info — batch query
     if activities:
@@ -159,7 +185,10 @@ async def get_feed(
         for activity in activities:
             activity["user_reaction"] = reaction_map.get(activity["activity_id"])
 
-    next_cursor = activities[-1]["created_at"] if activities and has_more else None
+    # Cursor = oldest created_at in the FULL pool (not just returned items).
+    # This advances the window past all ranked content, so the next page
+    # gets a fresh pool to rank independently.
+    next_cursor = pool[-1]["created_at"] if pool and has_more else None
 
     return {
         "activities": activities,
