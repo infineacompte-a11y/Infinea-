@@ -368,7 +368,16 @@ async def add_comment(
     request: Request,
     user: dict = Depends(get_current_user),
 ):
-    """Add a comment to an activity."""
+    """Add a comment (or reply) to an activity.
+
+    Threaded comments — benchmarked: Instagram (2-level), YouTube (2-level),
+    Reddit (deep nesting). InFinea uses 2-level threading (top-level + replies)
+    for clarity and engagement without complexity.
+
+    Body:
+        content (str): Comment text, 1-500 chars.
+        parent_id (str, optional): If set, this is a reply to an existing comment.
+    """
     body = await request.json()
     content = sanitize_text(str(body.get("content", "")), max_length=500)
     if not content:
@@ -382,6 +391,20 @@ async def add_comment(
     activity = await db.activities.find_one({"activity_id": activity_id})
     if not activity:
         raise HTTPException(status_code=404, detail="Activité introuvable")
+
+    # ── Threading: validate parent_id if provided ──
+    parent_id = body.get("parent_id")
+    parent_comment = None
+    if parent_id:
+        parent_comment = await db.comments.find_one(
+            {"comment_id": parent_id, "activity_id": activity_id}
+        )
+        if not parent_comment:
+            raise HTTPException(status_code=404, detail="Commentaire parent introuvable")
+        # Enforce 2-level max: if parent is itself a reply, attach to its parent instead
+        if parent_comment.get("parent_id"):
+            parent_id = parent_comment["parent_id"]
+            parent_comment = await db.comments.find_one({"comment_id": parent_id})
 
     # Extract @mentions
     blocked_ids = await get_blocked_ids(user["user_id"])
@@ -399,6 +422,8 @@ async def add_comment(
         "user_avatar": user.get("avatar_url") or user.get("picture"),
         "content": content,
         "mentions": mentions,
+        "parent_id": parent_id,  # None for top-level, comment_id for replies
+        "reply_count": 0,
         "created_at": now,
     }
 
@@ -408,16 +433,61 @@ async def add_comment(
         {"$inc": {"comment_count": 1}},
     )
 
+    # Increment reply_count on parent comment
+    if parent_id:
+        await db.comments.update_one(
+            {"comment_id": parent_id},
+            {"$inc": {"reply_count": 1}},
+        )
+
     display = user.get("display_name") or user.get("name", "Quelqu'un")
 
-    # Notify activity owner (non-blocking)
-    if activity["user_id"] != user["user_id"]:
+    # ── Notifications (non-blocking, silent fail) ──
+    already_notified = set()
+
+    # 1. Notify parent comment author (reply notification — highest priority)
+    if parent_comment and parent_comment["user_id"] != user["user_id"]:
         try:
+            parent_author = parent_comment.get("user_name", "quelqu'un")
+            await db.notifications.insert_one({
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": parent_comment["user_id"],
+                "type": "reply",
+                "message": f"{display} a répondu à ton commentaire",
+                "data": {
+                    "activity_id": activity_id,
+                    "comment_id": comment_id,
+                    "parent_id": parent_id,
+                    "replier_id": user["user_id"],
+                },
+                "read": False,
+                "created_at": now,
+            })
+            await send_push_to_user(
+                parent_comment["user_id"],
+                "Nouvelle réponse",
+                f"{display} a répondu à ton commentaire",
+                url="/community",
+                tag="reply",
+            )
+            already_notified.add(parent_comment["user_id"])
+        except Exception:
+            pass
+
+    # 2. Notify activity owner (skip if already notified as parent author, or if self)
+    if activity["user_id"] != user["user_id"] and activity["user_id"] not in already_notified:
+        try:
+            notif_type = "comment" if not parent_id else "reply"
+            notif_msg = (
+                f"{display} a commenté votre activité"
+                if not parent_id
+                else f"{display} a répondu dans les commentaires"
+            )
             await db.notifications.insert_one({
                 "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
                 "user_id": activity["user_id"],
-                "type": "comment",
-                "message": f"{display} a commenté votre activité",
+                "type": notif_type,
+                "message": notif_msg,
                 "data": {
                     "activity_id": activity_id,
                     "comment_id": comment_id,
@@ -428,17 +498,18 @@ async def add_comment(
             })
             await send_push_to_user(
                 activity["user_id"],
-                "Nouveau commentaire",
-                f"{display} a commenté ton activité",
+                "Nouveau commentaire" if not parent_id else "Nouvelle réponse",
+                notif_msg,
                 url="/community",
                 tag="comment",
             )
+            already_notified.add(activity["user_id"])
         except Exception:
             pass
 
-    # Notify mentioned users (non-blocking, skip activity owner — already notified)
+    # 3. Notify mentioned users (skip already notified)
     for m in mentions:
-        if m["user_id"] == activity["user_id"]:
+        if m["user_id"] in already_notified or m["user_id"] == user["user_id"]:
             continue
         try:
             await db.notifications.insert_one({
@@ -464,10 +535,11 @@ async def add_comment(
             # Email for mentions
             subject, html = email_mention(display, content, "/community")
             await send_email_to_user(m["user_id"], subject, html, email_category="social")
+            already_notified.add(m["user_id"])
         except Exception:
             pass
 
-    return {
+    response = {
         "comment_id": comment_id,
         "activity_id": activity_id,
         "user_id": user["user_id"],
@@ -476,8 +548,11 @@ async def add_comment(
         "user_avatar": comment_doc["user_avatar"],
         "content": content,
         "mentions": mentions,
+        "parent_id": parent_id,
+        "reply_count": 0,
         "created_at": now,
     }
+    return response
 
 
 @router.get("/activities/{activity_id}/comments")
@@ -486,8 +561,18 @@ async def get_comments(
     user: dict = Depends(get_current_user),
     limit: int = 30,
     skip: int = 0,
+    parent_id: str = None,
 ):
-    """Get comments on an activity."""
+    """Get threaded comments on an activity.
+
+    Benchmarked: Instagram (top-level + "View replies" expand), YouTube (same pattern).
+
+    Default (no parent_id): returns top-level comments with reply_count.
+    With parent_id: returns replies to that specific comment.
+
+    This 2-request pattern is efficient — only loads replies on demand,
+    keeping initial payload small for fast feed rendering.
+    """
     activity = await db.activities.find_one({"activity_id": activity_id})
     if not activity:
         raise HTTPException(status_code=404, detail="Activité introuvable")
@@ -498,6 +583,16 @@ async def get_comments(
     if blocked_ids:
         comment_query["user_id"] = {"$nin": list(blocked_ids)}
 
+    if parent_id:
+        # Fetch replies to a specific comment
+        comment_query["parent_id"] = parent_id
+    else:
+        # Fetch top-level comments only (parent_id is null or missing)
+        comment_query["$or"] = [
+            {"parent_id": None},
+            {"parent_id": {"$exists": False}},
+        ]
+
     comments = (
         await db.comments.find(comment_query, {"_id": 0})
         .sort("created_at", 1)
@@ -505,6 +600,11 @@ async def get_comments(
         .limit(limit)
         .to_list(limit)
     )
+
+    # Ensure reply_count and parent_id fields exist in response
+    for c in comments:
+        c.setdefault("reply_count", 0)
+        c.setdefault("parent_id", None)
 
     total = await db.comments.count_documents(comment_query)
     return {"comments": comments, "total": total}
@@ -515,7 +615,7 @@ async def delete_comment(
     comment_id: str,
     user: dict = Depends(get_current_user),
 ):
-    """Delete own comment."""
+    """Delete own comment. Cascade-deletes replies if top-level."""
     comment = await db.comments.find_one({"comment_id": comment_id})
     if not comment:
         raise HTTPException(status_code=404, detail="Commentaire introuvable")
@@ -523,10 +623,23 @@ async def delete_comment(
     if comment["user_id"] != user["user_id"]:
         raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres commentaires")
 
+    deleted_count = 1  # The comment itself
+
+    if comment.get("parent_id"):
+        # This is a reply — decrement parent's reply_count
+        await db.comments.update_one(
+            {"comment_id": comment["parent_id"]},
+            {"$inc": {"reply_count": -1}},
+        )
+    else:
+        # This is a top-level comment — cascade-delete all its replies
+        reply_result = await db.comments.delete_many({"parent_id": comment_id})
+        deleted_count += reply_result.deleted_count
+
     await db.comments.delete_one({"comment_id": comment_id})
     await db.activities.update_one(
         {"activity_id": comment["activity_id"]},
-        {"$inc": {"comment_count": -1}},
+        {"$inc": {"comment_count": -deleted_count}},
     )
 
     return {"message": "Commentaire supprimé"}

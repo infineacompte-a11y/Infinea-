@@ -22,6 +22,9 @@ import {
   UserPlus,
   Flag,
   RefreshCw,
+  Reply,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
@@ -167,6 +170,13 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
   const [reportCommentId, setReportCommentId] = useState(null);
   const [reactingType, setReactingType] = useState(null);
   const [reactionsDetailOpen, setReactionsDetailOpen] = useState(false);
+  // Threading state
+  const [replyingTo, setReplyingTo] = useState(null); // comment_id being replied to
+  const [replyText, setReplyText] = useState("");
+  const [replyMentions, setReplyMentions] = useState([]);
+  const [sendingReply, setSendingReply] = useState(false);
+  const [expandedReplies, setExpandedReplies] = useState({}); // { comment_id: [replies] }
+  const [loadingReplies, setLoadingReplies] = useState({}); // { comment_id: bool }
 
   const totalReactions =
     (activity.reaction_counts?.bravo || 0) +
@@ -184,6 +194,32 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
       }
     } catch { /* silent */ }
   }, [activity.activity_id, commentsLoaded]);
+
+  const loadReplies = useCallback(async (parentId) => {
+    setLoadingReplies((prev) => ({ ...prev, [parentId]: true }));
+    try {
+      const res = await authFetch(
+        `${API}/activities/${activity.activity_id}/comments?parent_id=${parentId}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setExpandedReplies((prev) => ({ ...prev, [parentId]: data.comments || [] }));
+      }
+    } catch { /* silent */ }
+    setLoadingReplies((prev) => ({ ...prev, [parentId]: false }));
+  }, [activity.activity_id]);
+
+  const toggleReplies = (parentId) => {
+    if (expandedReplies[parentId]) {
+      setExpandedReplies((prev) => {
+        const next = { ...prev };
+        delete next[parentId];
+        return next;
+      });
+    } else {
+      loadReplies(parentId);
+    }
+  };
 
   const handleToggleComments = () => {
     const next = !showComments;
@@ -236,11 +272,71 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
     }
   };
 
-  const handleDeleteComment = async (commentId) => {
+  const handleSendReply = async (e, parentId) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const text = replyText.trim();
+    if (!text) return;
+    setSendingReply(true);
+    try {
+      const res = await authFetch(`${API}/activities/${activity.activity_id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text, parent_id: parentId }),
+      });
+      if (res.ok) {
+        const newReply = await res.json();
+        // Add reply to expanded replies (or create the list)
+        setExpandedReplies((prev) => ({
+          ...prev,
+          [parentId]: [...(prev[parentId] || []), newReply],
+        }));
+        // Increment reply_count on parent
+        setComments((prev) =>
+          prev.map((c) =>
+            c.comment_id === parentId
+              ? { ...c, reply_count: (c.reply_count || 0) + 1 }
+              : c
+          )
+        );
+        setReplyText("");
+        setReplyMentions([]);
+        setReplyingTo(null);
+      } else {
+        toast.error("Erreur lors de l'envoi");
+      }
+    } catch {
+      toast.error("Erreur de connexion");
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId, parentId = null) => {
     try {
       const res = await authFetch(`${API}/comments/${commentId}`, { method: "DELETE" });
       if (res.ok) {
-        setComments((prev) => prev.filter((c) => c.comment_id !== commentId));
+        if (parentId) {
+          // Deleting a reply — remove from expanded replies + decrement parent count
+          setExpandedReplies((prev) => ({
+            ...prev,
+            [parentId]: (prev[parentId] || []).filter((c) => c.comment_id !== commentId),
+          }));
+          setComments((prev) =>
+            prev.map((c) =>
+              c.comment_id === parentId
+                ? { ...c, reply_count: Math.max(0, (c.reply_count || 0) - 1) }
+                : c
+            )
+          );
+        } else {
+          // Deleting a top-level comment — remove from list + clear expanded replies
+          setComments((prev) => prev.filter((c) => c.comment_id !== commentId));
+          setExpandedReplies((prev) => {
+            const next = { ...prev };
+            delete next[commentId];
+            return next;
+          });
+        }
       }
     } catch { /* silent */ }
   };
@@ -369,7 +465,7 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
           </button>
         )}
 
-        {/* Comments section — expandable */}
+        {/* Comments section — expandable, threaded (Instagram/YouTube pattern) */}
         {showComments && (
           <div className="mt-3 pt-2 border-t border-border/30 space-y-2.5 animate-fade-in" style={{ animationFillMode: "forwards" }}>
             {comments.length === 0 && commentsLoaded && (
@@ -379,55 +475,205 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
             )}
 
             {comments.map((c) => (
-              <div key={c.comment_id} className="flex items-start gap-2 group">
-                <Link to={`/users/${c.user_id}`}>
-                  <Avatar className="w-6 h-6 shrink-0">
-                    <AvatarImage src={c.user_avatar} />
-                    <AvatarFallback className="bg-muted text-[9px]">
-                      {getInitials(c.user_name)}
-                    </AvatarFallback>
-                  </Avatar>
-                </Link>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-1.5">
-                    <Link
-                      to={`/users/${c.user_id}`}
-                      className="font-semibold text-xs text-foreground hover:underline"
-                    >
-                      {c.user_name}
-                    </Link>
-                    <MentionText
-                      content={c.content}
-                      mentions={c.mentions}
-                      currentUserId={currentUserId}
-                      className="text-xs text-foreground/70 break-words"
-                    />
+              <div key={c.comment_id}>
+                {/* Top-level comment */}
+                <div className="flex items-start gap-2 group">
+                  <Link to={`/users/${c.user_id}`}>
+                    <Avatar className="w-6 h-6 shrink-0">
+                      <AvatarImage src={c.user_avatar} />
+                      <AvatarFallback className="bg-muted text-[9px]">
+                        {getInitials(c.user_name)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Link>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-1.5">
+                      <Link
+                        to={`/users/${c.user_id}`}
+                        className="font-semibold text-xs text-foreground hover:underline"
+                      >
+                        {c.user_name}
+                      </Link>
+                      <MentionText
+                        content={c.content}
+                        mentions={c.mentions}
+                        currentUserId={currentUserId}
+                        className="text-xs text-foreground/70 break-words"
+                      />
+                    </div>
+                    <div className="flex items-center gap-3 mt-0.5">
+                      <span className="text-[10px] text-muted-foreground/50">
+                        {timeAgo(c.created_at)}
+                      </span>
+                      <button
+                        onClick={() => {
+                          if (replyingTo === c.comment_id) {
+                            setReplyingTo(null);
+                            setReplyText("");
+                          } else {
+                            setReplyingTo(c.comment_id);
+                            const username = c.user_username || c.user_name;
+                            setReplyText(c.user_id !== currentUserId ? `@${username} ` : "");
+                          }
+                        }}
+                        className="text-[10px] font-medium text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        Répondre
+                      </button>
+                    </div>
                   </div>
-                  <span className="text-[10px] text-muted-foreground/50">
-                    {timeAgo(c.created_at)}
-                  </span>
+                  {c.user_id === currentUserId ? (
+                    <button
+                      onClick={() => handleDeleteComment(c.comment_id)}
+                      className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all p-1"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setReportCommentId(c.comment_id)}
+                      className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all p-1"
+                      title="Signaler"
+                    >
+                      <Flag className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
-                {c.user_id === currentUserId ? (
+
+                {/* View replies toggle */}
+                {(c.reply_count || 0) > 0 && (
                   <button
-                    onClick={() => handleDeleteComment(c.comment_id)}
-                    className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all p-1"
-                    title="Supprimer"
+                    onClick={() => toggleReplies(c.comment_id)}
+                    disabled={loadingReplies[c.comment_id]}
+                    className="ml-8 mt-1 flex items-center gap-1 text-[10px] font-medium text-primary/70 hover:text-primary transition-colors"
                   >
-                    <Trash2 className="w-3 h-3" />
+                    {loadingReplies[c.comment_id] ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : expandedReplies[c.comment_id] ? (
+                      <ChevronUp className="w-3 h-3" />
+                    ) : (
+                      <ChevronDown className="w-3 h-3" />
+                    )}
+                    {expandedReplies[c.comment_id]
+                      ? "Masquer les réponses"
+                      : `Voir ${c.reply_count} réponse${c.reply_count > 1 ? "s" : ""}`}
                   </button>
-                ) : (
-                  <button
-                    onClick={() => setReportCommentId(c.comment_id)}
-                    className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all p-1"
-                    title="Signaler"
+                )}
+
+                {/* Expanded replies */}
+                {expandedReplies[c.comment_id] && (
+                  <div className="ml-8 mt-1.5 pl-3 border-l-2 border-primary/10 space-y-2">
+                    {expandedReplies[c.comment_id].map((reply) => (
+                      <div key={reply.comment_id} className="flex items-start gap-2 group">
+                        <Link to={`/users/${reply.user_id}`}>
+                          <Avatar className="w-5 h-5 shrink-0">
+                            <AvatarImage src={reply.user_avatar} />
+                            <AvatarFallback className="bg-muted text-[8px]">
+                              {getInitials(reply.user_name)}
+                            </AvatarFallback>
+                          </Avatar>
+                        </Link>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline gap-1.5">
+                            <Link
+                              to={`/users/${reply.user_id}`}
+                              className="font-semibold text-[11px] text-foreground hover:underline"
+                            >
+                              {reply.user_name}
+                            </Link>
+                            <MentionText
+                              content={reply.content}
+                              mentions={reply.mentions}
+                              currentUserId={currentUserId}
+                              className="text-[11px] text-foreground/70 break-words"
+                            />
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            <span className="text-[10px] text-muted-foreground/50">
+                              {timeAgo(reply.created_at)}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setReplyingTo(c.comment_id);
+                                const username = reply.user_username || reply.user_name;
+                                setReplyText(reply.user_id !== currentUserId ? `@${username} ` : "");
+                              }}
+                              className="text-[10px] font-medium text-muted-foreground hover:text-primary transition-colors"
+                            >
+                              Répondre
+                            </button>
+                          </div>
+                        </div>
+                        {reply.user_id === currentUserId ? (
+                          <button
+                            onClick={() => handleDeleteComment(reply.comment_id, c.comment_id)}
+                            className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all p-1"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setReportCommentId(reply.comment_id)}
+                            className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all p-1"
+                            title="Signaler"
+                          >
+                            <Flag className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Reply input — inline, shown when replying to this comment */}
+                {replyingTo === c.comment_id && (
+                  <form
+                    onSubmit={(e) => handleSendReply(e, c.comment_id)}
+                    className="ml-8 mt-2 flex items-center gap-2 animate-fade-in"
+                    style={{ animationFillMode: "forwards" }}
                   >
-                    <Flag className="w-3 h-3" />
-                  </button>
+                    <Reply className="w-3 h-3 text-primary/40 shrink-0" />
+                    <MentionInput
+                      value={replyText}
+                      onChange={setReplyText}
+                      mentions={replyMentions}
+                      onMentionsChange={setReplyMentions}
+                      context="comment"
+                      contextId={activity.activity_id}
+                      placeholder={`Répondre à ${c.user_name}...`}
+                      maxLength={500}
+                      className="h-7 text-[11px] rounded-full border-primary/20 bg-primary/[0.03] focus:bg-white"
+                      onSubmit={(e) => handleSendReply(e, c.comment_id)}
+                      autoFocus
+                    />
+                    <Button
+                      type="submit"
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 shrink-0 rounded-full"
+                      disabled={!replyText.trim() || sendingReply}
+                    >
+                      {sendingReply ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Send className="w-3 h-3 text-primary" />
+                      )}
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => { setReplyingTo(null); setReplyText(""); }}
+                      className="text-muted-foreground/40 hover:text-muted-foreground p-1 transition-colors"
+                    >
+                      <span className="text-[10px]">Annuler</span>
+                    </button>
+                  </form>
                 )}
               </div>
             ))}
 
-            {/* Comment input — with @mention autocomplete */}
+            {/* Comment input — top-level, with @mention autocomplete */}
             <form onSubmit={handleSendComment} className="flex items-center gap-2 pt-1">
               <MentionInput
                 value={commentText}

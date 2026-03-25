@@ -342,6 +342,7 @@ export default function NotificationsPage() {
   const NOTIF_TYPE_MAP = {
     reaction:              { icon: Heart,          color: "#E48C75" },
     comment:               { icon: MessageCircle,  color: "#55B3AE" },
+    reply:                 { icon: MessageCircle,  color: "#55B3AE" },
     mention:               { icon: AtSign,         color: "#459492" },
     new_follower:          { icon: UserPlus,       color: "#5DB786" },
     new_message:           { icon: Mail,           color: "#55B3AE" },
