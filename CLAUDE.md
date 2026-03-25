@@ -70,7 +70,7 @@ Rollback immédiat possible à tout moment : `git checkout backup-pre-<name>` ou
 
 ## Déploiement — Points critiques
 
-- **Render** utilise `requirements-render.txt` (PAS `requirements.txt`) — toute nouvelle dépendance Python doit être ajoutée aux DEUX fichiers
+- **Render** utilise `requirements-deploy.txt` (Build Command: `pip install -r requirements-deploy.txt`) — toute nouvelle dépendance Python doit être ajoutée à `requirements.txt` ET `requirements-deploy.txt`
 - **Vercel** : les pushes sur `main` arrivent en **Preview** et non en Production — il faut promouvoir manuellement avec `npx vercel promote infinea-git-main-sams-projects-a7a69ca8.vercel.app --scope sams-projects-a7a69ca8 --yes`
 - **`.vercel/project.json`** dans `frontend/` doit pointer vers `prj_NxEZ1i7s4ip3l7TdofbvibOO2gt6` (projet "infinea"), PAS vers "frontend"
 - Variables d'environnement Render : via API `https://api.render.com/v1/services/srv-d67tfe6sb7us73bvmqk0/env-vars`
@@ -123,11 +123,11 @@ E.1 Split server.py à faire, E.2 Stripe webhook security à faire (critique), E
 | Fichier | Usage |
 |---------|-------|
 | `requirements.txt` | Base locale / CI |
-| `requirements-render.txt` | **Utilisé par Render pour le déploiement** |
-| `requirements-deploy.txt` | Déploiement alternatif |
+| `requirements-deploy.txt` | **Utilisé par Render pour le déploiement** (Build Command) |
+| `requirements-render.txt` | Historique — ne plus utiliser |
 | `requirements-full.txt` | Toutes les dépendances (dev + prod) |
 
-**Toute nouvelle dépendance** doit être ajoutée au minimum à `requirements.txt` ET `requirements-render.txt`.
+**Toute nouvelle dépendance** doit être ajoutée au minimum à `requirements.txt` ET `requirements-deploy.txt`.
 
 ## Communication
 
