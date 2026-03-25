@@ -319,6 +319,47 @@ async def react_to_activity(
         return {"reacted": True, "reaction_type": reaction_type}
 
 
+@router.get("/activities/{activity_id}/reactions")
+async def get_activity_reactions(
+    activity_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """List all reactions on an activity with user details."""
+    activity = await db.activities.find_one({"activity_id": activity_id})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activit\u00e9 introuvable")
+
+    reactions = await db.reactions.find(
+        {"activity_id": activity_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
+
+    if not reactions:
+        return {"reactions": [], "count": 0}
+
+    # Batch-fetch user details for all reactors
+    user_ids = list({r["user_id"] for r in reactions})
+    users_cursor = db.users.find(
+        {"user_id": {"$in": user_ids}},
+        {"_id": 0, "user_id": 1, "display_name": 1, "name": 1,
+         "username": 1, "avatar_url": 1, "picture": 1},
+    )
+    users_map = {u["user_id"]: u async for u in users_cursor}
+
+    result = []
+    for r in reactions:
+        u = users_map.get(r["user_id"], {})
+        result.append({
+            "user_id": r["user_id"],
+            "reaction_type": r["reaction_type"],
+            "display_name": u.get("display_name") or u.get("name", "Utilisateur"),
+            "username": u.get("username"),
+            "avatar_url": u.get("avatar_url") or u.get("picture"),
+            "created_at": r.get("created_at"),
+        })
+
+    return {"reactions": result, "count": len(result)}
+
+
 # ============== COMMENTS ==============
 
 @router.post("/activities/{activity_id}/comments")
