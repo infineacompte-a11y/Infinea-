@@ -93,10 +93,43 @@ function getInitials(name) {
   return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
+// ── Suggestion reason label (LinkedIn/Instagram benchmark — context matters) ──
+function SuggestionReason({ reason, detail }) {
+  switch (reason) {
+    case "mutual":
+      return (
+        <span className="text-[9px] text-primary/70 truncate">
+          {detail} ami{detail > 1 ? "s" : ""} en commun
+        </span>
+      );
+    case "follows_you":
+      return <span className="text-[9px] text-emerald-600/80 truncate">Vous suit</span>;
+    case "objectives":
+      return (
+        <span className="text-[9px] text-primary/70 truncate">
+          {detail} objectif{detail > 1 ? "s" : ""} similaire{detail > 1 ? "s" : ""}
+        </span>
+      );
+    case "same_goal":
+      return <span className="text-[9px] text-primary/70 truncate">{detail}</span>;
+    case "group":
+      return (
+        <span className="text-[9px] text-primary/70 truncate">
+          {detail} groupe{detail > 1 ? "s" : ""} en commun
+        </span>
+      );
+    case "active":
+      return <span className="text-[9px] text-muted-foreground/60 truncate">Actif récemment</span>;
+    default:
+      return null;
+  }
+}
+
 // ── Suggested Users (horizontal scroll — Instagram stories style) ──
 function SuggestedUsers({ currentUserId }) {
   const [users, setUsers] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [dismissed, setDismissed] = useState(new Set());
 
   useEffect(() => {
     (async () => {
@@ -111,7 +144,9 @@ function SuggestedUsers({ currentUserId }) {
     })();
   }, []);
 
-  if (!loaded || users.length === 0) return null;
+  const visibleUsers = users.filter((u) => !dismissed.has(u.user_id));
+
+  if (!loaded || visibleUsers.length === 0) return null;
 
   return (
     <div className="mb-5 opacity-0 animate-fade-in" style={{ animationFillMode: "forwards" }}>
@@ -119,7 +154,7 @@ function SuggestedUsers({ currentUserId }) {
         <div className="flex items-center gap-2">
           <UserPlus className="w-4 h-4 text-primary" />
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Suggestions
+            Suggestions pour vous
           </span>
         </div>
         <Link to="/search" className="text-xs text-primary hover:underline">
@@ -127,11 +162,19 @@ function SuggestedUsers({ currentUserId }) {
         </Link>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin snap-x snap-mandatory">
-        {users.map((u) => (
+        {visibleUsers.map((u) => (
           <div
             key={u.user_id}
-            className="flex flex-col items-center gap-2 min-w-[100px] max-w-[100px] snap-start"
+            className="relative flex flex-col items-center gap-1.5 min-w-[110px] max-w-[110px] snap-start bg-card/50 rounded-xl p-3 border border-border/30"
           >
+            {/* Dismiss button */}
+            <button
+              onClick={() => setDismissed((prev) => new Set(prev).add(u.user_id))}
+              className="absolute top-1 right-1 p-0.5 text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors"
+              title="Masquer"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
             <Link to={`/users/${u.user_id}`}>
               <Avatar className="w-14 h-14 ring-2 ring-primary/15 ring-offset-2 ring-offset-background">
                 <AvatarImage src={u.avatar_url} alt={u.display_name} />
@@ -149,6 +192,7 @@ function SuggestedUsers({ currentUserId }) {
               {u.username && (
                 <p className="text-[10px] text-muted-foreground truncate">@{u.username}</p>
               )}
+              <SuggestionReason reason={u.reason} detail={u.reason_detail} />
               {u.subscription_tier === "premium" && (
                 <Crown className="w-3 h-3 text-[#E48C75] mx-auto mt-0.5" />
               )}
