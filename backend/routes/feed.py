@@ -610,6 +610,68 @@ async def get_comments(
     return {"comments": comments, "total": total}
 
 
+# ── Edit window constant (15 minutes — Discord/Slack benchmark) ──
+EDIT_WINDOW_SECONDS = 15 * 60
+
+
+@router.put("/comments/{comment_id}")
+async def edit_comment(
+    comment_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """Edit own comment within 15-minute window.
+
+    Benchmarked: Discord (unlimited), Slack (unlimited), Instagram (no edit).
+    InFinea uses 15-minute window — encourages thoughtful posting while allowing
+    quick fixes. Shows "(modifié)" badge after edit.
+    """
+    comment = await db.comments.find_one({"comment_id": comment_id})
+    if not comment:
+        raise HTTPException(status_code=404, detail="Commentaire introuvable")
+
+    if comment["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres commentaires")
+
+    # Enforce 15-minute edit window
+    created = datetime.fromisoformat(comment["created_at"])
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    elapsed = (datetime.now(timezone.utc) - created).total_seconds()
+    if elapsed > EDIT_WINDOW_SECONDS:
+        raise HTTPException(status_code=403, detail="La fenêtre de modification de 15 minutes est expirée")
+
+    body = await request.json()
+    content = sanitize_text(str(body.get("content", "")), max_length=500)
+    if not content:
+        raise HTTPException(status_code=400, detail="Le commentaire doit faire entre 1 et 500 caractères")
+
+    moderation = check_content(content)
+    if not moderation["allowed"]:
+        raise HTTPException(status_code=400, detail=moderation["reason"])
+
+    # Re-extract @mentions
+    blocked_ids = await get_blocked_ids(user["user_id"])
+    mentions = await extract_mentions(content, user["user_id"], blocked_ids)
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.comments.update_one(
+        {"comment_id": comment_id},
+        {"$set": {
+            "content": content,
+            "mentions": mentions,
+            "edited_at": now,
+        }},
+    )
+
+    return {
+        "comment_id": comment_id,
+        "content": content,
+        "mentions": mentions,
+        "edited_at": now,
+    }
+
+
 @router.delete("/comments/{comment_id}")
 async def delete_comment(
     comment_id: str,

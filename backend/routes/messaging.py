@@ -324,6 +324,81 @@ async def mark_conversation_read(conversation_id: str, user: dict = Depends(get_
     return {"message": "Conversation marquée comme lue"}
 
 
+# ── Edit window constant (15 minutes — Discord/Slack benchmark) ──
+EDIT_WINDOW_SECONDS = 15 * 60
+
+
+@router.put("/messages/{message_id}")
+async def edit_message(
+    message_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """Edit own message within 15-minute window.
+
+    Benchmarked: Discord (unlimited), WhatsApp (15 min), Telegram (48h).
+    InFinea uses 15-minute window — quick fix typos without altering history.
+    Shows "(modifié)" badge after edit.
+    """
+    msg = await db.messages.find_one({"message_id": message_id})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message introuvable")
+
+    if msg["sender_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres messages")
+
+    # Enforce 15-minute edit window
+    created = datetime.fromisoformat(msg["created_at"])
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    elapsed = (datetime.now(timezone.utc) - created).total_seconds()
+    if elapsed > EDIT_WINDOW_SECONDS:
+        raise HTTPException(status_code=403, detail="La fenêtre de modification de 15 minutes est expirée")
+
+    body = await request.json()
+    content = sanitize_text(str(body.get("content", "")), max_length=1000)
+    if not content:
+        raise HTTPException(status_code=400, detail="Le message ne peut pas être vide")
+
+    moderation = check_content(content)
+    if not moderation["allowed"]:
+        raise HTTPException(status_code=400, detail=moderation["reason"])
+
+    # Re-extract @mentions
+    blocked_ids = await get_blocked_ids(user["user_id"])
+    mentions = await extract_mentions(content, user["user_id"], blocked_ids)
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.messages.update_one(
+        {"message_id": message_id},
+        {"$set": {
+            "content": content,
+            "mentions": mentions,
+            "edited_at": now,
+        }},
+    )
+
+    # Update conversation last_message if this was the latest
+    conv_id = msg["conversation_id"]
+    latest = await db.messages.find_one(
+        {"conversation_id": conv_id},
+        {"message_id": 1},
+        sort=[("created_at", -1)],
+    )
+    if latest and latest["message_id"] == message_id:
+        await db.conversations.update_one(
+            {"conversation_id": conv_id},
+            {"$set": {"last_message.content": content[:100]}},
+        )
+
+    return {
+        "message_id": message_id,
+        "content": content,
+        "mentions": mentions,
+        "edited_at": now,
+    }
+
+
 @router.delete("/messages/{message_id}")
 async def delete_message(message_id: str, user: dict = Depends(get_current_user)):
     """Delete own message."""

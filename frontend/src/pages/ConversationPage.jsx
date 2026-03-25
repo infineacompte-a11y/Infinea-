@@ -7,7 +7,7 @@ import Sidebar from "@/components/Sidebar";
 import SafetyMenu from "@/components/SafetyMenu";
 import MentionInput from "@/components/MentionInput";
 import MentionText from "@/components/MentionText";
-import { ArrowLeft, Send, Loader2, MessageCircle, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, Send, Loader2, MessageCircle, Sparkles, Trash2, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
 import { sanitize } from "@/lib/sanitize";
@@ -49,6 +49,10 @@ export default function ConversationPage() {
   const [hasMore, setHasMore] = useState(false);
   const [cursor, setCursor] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Edit state (15-min window)
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -188,6 +192,52 @@ export default function ConversationPage() {
     }
   };
 
+  // Edit own message (15-min window)
+  const canEditMessage = (createdAt) => {
+    const created = new Date(createdAt);
+    return (Date.now() - created.getTime()) < 15 * 60 * 1000;
+  };
+
+  const startEditMessage = (msg) => {
+    setEditingMessageId(msg.message_id);
+    setEditText(msg.content);
+  };
+
+  const cancelEditMessage = () => {
+    setEditingMessageId(null);
+    setEditText("");
+  };
+
+  const handleSaveEditMessage = async (messageId) => {
+    if (!editText.trim() || savingEdit) return;
+    setSavingEdit(true);
+    try {
+      const res = await authFetch(`${API}/messages/${messageId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: editText.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.message_id === messageId
+              ? { ...m, content: data.content, mentions: data.mentions, edited_at: data.edited_at }
+              : m
+          )
+        );
+        cancelEditMessage();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || "Impossible de modifier");
+      }
+    } catch {
+      toast.error("Erreur de connexion");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const other = conversation?.other_user || {};
   const myId = currentUser?.user_id;
 
@@ -321,31 +371,70 @@ export default function ConversationPage() {
                       </div>
                     )}
                     <div className={`group flex items-end gap-1 ${isMine ? "justify-end" : "justify-start"}`}>
-                      {isMine && (
-                        <button
-                          onClick={() => handleDeleteMessage(msg.message_id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 p-1 rounded-full hover:bg-destructive/10 text-muted-foreground/50 hover:text-destructive mb-0.5"
-                          title="Supprimer"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                      {isMine && editingMessageId !== msg.message_id && (
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 mb-0.5">
+                          {canEditMessage(msg.created_at) && (
+                            <button
+                              onClick={() => startEditMessage(msg)}
+                              className="p-1 rounded-full hover:bg-primary/10 text-muted-foreground/50 hover:text-primary"
+                              title="Modifier"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDeleteMessage(msg.message_id)}
+                            className="p-1 rounded-full hover:bg-destructive/10 text-muted-foreground/50 hover:text-destructive"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
                       )}
-                      <div
-                        className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
-                          isMine
-                            ? "bg-gradient-to-br from-[#459492] to-[#55B3AE] text-white rounded-br-md"
-                            : "bg-card border border-border/50 text-foreground rounded-bl-md"
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap break-words">
-                          <MentionText
-                            content={msg.content}
-                            mentions={msg.mentions}
-                            currentUserId={myId}
-                            variant={isMine ? "dark" : "light"}
+                      {editingMessageId === msg.message_id ? (
+                        /* ── Inline edit mode ── */
+                        <div className="max-w-[75%] flex items-center gap-1.5">
+                          <input
+                            value={editText}
+                            onChange={(e) => setEditText(e.target.value)}
+                            maxLength={1000}
+                            className="flex-1 h-9 text-sm rounded-xl border border-primary/30 bg-primary/[0.03] px-3 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSaveEditMessage(msg.message_id); }
+                              if (e.key === "Escape") cancelEditMessage();
+                            }}
                           />
-                        </p>
-                      </div>
+                          <button onClick={() => handleSaveEditMessage(msg.message_id)} disabled={savingEdit || !editText.trim()} className="p-1.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors" title="Enregistrer">
+                            {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                          </button>
+                          <button onClick={cancelEditMessage} className="p-1.5 rounded-full text-muted-foreground/50 hover:bg-muted/50 hover:text-muted-foreground transition-colors" title="Annuler">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
+                            isMine
+                              ? "bg-gradient-to-br from-[#459492] to-[#55B3AE] text-white rounded-br-md"
+                              : "bg-card border border-border/50 text-foreground rounded-bl-md"
+                          }`}
+                        >
+                          <p className="whitespace-pre-wrap break-words">
+                            <MentionText
+                              content={msg.content}
+                              mentions={msg.mentions}
+                              currentUserId={myId}
+                              variant={isMine ? "dark" : "light"}
+                            />
+                          </p>
+                          {msg.edited_at && (
+                            <span className={`text-[9px] italic mt-0.5 block ${isMine ? "text-white/60" : "text-muted-foreground/50"}`}>
+                              (modifié)
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </React.Fragment>
                 );
