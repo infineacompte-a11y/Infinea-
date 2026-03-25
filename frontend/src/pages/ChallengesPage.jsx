@@ -460,9 +460,9 @@ function TemplateDialog({ open, onOpenChange, onLaunch, onCustom }) {
                   <Plus className="w-4 h-4 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">Cr\u00e9er un d\u00e9fi personnalis\u00e9</p>
+                  <p className="text-sm font-medium">Créer un défi personnalisé</p>
                   <p className="text-[11px] text-muted-foreground">
-                    D\u00e9finissez vos propres objectifs, dur\u00e9e et r\u00e8gles
+                    Définissez vos propres objectifs, durée et règles
                   </p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -470,9 +470,9 @@ function TemplateDialog({ open, onOpenChange, onLaunch, onCustom }) {
             )}
 
             {[
-              { key: "duo", label: "Duo", desc: "\u00c0 deux, haute responsabilit\u00e9" },
-              { key: "group", label: "Groupe", desc: "3-10 personnes, dynamique d'\u00e9quipe" },
-              { key: "community", label: "Communaut\u00e9", desc: "Ouvert \u00e0 tous, objectif collectif" },
+              { key: "duo", label: "Duo", desc: "À deux, haute responsabilité" },
+              { key: "group", label: "Groupe", desc: "3-10 personnes, dynamique d'équipe" },
+              { key: "community", label: "Communauté", desc: "Ouvert à tous, objectif collectif" },
             ].map((section) => (
               <div key={section.key}>
                 <div className="mb-2">
@@ -771,7 +771,7 @@ export default function ChallengesPage() {
                       </Button>
                       <Button variant="outline" onClick={() => setCreateOpen(true)} className="rounded-xl gap-2">
                         <Plus className="w-4 h-4" />
-                        Personnalis\u00e9
+                        Personnalisé
                       </Button>
                     </div>
                   </div>

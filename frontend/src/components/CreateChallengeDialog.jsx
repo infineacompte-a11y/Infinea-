@@ -38,8 +38,8 @@ import { API, authFetch } from "@/App";
 
 const CATEGORIES = [
   { key: "learning", label: "Apprentissage", icon: BookOpen },
-  { key: "productivity", label: "Productivit\u00e9", icon: Target },
-  { key: "well_being", label: "Bien-\u00eatre", icon: Heart },
+  { key: "productivity", label: "Productivité", icon: Target },
+  { key: "well_being", label: "Bien-être", icon: Heart },
   { key: "mixed", label: "Mixte", icon: Sparkles },
 ];
 
@@ -51,9 +51,9 @@ const CATEGORY_COLORS = {
 };
 
 const TYPES = [
-  { key: "duo", label: "Duo", desc: "\u00c0 deux", icon: Users },
-  { key: "group", label: "Groupe", desc: "3\u201310 pers.", icon: Users },
-  { key: "community", label: "Communaut\u00e9", desc: "Ouvert", icon: Globe },
+  { key: "duo", label: "Duo", desc: "À deux", icon: Users },
+  { key: "group", label: "Groupe", desc: "3–10 pers.", icon: Users },
+  { key: "community", label: "Communauté", desc: "Ouvert", icon: Globe },
 ];
 
 const GOALS = [
@@ -98,7 +98,7 @@ export default function CreateChallengeDialog({ open, onOpenChange, onCreated })
       return;
     }
     if (trimmed.length < 3) {
-      toast.error("Le titre doit faire au moins 3 caract\u00e8res");
+      toast.error("Le titre doit faire au moins 3 caractères");
       return;
     }
     setCreating(true);
@@ -119,12 +119,12 @@ export default function CreateChallengeDialog({ open, onOpenChange, onCreated })
       });
       if (res.ok) {
         const challenge = await res.json();
-        toast.success(`D\u00e9fi \u00ab ${challenge.title} \u00bb cr\u00e9\u00e9 !`);
+        toast.success(`Défi « ${challenge.title} » créé !`);
         handleClose(false);
         onCreated?.(challenge);
       } else {
         const err = await res.json().catch(() => ({}));
-        toast.error(err.detail || "Erreur lors de la cr\u00e9ation");
+        toast.error(err.detail || "Erreur lors de la création");
       }
     } catch {
       toast.error("Erreur de connexion");
@@ -141,21 +141,21 @@ export default function CreateChallengeDialog({ open, onOpenChange, onCreated })
         <DialogHeader>
           <DialogTitle className="font-sans font-semibold tracking-tight flex items-center gap-2">
             <Plus className="w-5 h-5 text-primary" />
-            Cr\u00e9er un d\u00e9fi personnalis\u00e9
+            Créer un défi personnalisé
           </DialogTitle>
           <p className="text-xs text-muted-foreground mt-0.5">
-            D\u00e9finissez votre propre challenge et invitez vos amis
+            Définissez votre propre challenge et invitez vos amis
           </p>
         </DialogHeader>
 
         <div className="space-y-5 pt-1">
           {/* ── Title ── */}
           <div>
-            <SectionLabel>Titre du d\u00e9fi *</SectionLabel>
+            <SectionLabel>Titre du défi *</SectionLabel>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value.slice(0, 100))}
-              placeholder="Ex : Sprint productivit\u00e9 7 jours"
+              placeholder="Ex : Sprint productivité 7 jours"
               className="h-10"
               autoFocus
             />
@@ -175,7 +175,7 @@ export default function CreateChallengeDialog({ open, onOpenChange, onCreated })
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value.slice(0, 500))}
-              placeholder="D\u00e9crivez l\u2019objectif et les r\u00e8gles du d\u00e9fi..."
+              placeholder="Décrivez l'objectif et les règles du défi..."
               rows={2}
               className="resize-none text-sm"
             />
@@ -186,7 +186,7 @@ export default function CreateChallengeDialog({ open, onOpenChange, onCreated })
 
           {/* ── Category ── */}
           <div>
-            <SectionLabel>Cat\u00e9gorie</SectionLabel>
+            <SectionLabel>Catégorie</SectionLabel>
             <div className="grid grid-cols-2 gap-2">
               {CATEGORIES.map((cat) => {
                 const Icon = cat.icon;
@@ -212,7 +212,7 @@ export default function CreateChallengeDialog({ open, onOpenChange, onCreated })
 
           {/* ── Challenge Type ── */}
           <div>
-            <SectionLabel>Type de d\u00e9fi</SectionLabel>
+            <SectionLabel>Type de défi</SectionLabel>
             <div className="grid grid-cols-3 gap-2">
               {TYPES.map((type) => {
                 const Icon = type.icon;
@@ -285,16 +285,16 @@ export default function CreateChallengeDialog({ open, onOpenChange, onCreated })
                 {currentGoal?.unit || ""}
               </span>
               <p className="text-[10px] text-muted-foreground ml-auto">
-                {goalType === "sessions" && "Sessions compl\u00e9t\u00e9es par tous"}
-                {goalType === "time" && "Minutes cumul\u00e9es par tous"}
-                {goalType === "streak" && "Jours cons\u00e9cutifs d\u2019activit\u00e9"}
+                {goalType === "sessions" && "Sessions complétées par tous"}
+                {goalType === "time" && "Minutes cumulées par tous"}
+                {goalType === "streak" && "Jours consécutifs d'activité"}
               </p>
             </div>
           </div>
 
           {/* ── Duration ── */}
           <div>
-            <SectionLabel>Dur\u00e9e</SectionLabel>
+            <SectionLabel>Durée</SectionLabel>
             <div className="flex flex-wrap gap-1.5">
               {DURATION_PRESETS.map((d) => (
                 <button
@@ -316,7 +316,7 @@ export default function CreateChallengeDialog({ open, onOpenChange, onCreated })
           {/* ── Privacy (group/community only) ── */}
           {challengeType !== "duo" && (
             <div>
-              <SectionLabel>Visibilit\u00e9</SectionLabel>
+              <SectionLabel>Visibilité</SectionLabel>
               <div className="flex gap-2">
                 {[
                   { key: "invite_only", label: "Sur invitation", icon: Lock },
@@ -343,8 +343,8 @@ export default function CreateChallengeDialog({ open, onOpenChange, onCreated })
               </div>
               <p className="text-[10px] text-muted-foreground mt-1.5">
                 {privacy === "public"
-                  ? "Visible dans l\u2019onglet D\u00e9couvrir \u2014 tout le monde peut rejoindre"
-                  : "Seules les personnes invit\u00e9es peuvent rejoindre"}
+                  ? "Visible dans l'onglet Découvrir — tout le monde peut rejoindre"
+                  : "Seules les personnes invitées peuvent rejoindre"}
               </p>
             </div>
           )}
@@ -353,28 +353,28 @@ export default function CreateChallengeDialog({ open, onOpenChange, onCreated })
           {title.trim() && (
             <div className="rounded-xl bg-muted/30 border border-border/50 p-3 space-y-1.5">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                R\u00e9sum\u00e9
+                Résumé
               </p>
               <p className="text-sm font-semibold">{title.trim()}</p>
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
                 <span>
                   {CATEGORIES.find((c) => c.key === category)?.label}
                 </span>
-                <span>\u00b7</span>
+                <span>·</span>
                 <span>
                   {TYPES.find((t) => t.key === challengeType)?.label}
                 </span>
-                <span>\u00b7</span>
+                <span>·</span>
                 <span>
                   {goalValue} {currentGoal?.unit}
                 </span>
-                <span>\u00b7</span>
+                <span>·</span>
                 <span>
                   {durationDays} jour{durationDays > 1 ? "s" : ""}
                 </span>
-                <span>\u00b7</span>
+                <span>·</span>
                 <span>
-                  {privacy === "public" ? "Public" : "Priv\u00e9"}
+                  {privacy === "public" ? "Public" : "Privé"}
                 </span>
               </div>
             </div>
@@ -400,7 +400,7 @@ export default function CreateChallengeDialog({ open, onOpenChange, onCreated })
             ) : (
               <Plus className="w-4 h-4" />
             )}
-            Cr\u00e9er le d\u00e9fi
+            Créer le défi
           </Button>
         </DialogFooter>
       </DialogContent>
