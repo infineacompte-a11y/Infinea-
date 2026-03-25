@@ -25,6 +25,9 @@ import {
   Reply,
   ChevronDown,
   ChevronUp,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
@@ -177,6 +180,10 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
   const [sendingReply, setSendingReply] = useState(false);
   const [expandedReplies, setExpandedReplies] = useState({}); // { comment_id: [replies] }
   const [loadingReplies, setLoadingReplies] = useState({}); // { comment_id: bool }
+  // Edit state (15-min window — Discord/Slack benchmark)
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const totalReactions =
     (activity.reaction_counts?.bravo || 0) +
@@ -341,6 +348,57 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
     } catch { /* silent */ }
   };
 
+  // ── Edit comment (15-min window) ──
+  const canEdit = (createdAt) => {
+    const created = new Date(createdAt);
+    return (Date.now() - created.getTime()) < 15 * 60 * 1000;
+  };
+
+  const startEdit = (comment) => {
+    setEditingCommentId(comment.comment_id);
+    setEditText(comment.content);
+  };
+
+  const cancelEdit = () => {
+    setEditingCommentId(null);
+    setEditText("");
+  };
+
+  const handleSaveEdit = async (commentId, parentId = null) => {
+    if (!editText.trim() || savingEdit) return;
+    setSavingEdit(true);
+    try {
+      const res = await authFetch(`${API}/comments/${commentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: editText.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const updater = (c) =>
+          c.comment_id === commentId
+            ? { ...c, content: data.content, mentions: data.mentions, edited_at: data.edited_at }
+            : c;
+        if (parentId) {
+          setExpandedReplies((prev) => ({
+            ...prev,
+            [parentId]: (prev[parentId] || []).map(updater),
+          }));
+        } else {
+          setComments((prev) => prev.map(updater));
+        }
+        cancelEdit();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || "Impossible de modifier");
+      }
+    } catch {
+      toast.error("Erreur de connexion");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   return (
     <Card className="overflow-hidden hover:shadow-md transition-shadow duration-300">
       <CardContent className="p-4">
@@ -487,49 +545,86 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
                     </Avatar>
                   </Link>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-1.5">
-                      <Link
-                        to={`/users/${c.user_id}`}
-                        className="font-semibold text-xs text-foreground hover:underline"
-                      >
-                        {c.user_name}
-                      </Link>
-                      <MentionText
-                        content={c.content}
-                        mentions={c.mentions}
-                        currentUserId={currentUserId}
-                        className="text-xs text-foreground/70 break-words"
-                      />
-                    </div>
-                    <div className="flex items-center gap-3 mt-0.5">
-                      <span className="text-[10px] text-muted-foreground/50">
-                        {timeAgo(c.created_at)}
-                      </span>
-                      <button
-                        onClick={() => {
-                          if (replyingTo === c.comment_id) {
-                            setReplyingTo(null);
-                            setReplyText("");
-                          } else {
-                            setReplyingTo(c.comment_id);
-                            const username = c.user_username || c.user_name;
-                            setReplyText(c.user_id !== currentUserId ? `@${username} ` : "");
-                          }
-                        }}
-                        className="text-[10px] font-medium text-muted-foreground hover:text-primary transition-colors"
-                      >
-                        Répondre
-                      </button>
-                    </div>
+                    {editingCommentId === c.comment_id ? (
+                      /* ── Inline edit mode ── */
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          maxLength={500}
+                          className="flex-1 h-7 text-xs rounded-md border border-primary/30 bg-primary/[0.03] px-2 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSaveEdit(c.comment_id); }
+                            if (e.key === "Escape") cancelEdit();
+                          }}
+                        />
+                        <button onClick={() => handleSaveEdit(c.comment_id)} disabled={savingEdit || !editText.trim()} className="p-1 text-primary hover:text-primary/80 transition-colors" title="Enregistrer">
+                          {savingEdit ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                        </button>
+                        <button onClick={cancelEdit} className="p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors" title="Annuler">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-baseline gap-1.5">
+                          <Link
+                            to={`/users/${c.user_id}`}
+                            className="font-semibold text-xs text-foreground hover:underline"
+                          >
+                            {c.user_name}
+                          </Link>
+                          <MentionText
+                            content={c.content}
+                            mentions={c.mentions}
+                            currentUserId={currentUserId}
+                            className="text-xs text-foreground/70 break-words"
+                          />
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5">
+                          <span className="text-[10px] text-muted-foreground/50">
+                            {timeAgo(c.created_at)}
+                            {c.edited_at && <span className="ml-1 italic">(modifié)</span>}
+                          </span>
+                          <button
+                            onClick={() => {
+                              if (replyingTo === c.comment_id) {
+                                setReplyingTo(null);
+                                setReplyText("");
+                              } else {
+                                setReplyingTo(c.comment_id);
+                                const username = c.user_username || c.user_name;
+                                setReplyText(c.user_id !== currentUserId ? `@${username} ` : "");
+                              }
+                            }}
+                            className="text-[10px] font-medium text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            Répondre
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                   {c.user_id === currentUserId ? (
-                    <button
-                      onClick={() => handleDeleteComment(c.comment_id)}
-                      className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all p-1"
-                      title="Supprimer"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                      {canEdit(c.created_at) && editingCommentId !== c.comment_id && (
+                        <button
+                          onClick={() => startEdit(c)}
+                          className="text-muted-foreground/40 hover:text-primary transition-all p-1"
+                          title="Modifier"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteComment(c.comment_id)}
+                        className="text-muted-foreground/40 hover:text-destructive transition-all p-1"
+                        title="Supprimer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   ) : (
                     <button
                       onClick={() => setReportCommentId(c.comment_id)}
@@ -575,44 +670,80 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
                           </Avatar>
                         </Link>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline gap-1.5">
-                            <Link
-                              to={`/users/${reply.user_id}`}
-                              className="font-semibold text-[11px] text-foreground hover:underline"
-                            >
-                              {reply.user_name}
-                            </Link>
-                            <MentionText
-                              content={reply.content}
-                              mentions={reply.mentions}
-                              currentUserId={currentUserId}
-                              className="text-[11px] text-foreground/70 break-words"
-                            />
-                          </div>
-                          <div className="flex items-center gap-3 mt-0.5">
-                            <span className="text-[10px] text-muted-foreground/50">
-                              {timeAgo(reply.created_at)}
-                            </span>
-                            <button
-                              onClick={() => {
-                                setReplyingTo(c.comment_id);
-                                const username = reply.user_username || reply.user_name;
-                                setReplyText(reply.user_id !== currentUserId ? `@${username} ` : "");
-                              }}
-                              className="text-[10px] font-medium text-muted-foreground hover:text-primary transition-colors"
-                            >
-                              Répondre
-                            </button>
-                          </div>
+                          {editingCommentId === reply.comment_id ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                value={editText}
+                                onChange={(e) => setEditText(e.target.value)}
+                                maxLength={500}
+                                className="flex-1 h-6 text-[11px] rounded-md border border-primary/30 bg-primary/[0.03] px-2 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSaveEdit(reply.comment_id, c.comment_id); }
+                                  if (e.key === "Escape") cancelEdit();
+                                }}
+                              />
+                              <button onClick={() => handleSaveEdit(reply.comment_id, c.comment_id)} disabled={savingEdit || !editText.trim()} className="p-1 text-primary hover:text-primary/80 transition-colors" title="Enregistrer">
+                                {savingEdit ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                              </button>
+                              <button onClick={cancelEdit} className="p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors" title="Annuler">
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-baseline gap-1.5">
+                                <Link
+                                  to={`/users/${reply.user_id}`}
+                                  className="font-semibold text-[11px] text-foreground hover:underline"
+                                >
+                                  {reply.user_name}
+                                </Link>
+                                <MentionText
+                                  content={reply.content}
+                                  mentions={reply.mentions}
+                                  currentUserId={currentUserId}
+                                  className="text-[11px] text-foreground/70 break-words"
+                                />
+                              </div>
+                              <div className="flex items-center gap-3 mt-0.5">
+                                <span className="text-[10px] text-muted-foreground/50">
+                                  {timeAgo(reply.created_at)}
+                                  {reply.edited_at && <span className="ml-1 italic">(modifié)</span>}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    setReplyingTo(c.comment_id);
+                                    const username = reply.user_username || reply.user_name;
+                                    setReplyText(reply.user_id !== currentUserId ? `@${username} ` : "");
+                                  }}
+                                  className="text-[10px] font-medium text-muted-foreground hover:text-primary transition-colors"
+                                >
+                                  Répondre
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
                         {reply.user_id === currentUserId ? (
-                          <button
-                            onClick={() => handleDeleteComment(reply.comment_id, c.comment_id)}
-                            className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all p-1"
-                            title="Supprimer"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                            {canEdit(reply.created_at) && editingCommentId !== reply.comment_id && (
+                              <button
+                                onClick={() => startEdit(reply)}
+                                className="text-muted-foreground/40 hover:text-primary transition-all p-1"
+                                title="Modifier"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteComment(reply.comment_id, c.comment_id)}
+                              className="text-muted-foreground/40 hover:text-destructive transition-all p-1"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         ) : (
                           <button
                             onClick={() => setReportCommentId(reply.comment_id)}
