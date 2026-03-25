@@ -601,10 +601,22 @@ async def get_comments(
         .to_list(limit)
     )
 
-    # Ensure reply_count and parent_id fields exist in response
+    # Ensure reply_count, parent_id, like_count fields exist in response
+    # + check which comments the current user has liked
+    comment_ids = [c["comment_id"] for c in comments]
+    my_likes = set()
+    if comment_ids:
+        liked_docs = await db.comment_likes.find(
+            {"comment_id": {"$in": comment_ids}, "user_id": user["user_id"]},
+            {"comment_id": 1},
+        ).to_list(len(comment_ids))
+        my_likes = {d["comment_id"] for d in liked_docs}
+
     for c in comments:
         c.setdefault("reply_count", 0)
         c.setdefault("parent_id", None)
+        c.setdefault("like_count", 0)
+        c["liked_by_me"] = c["comment_id"] in my_likes
 
     total = await db.comments.count_documents(comment_query)
     return {"comments": comments, "total": total}
@@ -705,3 +717,75 @@ async def delete_comment(
     )
 
     return {"message": "Commentaire supprimé"}
+
+
+# ============== COMMENT LIKES ==============
+
+@router.post("/comments/{comment_id}/like")
+async def toggle_comment_like(
+    comment_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Toggle like on a comment. One like per user per comment.
+
+    Benchmarked: Instagram (heart on comment), YouTube (thumbs up on comment).
+    Simple toggle — no reaction types, just like/unlike.
+    """
+    comment = await db.comments.find_one({"comment_id": comment_id})
+    if not comment:
+        raise HTTPException(status_code=404, detail="Commentaire introuvable")
+
+    existing = await db.comment_likes.find_one(
+        {"comment_id": comment_id, "user_id": user["user_id"]}
+    )
+
+    if existing:
+        # Unlike
+        await db.comment_likes.delete_one({"_id": existing["_id"]})
+        await db.comments.update_one(
+            {"comment_id": comment_id},
+            {"$inc": {"like_count": -1}},
+        )
+        return {"liked": False, "like_count": max(0, (comment.get("like_count", 0)) - 1)}
+    else:
+        # Like
+        now = datetime.now(timezone.utc).isoformat()
+        await db.comment_likes.insert_one({
+            "comment_id": comment_id,
+            "user_id": user["user_id"],
+            "created_at": now,
+        })
+        new_count = (comment.get("like_count", 0)) + 1
+        await db.comments.update_one(
+            {"comment_id": comment_id},
+            {"$inc": {"like_count": 1}},
+        )
+
+        # Notify comment author (non-blocking)
+        if comment["user_id"] != user["user_id"]:
+            try:
+                display = user.get("display_name") or user.get("name", "Quelqu'un")
+                await db.notifications.insert_one({
+                    "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                    "user_id": comment["user_id"],
+                    "type": "comment_like",
+                    "message": f"{display} a aimé ton commentaire",
+                    "data": {
+                        "comment_id": comment_id,
+                        "liker_id": user["user_id"],
+                        "activity_id": comment.get("activity_id"),
+                    },
+                    "read": False,
+                    "created_at": now,
+                })
+                await send_push_to_user(
+                    comment["user_id"],
+                    "Commentaire aimé",
+                    f"{display} a aimé ton commentaire",
+                    url="/community",
+                    tag="comment_like",
+                )
+            except Exception:
+                pass
+
+        return {"liked": True, "like_count": new_count}
