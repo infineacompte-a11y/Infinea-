@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { track } from "@/lib/analytics";
 import {
   ChevronRight,
@@ -19,10 +20,12 @@ import {
   BatteryMedium,
   BatteryFull,
   Check,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 import InFineaLogo from "@/components/InFineaLogo";
+import FollowButton from "@/components/FollowButton";
 
 const STEPS = [
   { id: "goals", title: "Vos objectifs", subtitle: "Qu'aimeriez-vous améliorer ?" },
@@ -63,6 +66,71 @@ const INTERESTS = [
   { id: "mental_health", label: "Santé mentale", color: "text-[#6EAAA8] bg-[#6EAAA8]/10" },
   { id: "entrepreneurship", label: "Entrepreneuriat", color: "text-[#E48C75] bg-[#E48C75]/40" },
 ];
+
+function getInitials(name) {
+  if (!name) return "U";
+  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+}
+
+// ── Social suggestions on welcome screen (Instagram/Strava pattern) ──
+function SuggestedFollows() {
+  const [users, setUsers] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await authFetch(`${API}/feed/suggested-users?limit=6`);
+        if (res.ok) {
+          const data = await res.json();
+          setUsers(data.users || []);
+        }
+      } catch { /* silent */ }
+      setLoaded(true);
+    })();
+  }, []);
+
+  if (!loaded || users.length === 0) return null;
+
+  return (
+    <div
+      className="mb-6 text-left opacity-0 animate-fade-in"
+      style={{ animationDelay: "300ms", animationFillMode: "forwards" }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Users className="w-4 h-4 text-[#459492]" />
+        <span className="text-sm font-semibold text-[#141E24]">
+          Rejoignez la communauté
+        </span>
+      </div>
+      <div className="space-y-2">
+        {users.map((u, i) => (
+          <div
+            key={u.user_id}
+            className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-[#E2E6EA]/50 shadow-sm opacity-0 animate-fade-in"
+            style={{ animationDelay: `${400 + i * 60}ms`, animationFillMode: "forwards" }}
+          >
+            <Avatar className="w-9 h-9 shrink-0">
+              <AvatarImage src={u.avatar_url} alt={u.display_name} />
+              <AvatarFallback className="bg-[#459492]/10 text-[#459492] text-xs font-medium">
+                {getInitials(u.display_name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-[#141E24] truncate">{u.display_name}</p>
+              {u.streak_days > 0 ? (
+                <p className="text-[10px] text-[#667085]">🔥 {u.streak_days}j de streak</p>
+              ) : u.username ? (
+                <p className="text-[10px] text-[#667085] truncate">@{u.username}</p>
+              ) : null}
+            </div>
+            <FollowButton userId={u.user_id} initialFollowing={false} size="xs" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function OnboardingPage() {
   const { user, setUser } = useAuth();
@@ -152,11 +220,15 @@ export default function OnboardingPage() {
           <h1 className="font-sans font-semibold tracking-tight text-3xl font-bold text-[#141E24] mb-4">
             Bienvenue, {user?.name?.split(" ")[0] || "Utilisateur"} !
           </h1>
-          <Card className="mb-8 text-left rounded-2xl shadow-xl bg-white border border-[#E2E6EA]/50">
+          <Card className="mb-6 text-left rounded-2xl shadow-xl bg-white border border-[#E2E6EA]/50">
             <CardContent className="p-6">
               <p className="text-sm leading-relaxed text-[#141E24]">{welcomeMessage}</p>
             </CardContent>
           </Card>
+
+          {/* Social suggestions — follow users before starting */}
+          <SuggestedFollows />
+
           <Button
             onClick={handleFinish}
             className="w-full h-12 rounded-xl shadow-md bg-gradient-to-r from-[#459492] to-[#55B3AE] text-white hover:shadow-lg hover:brightness-105 transition-all duration-200 btn-press"
