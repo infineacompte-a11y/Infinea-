@@ -45,6 +45,7 @@ from routes.feed import router as feed_router
 from routes.challenges import router as challenges_router
 from routes.safety import router as safety_router
 from routes.messaging import router as messaging_router
+from routes.leaderboard import router as leaderboard_router
 
 api_router.include_router(auth_router)
 api_router.include_router(onboarding_router)
@@ -67,6 +68,7 @@ api_router.include_router(feed_router)
 api_router.include_router(challenges_router)
 api_router.include_router(safety_router)
 api_router.include_router(messaging_router)
+api_router.include_router(leaderboard_router)
 
 # Public routes (no /api prefix)
 app.include_router(social_public_router)
