@@ -137,16 +137,29 @@ export default function AdminModerationPage() {
         {/* Dark Header */}
         <div className="section-dark-header px-4 lg:px-8 pt-8 lg:pt-10 pb-8">
           <div className="max-w-5xl mx-auto">
-            <div className="flex items-center gap-3">
-              <Shield className="w-7 h-7 text-white/80" />
-              <div>
-                <h1 className="text-display text-3xl lg:text-4xl font-semibold text-white opacity-0 animate-fade-in">
-                  Modération
-                </h1>
-                <p className="text-white/60 text-sm mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
-                  Queue de signalements — administration
-                </p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Shield className="w-7 h-7 text-white/80" />
+                <div>
+                  <h1 className="text-display text-3xl lg:text-4xl font-semibold text-white opacity-0 animate-fade-in">
+                    Modération
+                  </h1>
+                  <p className="text-white/60 text-sm mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
+                    Queue de signalements — administration
+                  </p>
+                </div>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white/70 hover:text-white hover:bg-white/10 gap-2 rounded-lg opacity-0 animate-fade-in"
+                style={{ animationDelay: "100ms", animationFillMode: "forwards" }}
+                onClick={() => { fetchStats(); fetchReports(); }}
+                disabled={isLoading}
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline text-sm">Actualiser</span>
+              </Button>
             </div>
           </div>
         </div>
