@@ -30,6 +30,7 @@ import SafetyMenu from "@/components/SafetyMenu";
 import ReportDialog from "@/components/ReportDialog";
 import MentionInput from "@/components/MentionInput";
 import MentionText from "@/components/MentionText";
+import ReactionsDetailDialog from "@/components/ReactionsDetailDialog";
 import { sanitize } from "@/lib/sanitize";
 
 // ── Reaction config (InFinea DNA) ──
@@ -164,6 +165,7 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
   const [sendingComment, setSendingComment] = useState(false);
   const [reportCommentId, setReportCommentId] = useState(null);
   const [reactingType, setReactingType] = useState(null);
+  const [reactionsDetailOpen, setReactionsDetailOpen] = useState(false);
 
   const totalReactions =
     (activity.reaction_counts?.bravo || 0) +
@@ -330,11 +332,14 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
 
           <div className="flex-1" />
 
-          {/* Reactions total */}
+          {/* Reactions total — clickable to see who reacted */}
           {totalReactions > 0 && (
-            <span className="text-[11px] text-muted-foreground/50 mr-1">
-              {totalReactions} réaction{totalReactions > 1 ? "s" : ""}
-            </span>
+            <button
+              onClick={() => setReactionsDetailOpen(true)}
+              className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors mr-1"
+            >
+              {totalReactions} r\u00e9action{totalReactions > 1 ? "s" : ""}
+            </button>
           )}
 
           {/* Comment toggle */}
@@ -461,6 +466,14 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
             targetId={reportCommentId}
           />
         )}
+
+        {/* Reactions detail dialog */}
+        <ReactionsDetailDialog
+          open={reactionsDetailOpen}
+          onOpenChange={setReactionsDetailOpen}
+          activityId={activity.activity_id}
+          reactionCounts={activity.reaction_counts}
+        />
       </CardContent>
     </Card>
   );
