@@ -22,6 +22,11 @@ RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 FROM_EMAIL = os.getenv("EMAIL_FROM", "InFinea <noreply@infinea.app>")
 APP_URL = os.getenv("APP_URL", "https://infinea.app")
 
+if not RESEND_API_KEY:
+    logger.warning("⚠ RESEND_API_KEY not set — all emails will be silently skipped")
+else:
+    logger.info("✓ Email service ready (Resend)")
+
 
 # ── Core send helper ──
 
