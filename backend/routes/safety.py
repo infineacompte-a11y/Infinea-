@@ -1,14 +1,16 @@
 """
 InFinea — Social Safety routes.
-User blocking, content reporting, RGPD account deletion.
+User blocking, content reporting, admin moderation, RGPD account deletion.
 
 Design:
 - Blocks are bidirectional in effect (A blocks B → neither sees the other).
-- Reports are stored for admin review (no auto-action beyond logging).
+- Reports are stored for admin review with a full moderation queue.
+- Admin actions: dismiss, warn, remove_content, suspend_user.
 - Account deletion cascades across all social collections.
-- Benchmarked: Instagram block/report UX, RGPD Article 17.
+- Benchmarked: Instagram block/report UX, Discord mod queue, RGPD Article 17.
 """
 
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -16,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 
 from database import db
 from auth import get_current_user
+from config import logger
 
 router = APIRouter()
 
@@ -162,6 +165,276 @@ async def report_content(
     })
 
     return {"message": "Signalement enregistré. Merci.", "report_id": report_id}
+
+
+# ============== ADMIN MODERATION ==============
+
+ADMIN_ACTIONS = {"dismiss", "warn", "remove_content", "suspend_user"}
+
+
+def _require_admin(user: dict):
+    """Raise 403 if user is not in ADMIN_EMAILS."""
+    raw = os.environ.get("ADMIN_EMAILS", "")
+    emails = [e.strip().lower() for e in raw.split(",") if e.strip()]
+    if user.get("email", "").lower() not in emails:
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs")
+
+
+@router.get("/admin/reports/stats")
+async def get_moderation_stats(user: dict = Depends(get_current_user)):
+    """Dashboard stats for the moderation queue."""
+    _require_admin(user)
+
+    pending = await db.reports.count_documents({"status": "pending"})
+    resolved = await db.reports.count_documents({"status": {"$in": ["dismissed", "resolved"]}})
+
+    # Reports by reason (top reasons)
+    reason_pipeline = [
+        {"$match": {"status": "pending"}},
+        {"$group": {"_id": "$reason", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    by_reason = await db.reports.aggregate(reason_pipeline).to_list(20)
+
+    # Reports by type
+    type_pipeline = [
+        {"$match": {"status": "pending"}},
+        {"$group": {"_id": "$target_type", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    by_type = await db.reports.aggregate(type_pipeline).to_list(20)
+
+    return {
+        "pending": pending,
+        "resolved": resolved,
+        "by_reason": {r["_id"]: r["count"] for r in by_reason},
+        "by_type": {t["_id"]: t["count"] for t in by_type},
+    }
+
+
+@router.get("/admin/reports")
+async def get_reports(
+    user: dict = Depends(get_current_user),
+    status: str = "pending",
+    target_type: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List reports for admin review."""
+    _require_admin(user)
+
+    query = {}
+    if status:
+        query["status"] = status
+    if target_type:
+        query["target_type"] = target_type
+
+    reports = (
+        await db.reports.find(query, {"_id": 0})
+        .sort("created_at", -1)
+        .skip(offset)
+        .limit(limit)
+        .to_list(limit)
+    )
+
+    # Enrich with reporter info
+    reporter_ids = list({r["reporter_id"] for r in reports if r.get("reporter_id") != "deleted_user"})
+    if reporter_ids:
+        reporters = await db.users.find(
+            {"user_id": {"$in": reporter_ids}},
+            {"_id": 0, "user_id": 1, "display_name": 1, "username": 1, "avatar_url": 1},
+        ).to_list(len(reporter_ids))
+        reporter_map = {u["user_id"]: u for u in reporters}
+    else:
+        reporter_map = {}
+
+    for r in reports:
+        rid = r.get("reporter_id", "")
+        reporter = reporter_map.get(rid, {})
+        r["reporter_name"] = reporter.get("display_name", "Utilisateur supprimé")
+        r["reporter_avatar"] = reporter.get("avatar_url")
+
+    total = await db.reports.count_documents(query)
+
+    return {"reports": reports, "total": total}
+
+
+@router.get("/admin/reports/{report_id}")
+async def get_report_detail(report_id: str, user: dict = Depends(get_current_user)):
+    """Get full report detail with target context."""
+    _require_admin(user)
+
+    report = await db.reports.find_one({"report_id": report_id}, {"_id": 0})
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    # Enrich reporter
+    if report.get("reporter_id") and report["reporter_id"] != "deleted_user":
+        reporter = await db.users.find_one(
+            {"user_id": report["reporter_id"]},
+            {"_id": 0, "user_id": 1, "display_name": 1, "username": 1, "avatar_url": 1},
+        )
+        report["reporter"] = reporter or {}
+    else:
+        report["reporter"] = {"display_name": "Utilisateur supprimé"}
+
+    # Enrich target context
+    target = None
+    tt = report.get("target_type")
+    tid = report.get("target_id")
+
+    if tt == "comment":
+        target = await db.comments.find_one({"comment_id": tid}, {"_id": 0})
+    elif tt == "activity":
+        target = await db.activities.find_one({"activity_id": tid}, {"_id": 0})
+    elif tt == "user":
+        target = await db.users.find_one(
+            {"user_id": tid},
+            {"_id": 0, "user_id": 1, "display_name": 1, "username": 1,
+             "avatar_url": 1, "bio": 1, "email": 1, "created_at": 1},
+        )
+    elif tt == "group":
+        target = await db.groups.find_one({"group_id": tid}, {"_id": 0})
+
+    report["target"] = target
+
+    # Count previous reports against same target
+    previous_count = await db.reports.count_documents({
+        "target_type": tt,
+        "target_id": tid,
+        "report_id": {"$ne": report_id},
+    })
+    report["previous_reports_count"] = previous_count
+
+    # If target is a user, count total reports against them
+    if tt == "user":
+        total_user_reports = await db.reports.count_documents({"target_id": tid})
+        report["total_user_reports"] = total_user_reports
+
+    return report
+
+
+@router.put("/admin/reports/{report_id}/action")
+async def moderate_report(
+    report_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Take moderation action on a report.
+    Actions: dismiss, warn, remove_content, suspend_user.
+    """
+    _require_admin(user)
+
+    body = await request.json()
+    action = body.get("action", "")
+    admin_note = str(body.get("note", "")).strip()[:500]
+
+    if action not in ADMIN_ACTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Action invalide. Choix : {', '.join(sorted(ADMIN_ACTIONS))}",
+        )
+
+    report = await db.reports.find_one({"report_id": report_id}, {"_id": 0})
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    now = datetime.now(timezone.utc).isoformat()
+    target_type = report.get("target_type")
+    target_id = report.get("target_id")
+
+    # ── Execute action ──
+    result_message = ""
+
+    if action == "dismiss":
+        result_message = "Report dismissed"
+
+    elif action == "warn":
+        # Send warning notification to the reported user (target_id if user, or content owner)
+        warned_user_id = target_id
+        if target_type == "comment":
+            comment = await db.comments.find_one({"comment_id": target_id}, {"user_id": 1})
+            warned_user_id = comment["user_id"] if comment else None
+        elif target_type == "activity":
+            activity = await db.activities.find_one({"activity_id": target_id}, {"user_id": 1})
+            warned_user_id = activity["user_id"] if activity else None
+
+        if warned_user_id:
+            await db.notifications.insert_one({
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": warned_user_id,
+                "type": "moderation_warning",
+                "message": "Un de tes contenus a été signalé et ne respecte pas les règles de la communauté. Merci de rester bienveillant.",
+                "data": {"reason": report.get("reason")},
+                "read": False,
+                "created_at": now,
+            })
+            result_message = f"Warning sent to {warned_user_id}"
+        else:
+            result_message = "Warning skipped — target user not found"
+
+    elif action == "remove_content":
+        if target_type == "comment":
+            del_result = await db.comments.delete_one({"comment_id": target_id})
+            result_message = f"Comment deleted ({del_result.deleted_count})"
+        elif target_type == "activity":
+            del_result = await db.activities.delete_one({"activity_id": target_id})
+            # Also clean up reactions and comments on this activity
+            await db.reactions.delete_many({"activity_id": target_id})
+            await db.comments.delete_many({"activity_id": target_id})
+            result_message = f"Activity + reactions + comments deleted ({del_result.deleted_count})"
+        else:
+            result_message = f"Cannot remove content for target_type={target_type}"
+
+    elif action == "suspend_user":
+        suspended_user_id = target_id
+        if target_type != "user":
+            # Find the content owner
+            if target_type == "comment":
+                doc = await db.comments.find_one({"comment_id": target_id}, {"user_id": 1})
+                suspended_user_id = doc["user_id"] if doc else None
+            elif target_type == "activity":
+                doc = await db.activities.find_one({"activity_id": target_id}, {"user_id": 1})
+                suspended_user_id = doc["user_id"] if doc else None
+
+        if suspended_user_id:
+            await db.users.update_one(
+                {"user_id": suspended_user_id},
+                {"$set": {"suspended": True, "suspended_at": now, "suspended_reason": report.get("reason")}},
+            )
+            # Send notification
+            await db.notifications.insert_one({
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": suspended_user_id,
+                "type": "account_suspended",
+                "message": "Ton compte a été suspendu suite à des signalements. Contacte le support pour plus d'informations.",
+                "data": {"reason": report.get("reason")},
+                "read": False,
+                "created_at": now,
+            })
+            result_message = f"User {suspended_user_id} suspended"
+        else:
+            result_message = "Suspend skipped — target user not found"
+
+    # ── Update report status ──
+    new_status = "dismissed" if action == "dismiss" else "resolved"
+    await db.reports.update_one(
+        {"report_id": report_id},
+        {
+            "$set": {
+                "status": new_status,
+                "action_taken": action,
+                "admin_note": admin_note,
+                "resolved_by": user["user_id"],
+                "resolved_at": now,
+            }
+        },
+    )
+
+    logger.info(f"Moderation: {action} on report {report_id} by admin {user['user_id']}: {result_message}")
+
+    return {"message": result_message, "action": action, "status": new_status}
 
 
 # ============== CHECK BLOCK STATUS ==============

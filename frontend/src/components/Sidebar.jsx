@@ -26,6 +26,7 @@ import {
   Search,
   MessageCircle,
   Medal,
+  Shield,
 } from "lucide-react";
 import InFineaLogo from "@/components/InFineaLogo";
 import { API, authFetch, useAuth } from "@/App";
@@ -176,7 +177,7 @@ function NavItem({ to, label, icon: Icon, isActive, isNotif, unreadCount, mobile
   );
 }
 
-function GroupedNav({ mobile = false, onNavigate, unreadCount = 0, unreadMessages = 0 }) {
+function GroupedNav({ mobile = false, onNavigate, unreadCount = 0, unreadMessages = 0, isAdmin = false }) {
   const location = useLocation();
   let globalIndex = 0;
 
@@ -237,6 +238,27 @@ function GroupedNav({ mobile = false, onNavigate, unreadCount = 0, unreadMessage
           );
         })}
       </div>
+
+      {/* Admin — visible only for admins */}
+      {isAdmin && (
+        <>
+          <div className="my-2 mx-3 h-px bg-gradient-to-r from-transparent via-[#E48C75]/30 to-transparent" />
+          <div className="px-3 mb-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#E48C75]/60">
+              Admin
+            </span>
+          </div>
+          <NavItem
+            to="/admin/moderation"
+            label="Modération"
+            icon={Shield}
+            isActive={location.pathname === "/admin/moderation"}
+            mobile={mobile}
+            onNavigate={onNavigate}
+            animDelay={mobile ? null : (globalIndex++) * 25}
+          />
+        </>
+      )}
     </div>
   );
 }
@@ -246,7 +268,8 @@ let _sidebarScrollY = 0;
 
 export default function Sidebar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const isAdmin = !!user?.is_admin;
   const navigate = useNavigate();
   const unreadCount = useUnreadCount();
   const unreadMessages = useUnreadMessages();
@@ -281,7 +304,7 @@ export default function Sidebar() {
 
         {/* Nav */}
         <nav ref={navRef} onScroll={handleNavScroll} className="flex-1 overflow-y-auto px-3 py-1 scrollbar-thin">
-          <GroupedNav unreadCount={unreadCount} unreadMessages={unreadMessages} />
+          <GroupedNav unreadCount={unreadCount} unreadMessages={unreadMessages} isAdmin={isAdmin} />
         </nav>
 
         {/* Logout */}
@@ -323,7 +346,7 @@ export default function Sidebar() {
 
               {/* Scrollable nav */}
               <nav className="flex-1 overflow-y-auto px-3 pb-2">
-                <GroupedNav mobile onNavigate={() => setMobileMenuOpen(false)} unreadCount={unreadCount} unreadMessages={unreadMessages} />
+                <GroupedNav mobile onNavigate={() => setMobileMenuOpen(false)} unreadCount={unreadCount} unreadMessages={unreadMessages} isAdmin={isAdmin} />
               </nav>
 
               {/* Logout — properly positioned, not absolute */}

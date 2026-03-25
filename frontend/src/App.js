@@ -38,6 +38,7 @@ import CommunityFeedPage from "@/pages/CommunityFeedPage";
 import BlockedUsersPage from "@/pages/BlockedUsersPage";
 import MessagesPage from "@/pages/MessagesPage";
 import ConversationPage from "@/pages/ConversationPage";
+import AdminModerationPage from "@/pages/AdminModerationPage";
 import NotFound from "@/pages/NotFound";
 import CoachFAB from "@/components/CoachFAB";
 import MicroInstantBanner from "@/components/MicroInstantBanner";
@@ -553,6 +554,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ConversationPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/moderation"
+        element={
+          <ProtectedRoute>
+            <AdminModerationPage />
           </ProtectedRoute>
         }
       />
