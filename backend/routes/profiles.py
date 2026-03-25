@@ -5,7 +5,7 @@ Public profiles, user search, follow/unfollow.
 Design:
 - Profile data lives ON the user document (no separate collection = no joins).
 - Follow relationships stored in a `follows` collection (follower_id, following_id).
-- Search matches on name, display_name, and username.
+- Search matches on name, display_name, and username (email excluded for privacy).
 - Benchmarked: Strava athlete profiles, Instagram user search.
 """
 
@@ -171,7 +171,7 @@ async def search_users(
     user: dict = Depends(get_current_user),
     limit: int = Query(20, ge=1, le=50),
 ):
-    """Search users by name, display_name, username, or email local part."""
+    """Search users by name, display_name, or username."""
     # Strip @ prefix if user searches "@john.doe"
     search_q = q.lstrip("@")
 
@@ -184,7 +184,6 @@ async def search_users(
             {"name": {"$regex": search_q, "$options": "i"}},
             {"display_name": {"$regex": search_q, "$options": "i"}},
             {"username": {"$regex": search_q, "$options": "i"}},
-            {"email": {"$regex": f"^{search_q}", "$options": "i"}},
         ],
         "user_id": {"$nin": exclude_ids},
     }
