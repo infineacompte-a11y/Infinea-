@@ -33,6 +33,7 @@ import {
   Ban,
   Trash2,
   AlertTriangle,
+  Camera,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
@@ -49,6 +50,8 @@ export default function ProfilePage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const avatarInputRef = React.useRef(null);
 
   // Fetch social stats (followers/following counts)
   const fetchSocialStats = useCallback(async () => {
@@ -182,6 +185,48 @@ export default function ProfilePage() {
     }
   };
 
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Client-side validation
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Format non supporté. Utilisez JPEG, PNG ou WebP.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("L'image ne doit pas dépasser 5 Mo");
+      return;
+    }
+
+    setAvatarUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await authFetch(`${API}/profile/avatar`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setUser((prev) => ({ ...prev, picture: data.avatar_url, avatar_url: data.avatar_url }));
+        toast.success("Photo de profil mise à jour");
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || "Erreur lors de l'upload");
+      }
+    } catch {
+      toast.error("Erreur de connexion");
+    } finally {
+      setAvatarUploading(false);
+      // Reset input so same file can be re-selected
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+  };
+
   const getInitials = (name) => {
     if (!name) return "U";
     return name
@@ -201,12 +246,34 @@ export default function ProfilePage() {
           <div className="max-w-3xl mx-auto">
             <div className="flex items-center gap-5">
               <div className="avatar-gradient-ring relative flex items-center justify-center opacity-0 animate-fade-in">
-                <Avatar className="w-20 h-20 lg:w-24 lg:h-24 ring-offset-2 ring-offset-[#275255]">
-                  <AvatarImage src={user?.picture} alt={user?.display_name || user?.name} />
-                  <AvatarFallback className="bg-white/10 text-white text-2xl">
-                    {getInitials(user?.display_name || user?.name)}
-                  </AvatarFallback>
-                </Avatar>
+                <button
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="relative group cursor-pointer"
+                  disabled={avatarUploading}
+                  title="Changer la photo de profil"
+                >
+                  <Avatar className="w-20 h-20 lg:w-24 lg:h-24 ring-offset-2 ring-offset-[#275255]">
+                    <AvatarImage src={user?.avatar_url || user?.picture} alt={user?.display_name || user?.name} />
+                    <AvatarFallback className="bg-white/10 text-white text-2xl">
+                      {getInitials(user?.display_name || user?.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  {/* Camera overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 group-hover:bg-black/40 transition-colors">
+                    {avatarUploading ? (
+                      <Loader2 className="w-6 h-6 text-white animate-spin" />
+                    ) : (
+                      <Camera className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </div>
+                </button>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleAvatarUpload}
+                  className="hidden"
+                />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-1 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>

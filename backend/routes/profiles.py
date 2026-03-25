@@ -10,17 +10,21 @@ Design:
 """
 
 import asyncio
+import logging
+import os
 import re
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Depends, Query, Request
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, UploadFile, File
 
 from database import db
 from auth import get_current_user
 from helpers import send_push_to_user
 from services.moderation import get_blocked_ids, check_content, sanitize_text
 from services.email_service import send_email_to_user, email_new_follower
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -116,6 +120,97 @@ async def update_my_profile(
         "bio": doc.get("bio", ""),
         "avatar_url": doc.get("avatar_url") or doc.get("picture", ""),
     }
+
+
+# ============== AVATAR UPLOAD ==============
+
+AVATAR_MAX_SIZE = 5 * 1024 * 1024  # 5 MB
+AVATAR_ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
+CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "")
+
+
+@router.post("/profile/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
+    """Upload or replace profile avatar via Cloudinary.
+
+    Accepts JPEG, PNG, or WebP up to 5 MB. Cloudinary auto-crops to face,
+    resizes to 400x400, and serves optimized WebP via CDN.
+
+    Benchmarked: Instagram (face-aware crop), LinkedIn (square crop + CDN).
+    """
+    if not CLOUDINARY_URL:
+        raise HTTPException(
+            status_code=503,
+            detail="Service d'upload non configuré (CLOUDINARY_URL manquant)",
+        )
+
+    # Validate content type
+    if file.content_type not in AVATAR_ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Format non supporté. Utilisez JPEG, PNG ou WebP.",
+        )
+
+    # Read and validate size
+    contents = await file.read()
+    if len(contents) > AVATAR_MAX_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail="L'image ne doit pas dépasser 5 Mo",
+        )
+
+    if len(contents) < 1024:
+        raise HTTPException(
+            status_code=400,
+            detail="Fichier trop petit ou corrompu",
+        )
+
+    # Upload to Cloudinary (run in thread — SDK is synchronous)
+    try:
+        import cloudinary
+        import cloudinary.uploader
+
+        # cloudinary auto-configures from CLOUDINARY_URL env var
+        result = await asyncio.to_thread(
+            cloudinary.uploader.upload,
+            contents,
+            folder="infinea/avatars",
+            public_id=f"user_{user['user_id']}",
+            overwrite=True,
+            transformation=[
+                {
+                    "width": 400,
+                    "height": 400,
+                    "crop": "fill",
+                    "gravity": "face",
+                    "quality": "auto",
+                    "fetch_format": "auto",
+                },
+            ],
+            resource_type="image",
+        )
+        avatar_url = result["secure_url"]
+    except Exception as e:
+        logger.exception(f"Cloudinary upload failed for {user['user_id']}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Erreur lors de l'upload de l'image",
+        )
+
+    # Update user document
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "avatar_url": avatar_url,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+
+    logger.info(f"Avatar updated for {user['user_id']}: {avatar_url[:60]}...")
+    return {"avatar_url": avatar_url}
 
 
 # ============== PRIVACY SETTINGS ==============
