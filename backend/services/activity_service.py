@@ -25,6 +25,7 @@ ACTIVITY_TYPES = {
     "badge_earned",
     "streak_milestone",
     "challenge_completed",
+    "post",  # Manual user post (text, reflections, questions)
 }
 
 # Streak milestones that generate activities (avoid noise)

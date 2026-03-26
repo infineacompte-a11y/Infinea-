@@ -73,6 +73,12 @@ const ACTIVITY_CONFIG = {
     color: "#459492",
     getText: (data) => `a complété le défi "${data.challenge_title || "un défi"}" !`,
   },
+  post: {
+    icon: MessageCircle,
+    color: "#55B3AE",
+    getText: () => null, // Post content rendered separately (full text, not a one-liner)
+    isPost: true,
+  },
 };
 
 function timeAgo(iso) {
@@ -515,17 +521,30 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
                 />
               )}
             </div>
-            <div className="flex items-center gap-1.5 mt-1">
-              <div
-                className="w-5 h-5 rounded-md flex items-center justify-center"
-                style={{ backgroundColor: `${config.color}15` }}
-              >
-                <Icon className="w-3 h-3" style={{ color: config.color }} />
+            {config.isPost ? (
+              /* Manual post: full text content with @mentions */
+              <div className="mt-2">
+                <p className="text-sm text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
+                  <MentionText
+                    content={activity.data?.content || ""}
+                    mentions={activity.data?.mentions || []}
+                    currentUserId={currentUserId}
+                  />
+                </p>
               </div>
-              <p className="text-sm text-foreground/80">
-                {config.getText(activity.data || {})}
-              </p>
-            </div>
+            ) : (
+              <div className="flex items-center gap-1.5 mt-1">
+                <div
+                  className="w-5 h-5 rounded-md flex items-center justify-center"
+                  style={{ backgroundColor: `${config.color}15` }}
+                >
+                  <Icon className="w-3 h-3" style={{ color: config.color }} />
+                </div>
+                <p className="text-sm text-foreground/80">
+                  {config.getText(activity.data || {})}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -950,6 +969,96 @@ const quickLinks = [
 ];
 
 // ── Main Page ──
+// ── Post Composer (LinkedIn/Strava benchmark — "What's on your mind?") ──
+function PostComposer({ user, onPost }) {
+  const [expanded, setExpanded] = useState(false);
+  const [text, setText] = useState("");
+  const [posting, setPosting] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!text.trim() || posting) return;
+    setPosting(true);
+    const ok = await onPost(text.trim());
+    if (ok) {
+      setText("");
+      setExpanded(false);
+    }
+    setPosting(false);
+  };
+
+  return (
+    <Card className="mb-4 opacity-0 animate-fade-in" style={{ animationFillMode: "forwards" }}>
+      <CardContent className="p-3">
+        {!expanded ? (
+          <button
+            onClick={() => setExpanded(true)}
+            className="w-full flex items-center gap-3 text-left"
+          >
+            <Avatar className="w-9 h-9 shrink-0">
+              <AvatarImage src={user?.avatar_url || user?.picture} />
+              <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                {getInitials(user?.display_name || user?.name)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="text-sm text-muted-foreground/60 flex-1">
+              Partagez une réflexion, un progrès, une question...
+            </span>
+            <Send className="w-4 h-4 text-primary/30" />
+          </button>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <div className="flex items-start gap-3">
+              <Avatar className="w-9 h-9 shrink-0 mt-1">
+                <AvatarImage src={user?.avatar_url || user?.picture} />
+                <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                  {getInitials(user?.display_name || user?.name)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Qu'avez-vous appris aujourd'hui ? Un défi à partager ?"
+                  maxLength={2000}
+                  rows={3}
+                  className="w-full text-sm resize-none rounded-lg border border-border/50 bg-muted/30 p-2.5 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:bg-background placeholder:text-muted-foreground/40"
+                  autoFocus
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-[10px] text-muted-foreground/40">
+                    {text.length}/2000
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-7"
+                      onClick={() => { setExpanded(false); setText(""); }}
+                    >
+                      Annuler
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="text-xs h-7 gap-1.5 bg-[#459492] hover:bg-[#3a7d7b]"
+                      disabled={!text.trim() || text.trim().length < 3 || posting}
+                    >
+                      {posting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                      Publier
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function CommunityFeedPage() {
   const { user } = useAuth();
   const [tab, setTab] = useState("feed"); // "feed" | "discover"
@@ -1023,6 +1132,30 @@ export default function CommunityFeedPage() {
       }
     } catch {
       toast.error("Erreur de connexion");
+    }
+  };
+
+  // Create manual post
+  const handleCreatePost = async (content) => {
+    try {
+      const res = await authFetch(`${API}/activities`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      if (res.ok) {
+        const newActivity = await res.json();
+        setActivities((prev) => [newActivity, ...prev]);
+        toast.success("Post publié !");
+        return true;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || "Impossible de publier");
+        return false;
+      }
+    } catch {
+      toast.error("Erreur de connexion");
+      return false;
     }
   };
 
@@ -1114,6 +1247,9 @@ export default function CommunityFeedPage() {
 
         <div className="px-4 lg:px-8">
           <div className="max-w-2xl mx-auto mt-5">
+            {/* Post composer — feed tab only */}
+            {tab === "feed" && <PostComposer user={user} onPost={handleCreatePost} />}
+
             {/* Suggested users — show on feed tab when feed is empty or on discover tab */}
             {(tab === "discover" || (tab === "feed" && !loading && activities.length === 0)) && (
               <SuggestedUsers currentUserId={user?.user_id} />
