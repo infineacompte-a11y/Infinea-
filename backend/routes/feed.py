@@ -466,6 +466,115 @@ async def get_own_activities(
     }
 
 
+# ============== CREATE MANUAL POST ==============
+
+@router.post("/activities")
+async def create_manual_post(
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """Create a manual text post in the community feed.
+
+    Benchmarked: Strava activity post, LinkedIn text post, Instagram caption.
+    Allows users to share reflections, milestones, questions, and thoughts
+    beyond auto-generated activities.
+
+    Body:
+        content (str): Post text, 1-2000 chars.
+        visibility (str, optional): "public" | "followers". Default: user preference or "public".
+        category (str, optional): "learning" | "productivity" | "well_being" | "general".
+    """
+    body = await request.json()
+    content = sanitize_text(str(body.get("content", "")), max_length=2000)
+    if not content or len(content.strip()) < 3:
+        raise HTTPException(status_code=400, detail="Le post doit faire au moins 3 caractères")
+
+    # Moderation
+    moderation = check_content(content)
+    if not moderation["allowed"]:
+        raise HTTPException(status_code=400, detail=moderation["reason"])
+
+    # Visibility: respect user preference or explicit choice
+    visibility = body.get("visibility")
+    if visibility not in ("public", "followers"):
+        privacy = user.get("privacy", {})
+        visibility = privacy.get("activity_default_visibility", "public")
+        if visibility == "private":
+            visibility = "public"
+
+    # Category (optional — enriches feed ranking via contextual boost)
+    category = body.get("category", "general")
+    if category not in ("learning", "productivity", "well_being", "general"):
+        category = "general"
+
+    # Extract @mentions
+    blocked_ids = await get_blocked_ids(user["user_id"])
+    mentions = await extract_mentions(content, user["user_id"], blocked_ids)
+
+    now = datetime.now(timezone.utc).isoformat()
+    activity_id = f"act_{uuid.uuid4().hex[:12]}"
+
+    activity_doc = {
+        "activity_id": activity_id,
+        "user_id": user["user_id"],
+        "type": "post",
+        "data": {
+            "content": content,
+            "category": category,
+            "mentions": mentions,
+        },
+        "visibility": visibility,
+        "reaction_counts": {"bravo": 0, "inspire": 0, "fire": 0},
+        "comment_count": 0,
+        "created_at": now,
+    }
+
+    await db.activities.insert_one(activity_doc)
+
+    # Notify mentioned users
+    display = user.get("display_name") or user.get("name", "Quelqu'un")
+    for m in mentions:
+        try:
+            await db.notifications.insert_one({
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": m["user_id"],
+                "type": "mention",
+                "message": f"{display} vous a mentionné dans un post",
+                "data": {
+                    "activity_id": activity_id,
+                    "mentioner_id": user["user_id"],
+                },
+                "read": False,
+                "created_at": now,
+            })
+            await send_push_to_user(
+                m["user_id"],
+                f"{display} vous a mentionné",
+                content[:80],
+                url="/community",
+                tag="mention",
+            )
+            subject, html = email_mention(display, content, "/community")
+            await send_email_to_user(m["user_id"], subject, html, email_category="social")
+        except Exception:
+            pass
+
+    # Return enriched activity for immediate frontend display
+    return {
+        "activity_id": activity_id,
+        "user_id": user["user_id"],
+        "type": "post",
+        "data": activity_doc["data"],
+        "visibility": visibility,
+        "reaction_counts": {"bravo": 0, "inspire": 0, "fire": 0},
+        "comment_count": 0,
+        "created_at": now,
+        "user_name": user.get("display_name") or user.get("name", "Utilisateur"),
+        "user_username": user.get("username"),
+        "user_avatar": user.get("avatar_url") or user.get("picture"),
+    }
+
+
 # ============== DELETE ACTIVITY ==============
 
 @router.delete("/activities/{activity_id}")

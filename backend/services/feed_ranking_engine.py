@@ -87,6 +87,7 @@ TYPE_SCORES = {
     "challenge_completed": 1.00,   # Social proof of collective achievement
     "badge_earned":        0.90,   # Celebration moment, inspires aspiration
     "streak_milestone":    0.85,   # Motivates consistency in others
+    "post":                0.75,   # Manual user-generated content (high intent, personal voice)
     "session_completed":   0.55,   # Routine activity, lower novelty
 }
 
@@ -97,6 +98,7 @@ HALF_LIFE_HOURS = {
     "challenge_completed": 36,
     "badge_earned":        24,
     "streak_milestone":    24,
+    "post":                16,   # Manual posts stay relevant longer than sessions
     "session_completed":   8,
 }
 DEFAULT_HALF_LIFE = 12
