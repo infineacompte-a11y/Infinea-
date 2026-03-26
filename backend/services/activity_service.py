@@ -9,6 +9,7 @@ and trivial to add/remove follows without rebuilding feeds.
 Benchmarked against: Strava's activity feed, Duolingo's social layer.
 """
 
+import asyncio
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -16,6 +17,7 @@ from typing import Optional
 
 from database import db
 from services.moderation import get_blocked_ids
+from services.hashtag_service import generate_auto_tags, update_hashtag_stats
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,9 @@ async def create_activity(
     activity_id = f"act_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
 
+    # Auto-generate hashtags based on activity type + data
+    auto_tags = generate_auto_tags(activity_type, data)
+
     activity_doc = {
         "activity_id": activity_id,
         "user_id": user_id,
@@ -79,8 +84,15 @@ async def create_activity(
         "comment_count": 0,
         "created_at": now,
     }
+    if auto_tags:
+        activity_doc["hashtags"] = auto_tags
 
     await db.activities.insert_one(activity_doc)
+
+    # Fire-and-forget: update hashtag stats
+    if auto_tags:
+        asyncio.create_task(update_hashtag_stats(auto_tags))
+
     return activity_doc
 
 

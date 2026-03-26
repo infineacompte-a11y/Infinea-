@@ -40,6 +40,7 @@ import MessagesPage from "@/pages/MessagesPage";
 import ConversationPage from "@/pages/ConversationPage";
 import AdminModerationPage from "@/pages/AdminModerationPage";
 import SavedPage from "@/pages/SavedPage";
+import HashtagFeedPage from "@/pages/HashtagFeedPage";
 import NotFound from "@/pages/NotFound";
 import CoachFAB from "@/components/CoachFAB";
 import MicroInstantBanner from "@/components/MicroInstantBanner";
@@ -563,6 +564,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <SavedPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/hashtags/:tag"
+        element={
+          <ProtectedRoute>
+            <HashtagFeedPage />
           </ProtectedRoute>
         }
       />

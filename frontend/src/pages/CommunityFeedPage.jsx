@@ -31,6 +31,8 @@ import {
   Heart,
   ImagePlus,
   Bookmark,
+  Hash,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
@@ -1104,6 +1106,53 @@ const quickLinks = [
   { to: "/saved", icon: Bookmark, title: "Mes sauvegardés", color: "#459492" },
 ];
 
+// ── Trending Hashtags (Twitter/X trending pattern — discover tab) ──
+function TrendingHashtags() {
+  const [trending, setTrending] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authFetch(`${API}/hashtags/trending?limit=12`);
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setTrending(data.trending || []);
+        }
+      } catch { /* silent */ }
+      if (!cancelled) setLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!loaded || trending.length === 0) return null;
+
+  return (
+    <div className="mb-4 opacity-0 animate-fade-in" style={{ animationFillMode: "forwards", animationDelay: "80ms" }}>
+      <div className="flex items-center gap-1.5 mb-2">
+        <TrendingUp className="w-3.5 h-3.5 text-[#459492]" />
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Tendances
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {trending.map((t) => (
+          <Link
+            key={t.tag}
+            to={`/hashtags/${encodeURIComponent(t.tag)}`}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#459492]/8 hover:bg-[#459492]/15 text-xs font-medium text-[#459492] transition-colors"
+          >
+            <Hash className="w-3 h-3" />
+            {t.tag}
+            <span className="text-[10px] text-muted-foreground/60 ml-0.5">{t.user_count}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ──
 // ── Post Composer (LinkedIn/Strava benchmark — "What's on your mind?") ──
 function PostComposer({ user, onPost }) {
@@ -1541,6 +1590,9 @@ export default function CommunityFeedPage() {
             {(tab === "discover" || (tab === "feed" && !loading && activities.length === 0)) && (
               <SuggestedUsers currentUserId={user?.user_id} />
             )}
+
+            {/* Trending hashtags — discover tab only */}
+            {tab === "discover" && <TrendingHashtags />}
 
             {/* Loading state */}
             {loading && (

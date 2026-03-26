@@ -25,6 +25,7 @@ from database import db
 from auth import get_current_user
 from services.activity_service import get_feed, REACTION_TYPES
 from services.moderation import get_blocked_ids, check_content, sanitize_text, extract_mentions
+from services.hashtag_service import extract_hashtags, update_hashtag_stats
 from helpers import send_push_to_user
 from services.email_service import send_email_to_user, email_mention
 
@@ -670,6 +671,9 @@ async def create_manual_post(
     blocked_ids = await get_blocked_ids(user["user_id"])
     mentions = await extract_mentions(content, user["user_id"], blocked_ids) if has_text else []
 
+    # Extract #hashtags from content
+    hashtags = extract_hashtags(content) if has_text else []
+
     now = datetime.now(timezone.utc).isoformat()
     activity_id = f"act_{uuid.uuid4().hex[:12]}"
 
@@ -691,8 +695,14 @@ async def create_manual_post(
         "comment_count": 0,
         "created_at": now,
     }
+    if hashtags:
+        activity_doc["hashtags"] = hashtags
 
     await db.activities.insert_one(activity_doc)
+
+    # Fire-and-forget: update hashtag stats
+    if hashtags:
+        asyncio.create_task(update_hashtag_stats(hashtags))
 
     # Layer 2: async AI moderation (fire-and-forget, never blocks)
     try:
@@ -764,10 +774,15 @@ async def delete_activity(activity_id: str, user: dict = Depends(get_current_use
     if activity["user_id"] != user["user_id"]:
         raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres activités")
 
-    # Cascade delete: reactions + comments
+    # Cascade delete: reactions + comments + bookmark refs
     await db.reactions.delete_many({"activity_id": activity_id})
     await db.comments.delete_many({"activity_id": activity_id})
     await db.activities.delete_one({"activity_id": activity_id})
+
+    # Decrement hashtag stats (fire-and-forget)
+    deleted_tags = activity.get("hashtags", [])
+    if deleted_tags:
+        asyncio.create_task(update_hashtag_stats(deleted_tags, increment=-1))
 
     return {"message": "Activité supprimée"}
 
