@@ -1,14 +1,16 @@
 """InFinea — Weekly Leaderboards (Duolingo-style).
 
-Two views:
+Three views:
 - Global: all users ranked (GET /leaderboard/weekly)
 - Friends: only people you follow + yourself (GET /leaderboard/friends)
+- Category: ranked by activity in a specific learning domain (GET /leaderboard/category)
 
 Scoring: total_minutes + (sessions × 5) + (streak_days × 2)
+Category scoring: total_minutes + (sessions × 5) — no streak (category-agnostic)
 Tiers: podium (1-3), elite (4-10), rising (11-30), standard (31+)
 Resets every Monday 00:00 UTC.
 
-Benchmarks: Duolingo (friends league), Strava (segment leaderboard), Fitbit (challenges).
+Benchmarks: Duolingo (language-specific leagues), Strava (segment leaderboard), Fitbit (challenges).
 """
 
 from datetime import datetime, timezone, timedelta
@@ -308,6 +310,190 @@ async def get_friends_leaderboard(
         "my_entry": my_entry,
         "total_participants": total,
         "friends_count": len(friend_ids),
+        "week_start": week_start,
+        "week_end": week_end,
+    }
+
+
+# ── Category Leaderboard (Duolingo per-language leagues) ──
+
+# Category metadata — labels, icons, colors for frontend rendering
+CATEGORY_META = {
+    "learning": {"label": "Apprentissage", "icon": "book-open", "color": "#459492"},
+    "productivity": {"label": "Productivité", "icon": "briefcase", "color": "#55B3AE"},
+    "well_being": {"label": "Bien-être", "icon": "heart", "color": "#E48C75"},
+}
+
+
+@router.get("/leaderboard/categories")
+async def get_active_categories(
+    user: dict = Depends(get_current_user),
+):
+    """List categories with activity this week.
+
+    Returns categories sorted by participant count (most active first).
+    Enables the frontend to show available category tabs dynamically.
+    """
+    week_start, week_end = _week_bounds()
+
+    # Aggregate distinct categories with at least 1 completed session this week
+    pipeline = [
+        {
+            "$match": {
+                "completed": True,
+                "completed_at": {"$gte": week_start, "$lt": week_end},
+                "category": {"$ne": None},
+            }
+        },
+        {
+            "$group": {
+                "_id": "$category",
+                "participants": {"$addToSet": "$user_id"},
+                "total_sessions": {"$sum": 1},
+            }
+        },
+        {"$project": {
+            "category": "$_id",
+            "participant_count": {"$size": "$participants"},
+            "total_sessions": 1,
+            "_id": 0,
+        }},
+        {"$sort": {"participant_count": -1}},
+    ]
+
+    results = await db.user_sessions_history.aggregate(pipeline).to_list(20)
+
+    categories = []
+    for r in results:
+        cat = r["category"]
+        meta = CATEGORY_META.get(cat, {"label": cat.replace("_", " ").title(), "icon": "layers", "color": "#888"})
+        categories.append({
+            "category": cat,
+            "label": meta["label"],
+            "icon": meta["icon"],
+            "color": meta["color"],
+            "participant_count": r["participant_count"],
+            "total_sessions": r["total_sessions"],
+        })
+
+    return {
+        "categories": categories,
+        "week_start": week_start,
+        "week_end": week_end,
+    }
+
+
+@router.get("/leaderboard/category")
+async def get_category_leaderboard(
+    category: str,
+    user: dict = Depends(get_current_user),
+    limit: int = 50,
+):
+    """Category-specific weekly leaderboard.
+
+    Scoring: total_minutes + (sessions × 5) — streak excluded because
+    streak is category-agnostic (a user might have a streak from
+    a different category). This keeps the ranking pure to the domain.
+
+    Benchmarked: Duolingo per-language leagues.
+    """
+    week_start, week_end = _week_bounds()
+
+    # Aggregate sessions filtered by category
+    pipeline = [
+        {
+            "$match": {
+                "completed": True,
+                "completed_at": {"$gte": week_start, "$lt": week_end},
+                "category": category,
+            }
+        },
+        {
+            "$group": {
+                "_id": "$user_id",
+                "total_minutes": {"$sum": {"$ifNull": ["$actual_duration", 0]}},
+                "sessions_count": {"$sum": 1},
+            }
+        },
+    ]
+
+    week_stats = await db.user_sessions_history.aggregate(pipeline).to_list(500)
+
+    if not week_stats:
+        meta = CATEGORY_META.get(category, {"label": category})
+        return {
+            "leaderboard": [],
+            "my_entry": {
+                "user_id": user["user_id"],
+                "display_name": user.get("display_name", "Toi"),
+                "avatar_url": user.get("avatar_url"),
+                "total_minutes": 0,
+                "sessions_count": 0,
+                "score": 0,
+                "rank": None,
+                "tier": "standard",
+            },
+            "category": category,
+            "category_label": meta["label"],
+            "total_participants": 0,
+            "week_start": week_start,
+            "week_end": week_end,
+        }
+
+    # Enrich with user profiles
+    user_ids = [s["_id"] for s in week_stats]
+    users_cursor = db.users.find(
+        {"user_id": {"$in": user_ids}},
+        {"_id": 0, "user_id": 1, "display_name": 1, "username": 1, "avatar_url": 1},
+    )
+    users_map = {u["user_id"]: u async for u in users_cursor}
+
+    # Category score: minutes + (sessions × 5) — NO streak
+    entries = []
+    for stat in week_stats:
+        uid = stat["_id"]
+        u = users_map.get(uid, {})
+        minutes = stat["total_minutes"] or 0
+        sessions = stat["sessions_count"] or 0
+        score = minutes + (sessions * 5)
+
+        entries.append({
+            "user_id": uid,
+            "display_name": u.get("display_name", "Utilisateur"),
+            "username": u.get("username"),
+            "avatar_url": u.get("avatar_url"),
+            "total_minutes": minutes,
+            "sessions_count": sessions,
+            "score": score,
+        })
+
+    # Rank
+    entries.sort(key=lambda e: (e["score"], e["sessions_count"]), reverse=True)
+    total = len(entries)
+    for i, entry in enumerate(entries):
+        entry["rank"] = i + 1
+        entry["tier"] = _assign_friends_tier(i + 1, total)
+
+    my_entry = next((e for e in entries if e["user_id"] == user["user_id"]), None)
+    if my_entry is None:
+        my_entry = {
+            "user_id": user["user_id"],
+            "display_name": user.get("display_name", "Toi"),
+            "avatar_url": user.get("avatar_url"),
+            "total_minutes": 0,
+            "sessions_count": 0,
+            "score": 0,
+            "rank": total + 1,
+            "tier": "standard",
+        }
+
+    meta = CATEGORY_META.get(category, {"label": category.replace("_", " ").title()})
+    return {
+        "leaderboard": entries[:limit],
+        "my_entry": my_entry,
+        "category": category,
+        "category_label": meta["label"],
+        "total_participants": total,
         "week_start": week_start,
         "week_end": week_end,
     }

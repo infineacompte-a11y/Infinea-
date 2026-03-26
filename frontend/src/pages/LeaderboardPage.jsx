@@ -17,6 +17,11 @@ import {
   Users,
   Globe,
   UserPlus,
+  Layers,
+  BookOpen,
+  Briefcase,
+  Heart,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
@@ -34,6 +39,13 @@ const RANK_COLORS = {
   1: { bg: "bg-gradient-to-br from-[#F5A623] to-[#E8960F]", text: "text-white", label: "1er" },
   2: { bg: "bg-gradient-to-br from-[#C0C0C0] to-[#A8A8A8]", text: "text-white", label: "2e" },
   3: { bg: "bg-gradient-to-br from-[#CD7F32] to-[#B56E28]", text: "text-white", label: "3e" },
+};
+
+/* ── Category icon mapping (matches backend CATEGORY_META) ── */
+const CATEGORY_ICONS = {
+  learning: { icon: BookOpen, label: "Apprentissage", color: "#459492" },
+  productivity: { icon: Briefcase, label: "Productivité", color: "#55B3AE" },
+  well_being: { icon: Heart, label: "Bien-être", color: "#E48C75" },
 };
 
 /* ── Countdown to next Monday 00:00 UTC ── */
@@ -250,7 +262,7 @@ function LeaderboardSkeleton() {
   );
 }
 
-/* ── Leaderboard view (reused for both tabs) ── */
+/* ── Leaderboard view (reused for all tabs) ── */
 function LeaderboardView({ data, isLoading, currentUserId, emptyState }) {
   const navigate = useNavigate();
   const leaderboard = data?.leaderboard || [];
@@ -330,15 +342,20 @@ function LeaderboardView({ data, isLoading, currentUserId, emptyState }) {
 export default function LeaderboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [tab, setTab] = useState("global"); // "global" | "friends"
+  const [tab, setTab] = useState("global"); // "global" | "friends" | "category"
   const [globalData, setGlobalData] = useState(null);
   const [friendsData, setFriendsData] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [categoryData, setCategoryData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(false);
 
-  const activeData = tab === "global" ? globalData : friendsData;
+  const activeData = tab === "global" ? globalData : tab === "friends" ? friendsData : categoryData;
   const countdown = useWeekCountdown(activeData?.week_end);
 
   const fetchLeaderboard = useCallback(async (view) => {
+    if (view === "category") return;
     setIsLoading(true);
     try {
       const endpoint = view === "friends" ? "leaderboard/friends" : "leaderboard/weekly";
@@ -357,19 +374,99 @@ export default function LeaderboardPage() {
     }
   }, []);
 
+  const fetchCategoryLeaderboard = useCallback(async (category) => {
+    setIsLoading(true);
+    try {
+      const res = await authFetch(`${API}/leaderboard/category?category=${encodeURIComponent(category)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCategoryData(data);
+      } else {
+        toast.error("Erreur de chargement");
+      }
+    } catch {
+      toast.error("Erreur réseau");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const fetchCategories = useCallback(async () => {
+    setLoadingCategories(true);
+    try {
+      const res = await authFetch(`${API}/leaderboard/categories`);
+      if (res.ok) {
+        const data = await res.json();
+        const cats = data.categories || [];
+        setCategories(cats);
+        return cats;
+      }
+    } catch {
+      toast.error("Erreur réseau");
+    } finally {
+      setLoadingCategories(false);
+    }
+    return [];
+  }, []);
+
   useEffect(() => {
     fetchLeaderboard(tab);
   }, [tab, fetchLeaderboard]);
 
-  const handleTabChange = (newTab) => {
+  const handleTabChange = async (newTab) => {
     if (newTab === tab) return;
     setTab(newTab);
-    // Use cached data if available
-    if (newTab === "global" && globalData) {
+    if (newTab === "category") {
+      if (categories.length > 0) {
+        // Categories already loaded — use cached or re-fetch
+        if (categoryData && selectedCategory) {
+          setIsLoading(false);
+        } else if (selectedCategory) {
+          fetchCategoryLeaderboard(selectedCategory);
+        }
+      } else {
+        // First time — fetch categories then auto-select first
+        const cats = await fetchCategories();
+        if (cats.length > 0) {
+          setSelectedCategory(cats[0].category);
+          fetchCategoryLeaderboard(cats[0].category);
+        } else {
+          setIsLoading(false);
+        }
+      }
+    } else if (newTab === "global" && globalData) {
       setIsLoading(false);
     } else if (newTab === "friends" && friendsData) {
       setIsLoading(false);
     }
+  };
+
+  const handleSelectCategory = (category) => {
+    if (category === selectedCategory) return;
+    setSelectedCategory(category);
+    setCategoryData(null);
+    fetchCategoryLeaderboard(category);
+  };
+
+  const handleRefresh = () => {
+    if (tab === "category" && selectedCategory) {
+      fetchCategoryLeaderboard(selectedCategory);
+    } else {
+      fetchLeaderboard(tab);
+    }
+  };
+
+  // Subtitle per tab
+  const getSubtitle = () => {
+    if (tab === "global") return "Classement hebdomadaire global";
+    if (tab === "friends") {
+      const count = friendsData?.friends_count || 0;
+      return `Entre amis \u2014 ${count} ami${count > 1 ? "s" : ""}`;
+    }
+    // category
+    const label = categoryData?.category_label || selectedCategory || "...";
+    const count = categoryData?.total_participants || 0;
+    return `${label} \u2014 ${count} participant${count > 1 ? "s" : ""}`;
   };
 
   // Friends empty state with CTA to find people
@@ -392,6 +489,26 @@ export default function LeaderboardPage() {
     </Card>
   );
 
+  // Category empty state
+  const categoryEmptyState = (
+    <Card className="p-8 text-center rounded-xl">
+      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#459492]/20 to-[#459492]/5 flex items-center justify-center mx-auto mb-3">
+        <Layers className="w-8 h-8 text-[#459492]/60" />
+      </div>
+      <h3 className="font-semibold mb-1">Aucune activité dans ce domaine</h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        Commence une session dans ce domaine pour apparaître au classement !
+      </p>
+      <Button
+        onClick={() => navigate("/dashboard")}
+        className="rounded-xl gap-1.5 btn-press"
+      >
+        Commencer une session
+        <ChevronRight className="w-4 h-4" />
+      </Button>
+    </Card>
+  );
+
   return (
     <div className="min-h-screen app-bg-mesh">
       <Sidebar />
@@ -408,7 +525,7 @@ export default function LeaderboardPage() {
                   className="text-white/60 text-sm mt-1 opacity-0 animate-fade-in"
                   style={{ animationDelay: "50ms" }}
                 >
-                  {tab === "global" ? "Classement hebdomadaire global" : `Entre amis — ${friendsData?.friends_count || 0} ami${(friendsData?.friends_count || 0) > 1 ? "s" : ""}`}
+                  {getSubtitle()}
                 </p>
               </div>
               {countdown && (
@@ -422,7 +539,7 @@ export default function LeaderboardPage() {
               )}
             </div>
 
-            {/* ── Tab switcher (Duolingo-style pill) ── */}
+            {/* ── Tab switcher (3-tab pill) ── */}
             <div
               className="opacity-0 animate-fade-in flex mt-5 bg-white/10 rounded-xl p-1 gap-1"
               style={{ animationDelay: "80ms", animationFillMode: "forwards" }}
@@ -449,12 +566,72 @@ export default function LeaderboardPage() {
                 <Users className="w-3.5 h-3.5" />
                 Amis
               </button>
+              <button
+                onClick={() => handleTabChange("category")}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  tab === "category"
+                    ? "bg-white text-[#275255] shadow-sm"
+                    : "text-white/70 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                Par domaine
+              </button>
             </div>
           </div>
         </div>
 
         <div className="px-4 lg:px-8">
           <div className="max-w-3xl mx-auto">
+            {/* ── Category selector (shown only on category tab) ── */}
+            {tab === "category" && (
+              <div
+                className="opacity-0 animate-fade-in flex gap-2 mb-4 overflow-x-auto pb-1 -mx-1 px-1"
+                style={{ animationDelay: "120ms", animationFillMode: "forwards" }}
+              >
+                {loadingCategories ? (
+                  <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Chargement des domaines...
+                  </div>
+                ) : categories.length === 0 && !isLoading ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    Aucun domaine actif cette semaine
+                  </p>
+                ) : (
+                  categories.map((cat) => {
+                    const meta = CATEGORY_ICONS[cat.category] || {
+                      icon: Layers,
+                      label: cat.label,
+                      color: "#888",
+                    };
+                    const CatIcon = meta.icon;
+                    const isActive = cat.category === selectedCategory;
+                    return (
+                      <button
+                        key={cat.category}
+                        onClick={() => handleSelectCategory(cat.category)}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200 whitespace-nowrap border ${
+                          isActive
+                            ? "bg-card shadow-sm border-border"
+                            : "border-transparent text-muted-foreground hover:bg-muted/50"
+                        }`}
+                      >
+                        <CatIcon
+                          className="w-3.5 h-3.5 shrink-0"
+                          style={{ color: isActive ? meta.color : undefined }}
+                        />
+                        {cat.label}
+                        <span className="text-[10px] text-muted-foreground/70">
+                          {cat.participant_count}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
             {/* Score breakdown legend */}
             <div
               className="opacity-0 animate-fade-in flex flex-wrap gap-3 mb-5 text-[11px] text-muted-foreground"
@@ -466,15 +643,17 @@ export default function LeaderboardPage() {
               <span className="flex items-center gap-1">
                 <Zap className="w-3 h-3" /> Sessions x5
               </span>
-              <span className="flex items-center gap-1">
-                <Flame className="w-3 h-3" /> Streak x2
-              </span>
+              {tab !== "category" && (
+                <span className="flex items-center gap-1">
+                  <Flame className="w-3 h-3" /> Streak x2
+                </span>
+              )}
               <span className="ml-auto">
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-6 text-xs gap-1 text-muted-foreground rounded-xl btn-press"
-                  onClick={() => fetchLeaderboard(tab)}
+                  onClick={handleRefresh}
                   disabled={isLoading}
                 >
                   <RefreshCw className={`w-3 h-3 ${isLoading ? "animate-spin" : ""}`} />
@@ -487,7 +666,13 @@ export default function LeaderboardPage() {
               data={activeData}
               isLoading={isLoading}
               currentUserId={user?.user_id}
-              emptyState={tab === "friends" ? friendsEmptyState : undefined}
+              emptyState={
+                tab === "friends"
+                  ? friendsEmptyState
+                  : tab === "category"
+                  ? categoryEmptyState
+                  : undefined
+              }
             />
           </div>
         </div>
