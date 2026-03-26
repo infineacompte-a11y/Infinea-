@@ -29,6 +29,7 @@ import {
   Check,
   X,
   Heart,
+  ImagePlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
@@ -208,6 +209,100 @@ function SuggestedUsers({ currentUserId }) {
         ))}
       </div>
     </div>
+  );
+}
+
+// ── Post Image Grid (Instagram-style responsive grid + lightbox) ──
+function PostImageGrid({ images }) {
+  const [lightboxIdx, setLightboxIdx] = useState(null);
+
+  if (!images || images.length === 0) return null;
+
+  const gridClass =
+    images.length === 1
+      ? "grid-cols-1"
+      : images.length === 2
+        ? "grid-cols-2"
+        : "grid-cols-2";
+
+  return (
+    <>
+      <div className={`grid ${gridClass} gap-1 mt-2 rounded-lg overflow-hidden`}>
+        {images.map((img, idx) => (
+          <button
+            key={idx}
+            onClick={() => setLightboxIdx(idx)}
+            className={`relative bg-muted/20 overflow-hidden ${
+              images.length === 1 ? "aspect-video" :
+              images.length === 3 && idx === 0 ? "row-span-2 aspect-auto h-full" :
+              "aspect-square"
+            }`}
+          >
+            <img
+              src={images.length === 1 ? img.image_url : (img.thumbnail_url || img.image_url)}
+              alt=""
+              className="w-full h-full object-cover transition-transform hover:scale-[1.02]"
+              loading="lazy"
+            />
+          </button>
+        ))}
+      </div>
+
+      {/* Lightbox — full-screen image viewer */}
+      {lightboxIdx !== null && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+          onClick={() => setLightboxIdx(null)}
+        >
+          <button
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors z-10"
+            onClick={() => setLightboxIdx(null)}
+          >
+            <X className="w-5 h-5 text-white" />
+          </button>
+
+          {/* Nav arrows for multi-image */}
+          {images.length > 1 && (
+            <>
+              {lightboxIdx > 0 && (
+                <button
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors z-10"
+                  onClick={(e) => { e.stopPropagation(); setLightboxIdx(lightboxIdx - 1); }}
+                >
+                  <ChevronRight className="w-5 h-5 text-white rotate-180" />
+                </button>
+              )}
+              {lightboxIdx < images.length - 1 && (
+                <button
+                  className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors z-10"
+                  onClick={(e) => { e.stopPropagation(); setLightboxIdx(lightboxIdx + 1); }}
+                >
+                  <ChevronRight className="w-5 h-5 text-white" />
+                </button>
+              )}
+              {/* Dots indicator */}
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+                {images.map((_, i) => (
+                  <div
+                    key={i}
+                    className={`w-2 h-2 rounded-full transition-colors ${
+                      i === lightboxIdx ? "bg-white" : "bg-white/30"
+                    }`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          <img
+            src={images[lightboxIdx]?.image_url}
+            alt=""
+            className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -522,15 +617,21 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
               )}
             </div>
             {config.isPost ? (
-              /* Manual post: full text content with @mentions */
+              /* Manual post: text + optional images (Instagram pattern) */
               <div className="mt-2">
-                <p className="text-sm text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
-                  <MentionText
-                    content={activity.data?.content || ""}
-                    mentions={activity.data?.mentions || []}
-                    currentUserId={currentUserId}
-                  />
-                </p>
+                {activity.data?.content && (
+                  <p className="text-sm text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
+                    <MentionText
+                      content={activity.data.content}
+                      mentions={activity.data?.mentions || []}
+                      currentUserId={currentUserId}
+                    />
+                  </p>
+                )}
+                {/* Post images grid */}
+                {activity.data?.images?.length > 0 && (
+                  <PostImageGrid images={activity.data.images} />
+                )}
               </div>
             ) : (
               <div className="flex items-center gap-1.5 mt-1">
@@ -973,19 +1074,107 @@ const quickLinks = [
 function PostComposer({ user, onPost }) {
   const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState("");
+  const [images, setImages] = useState([]); // [{image_url, thumbnail_url, width, height, uploading?, file?}]
   const [posting, setPosting] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const canSubmit =
+    !posting &&
+    !images.some((img) => img.uploading) &&
+    (text.trim().length >= 3 || images.filter((i) => !i.uploading).length > 0);
+
+  const handleImageSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    e.target.value = ""; // reset input
+
+    const remaining = 4 - images.length;
+    if (remaining <= 0) {
+      toast.error("Maximum 4 images par post");
+      return;
+    }
+
+    const toUpload = files.slice(0, remaining);
+    for (const file of toUpload) {
+      if (!file.type.startsWith("image/")) {
+        toast.error(`${file.name} n'est pas une image`);
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} dépasse 10 Mo`);
+        continue;
+      }
+
+      // Add placeholder with local preview
+      const localUrl = URL.createObjectURL(file);
+      const tempId = `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      setImages((prev) => [...prev, { tempId, thumbnail_url: localUrl, uploading: true }]);
+
+      // Upload to server
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const res = await authFetch(`${API}/feed/upload-image`, {
+          method: "POST",
+          body: formData,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setImages((prev) =>
+            prev.map((img) =>
+              img.tempId === tempId
+                ? { ...data, tempId, uploading: false }
+                : img
+            )
+          );
+        } else {
+          const err = await res.json().catch(() => ({}));
+          toast.error(err.detail || "Erreur d'upload");
+          setImages((prev) => prev.filter((img) => img.tempId !== tempId));
+        }
+      } catch {
+        toast.error("Erreur de connexion pendant l'upload");
+        setImages((prev) => prev.filter((img) => img.tempId !== tempId));
+      } finally {
+        URL.revokeObjectURL(localUrl);
+      }
+    }
+  };
+
+  const removeImage = (tempId) => {
+    setImages((prev) => prev.filter((img) => img.tempId !== tempId));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!text.trim() || posting) return;
+    if (!canSubmit) return;
     setPosting(true);
-    const ok = await onPost(text.trim());
+    const uploadedImages = images
+      .filter((i) => !i.uploading && i.image_url)
+      .map(({ image_url, thumbnail_url, width, height }) => ({
+        image_url, thumbnail_url, width, height,
+      }));
+    const ok = await onPost(text.trim(), uploadedImages);
     if (ok) {
       setText("");
+      setImages([]);
       setExpanded(false);
     }
     setPosting(false);
   };
+
+  const handleCancel = () => {
+    setExpanded(false);
+    setText("");
+    setImages([]);
+  };
+
+  // Image preview grid: 1 image full width, 2 side by side, 3-4 grid
+  const imageGrid = images.length === 1
+    ? "grid-cols-1"
+    : images.length === 2
+      ? "grid-cols-2"
+      : "grid-cols-2";
 
   return (
     <Card className="mb-4 opacity-0 animate-fade-in" style={{ animationFillMode: "forwards" }}>
@@ -1004,6 +1193,7 @@ function PostComposer({ user, onPost }) {
             <span className="text-sm text-muted-foreground/60 flex-1">
               Partagez une réflexion, un progrès, une question...
             </span>
+            <ImagePlus className="w-4 h-4 text-primary/30 mr-1" />
             <Send className="w-4 h-4 text-primary/30" />
           </button>
         ) : (
@@ -1025,17 +1215,68 @@ function PostComposer({ user, onPost }) {
                   className="w-full text-sm resize-none rounded-lg border border-border/50 bg-muted/30 p-2.5 focus:outline-none focus:ring-1 focus:ring-primary/30 focus:bg-background placeholder:text-muted-foreground/40"
                   autoFocus
                 />
+
+                {/* Image preview grid */}
+                {images.length > 0 && (
+                  <div className={`grid ${imageGrid} gap-1.5 mt-2 rounded-lg overflow-hidden`}>
+                    {images.map((img) => (
+                      <div
+                        key={img.tempId}
+                        className={`relative bg-muted/30 ${images.length === 1 ? "aspect-video" : "aspect-square"}`}
+                      >
+                        <img
+                          src={img.thumbnail_url || img.image_url}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                        {img.uploading && (
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            <Loader2 className="w-5 h-5 text-white animate-spin" />
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeImage(img.tempId)}
+                          className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80 transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5 text-white" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between mt-2">
-                  <span className="text-[10px] text-muted-foreground/40">
-                    {text.length}/2000
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {/* Image upload button */}
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={images.length >= 4}
+                      className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-primary transition-colors disabled:opacity-30"
+                    >
+                      <ImagePlus className="w-4 h-4" />
+                      <span className="hidden sm:inline">{images.length > 0 ? `${images.length}/4` : "Photo"}</span>
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      multiple
+                      onChange={handleImageSelect}
+                      className="hidden"
+                    />
+                    <span className="text-[10px] text-muted-foreground/40">
+                      {text.length}/2000
+                    </span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       className="text-xs h-7"
-                      onClick={() => { setExpanded(false); setText(""); }}
+                      onClick={handleCancel}
                     >
                       Annuler
                     </Button>
@@ -1043,7 +1284,7 @@ function PostComposer({ user, onPost }) {
                       type="submit"
                       size="sm"
                       className="text-xs h-7 gap-1.5 bg-[#459492] hover:bg-[#3a7d7b]"
-                      disabled={!text.trim() || text.trim().length < 3 || posting}
+                      disabled={!canSubmit}
                     >
                       {posting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
                       Publier
@@ -1136,12 +1377,14 @@ export default function CommunityFeedPage() {
   };
 
   // Create manual post
-  const handleCreatePost = async (content) => {
+  const handleCreatePost = async (content, images = []) => {
     try {
+      const payload = { content };
+      if (images.length > 0) payload.images = images;
       const res = await authFetch(`${API}/activities`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         const newActivity = await res.json();
