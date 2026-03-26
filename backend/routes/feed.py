@@ -738,10 +738,10 @@ async def create_manual_post(
                 m["user_id"],
                 f"{display} vous a mentionné",
                 content[:80],
-                url="/community",
+                url=f"/activity/{activity_id}",
                 tag="mention",
             )
-            subject, html = email_mention(display, content, "/community")
+            subject, html = email_mention(display, content, f"/activity/{activity_id}")
             await send_email_to_user(m["user_id"], subject, html, email_category="social")
         except Exception:
             pass
@@ -785,6 +785,90 @@ async def delete_activity(activity_id: str, user: dict = Depends(get_current_use
         asyncio.create_task(update_hashtag_stats(deleted_tags, increment=-1))
 
     return {"message": "Activité supprimée"}
+
+
+# ============== ACTIVITY DETAIL ==============
+
+@router.get("/activities/{activity_id}")
+async def get_activity_detail(
+    activity_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Get a single activity with full enrichment.
+
+    Returns the activity with author info, viewer's reaction, bookmark status,
+    and top-level comments with replies. Used for permalink pages and
+    notification deep links.
+
+    Benchmarked: Instagram post detail, Twitter/X tweet detail, Strava activity.
+    """
+    activity = await db.activities.find_one(
+        {"activity_id": activity_id, "moderation_status": {"$ne": "hidden"}},
+        {"_id": 0},
+    )
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activité introuvable")
+
+    my_id = user["user_id"]
+
+    # ── Enrich with author info ──
+    author = await db.users.find_one(
+        {"user_id": activity["user_id"]},
+        {"_id": 0, "user_id": 1, "name": 1, "display_name": 1,
+         "username": 1, "avatar_url": 1, "picture": 1},
+    )
+    if author:
+        activity["user_name"] = author.get("display_name") or author.get("name", "Utilisateur")
+        activity["user_username"] = author.get("username")
+        activity["user_avatar"] = author.get("avatar_url") or author.get("picture")
+
+    # ── Viewer's reaction ──
+    my_reaction = await db.reactions.find_one(
+        {"activity_id": activity_id, "user_id": my_id},
+        {"_id": 0, "reaction_type": 1},
+    )
+    activity["user_reaction"] = my_reaction["reaction_type"] if my_reaction else None
+
+    # ── Bookmark status ──
+    bm = await db.bookmarks.find_one(
+        {"user_id": my_id, "activity_id": activity_id},
+        {"_id": 0},
+    )
+    activity["bookmarked"] = bm is not None
+
+    # ── Comments (top-level + replies, Instagram pattern) ──
+    comments = await db.comments.find(
+        {"activity_id": activity_id, "moderation_status": {"$ne": "hidden"}},
+        {"_id": 0},
+    ).sort("created_at", 1).limit(100).to_list(100)
+
+    # Check viewer's likes on these comments
+    comment_ids = [c["comment_id"] for c in comments]
+    my_likes = set()
+    if comment_ids:
+        liked = await db.comment_likes.find(
+            {"comment_id": {"$in": comment_ids}, "user_id": my_id},
+            {"comment_id": 1},
+        ).to_list(len(comment_ids))
+        my_likes = {l["comment_id"] for l in liked}
+
+    for c in comments:
+        c["liked_by_me"] = c["comment_id"] in my_likes
+
+    # Structure: top-level comments with nested replies
+    top_level = [c for c in comments if not c.get("parent_id")]
+    reply_map = defaultdict(list)
+    for c in comments:
+        if c.get("parent_id"):
+            reply_map[c["parent_id"]].append(c)
+
+    for c in top_level:
+        c["replies"] = reply_map.get(c["comment_id"], [])
+
+    activity["comments"] = top_level
+    activity["total_comments"] = len(comments)
+
+    return activity
 
 
 # ============== REACTIONS ==============
@@ -874,7 +958,7 @@ async def react_to_activity(
                     activity["user_id"],
                     "Nouvelle réaction",
                     f"{display} a réagi à ton activité",
-                    url="/community",
+                    url=f"/activity/{activity_id}",
                     tag="reaction",
                 )
             except Exception:
@@ -1044,7 +1128,7 @@ async def add_comment(
                 parent_comment["user_id"],
                 "Nouvelle réponse",
                 f"{display} a répondu à ton commentaire",
-                url="/community",
+                url=f"/activity/{activity_id}",
                 tag="reply",
             )
             already_notified.add(parent_comment["user_id"])
@@ -1078,7 +1162,7 @@ async def add_comment(
                 activity["user_id"],
                 "Nouveau commentaire" if not parent_id else "Nouvelle réponse",
                 notif_msg,
-                url="/community",
+                url=f"/activity/{activity_id}",
                 tag="comment",
             )
             already_notified.add(activity["user_id"])
@@ -1108,11 +1192,11 @@ async def add_comment(
                 m["user_id"],
                 f"{display} vous a mentionné",
                 content[:80],
-                url="/community",
+                url=f"/activity/{activity_id}",
                 tag="mention",
             )
             # Email for mentions
-            subject, html = email_mention(display, content, "/community")
+            subject, html = email_mention(display, content, f"/activity/{activity_id}")
             await send_email_to_user(m["user_id"], subject, html, email_category="social")
             already_notified.add(m["user_id"])
         except Exception:
@@ -1361,7 +1445,7 @@ async def toggle_comment_like(
                     comment["user_id"],
                     "Commentaire aimé",
                     f"{display} a aimé ton commentaire",
-                    url="/community",
+                    url=f"/activity/{comment.get('activity_id', '')}",
                     tag="comment_like",
                 )
             except Exception:
