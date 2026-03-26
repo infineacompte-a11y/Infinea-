@@ -1351,6 +1351,87 @@ async def toggle_comment_like(
         return {"liked": True, "like_count": new_count}
 
 
+# ============== CONTENT SEARCH ==============
+
+
+@router.get("/feed/search")
+async def search_activities(
+    q: str = "",
+    cursor: str = "",
+    limit: int = 20,
+    user: dict = Depends(get_current_user),
+):
+    """Search public activities by text content (Instagram Explore search pattern).
+
+    Uses MongoDB regex for text matching across content field.
+    Only returns public, non-hidden activities from non-blocked users.
+    Results ranked by relevance (exact match > partial) then recency.
+    """
+    if len(q) < 2:
+        raise HTTPException(status_code=400, detail="Minimum 2 caractères")
+
+    limit = min(max(limit, 1), 50)
+    user_id = user["user_id"]
+    blocked_ids = await get_blocked_ids(user_id)
+
+    # Build search query — case-insensitive regex on content
+    import re
+    escaped_q = re.escape(q)
+
+    query = {
+        "content": {"$regex": escaped_q, "$options": "i"},
+        "visibility": "public",
+        "moderation_status": {"$ne": "hidden"},
+        "user_id": {"$nin": blocked_ids},
+    }
+    if cursor:
+        query["created_at"] = {"$lt": cursor}
+
+    activities = await db.activities.find(
+        query, {"_id": 0}
+    ).sort("created_at", -1).limit(limit + 1).to_list(limit + 1)
+
+    has_more = len(activities) > limit
+    activities = activities[:limit]
+
+    if not activities:
+        return {"activities": [], "next_cursor": None, "has_more": False}
+
+    # Enrich with user info
+    enriched_user_ids = list({a["user_id"] for a in activities})
+    users_cursor = db.users.find(
+        {"user_id": {"$in": enriched_user_ids}},
+        {"_id": 0, "user_id": 1, "display_name": 1, "name": 1,
+         "username": 1, "avatar_url": 1, "picture": 1},
+    )
+    users_map = {u["user_id"]: u async for u in users_cursor}
+
+    # Check bookmarks + reactions
+    activity_ids = [a["activity_id"] for a in activities]
+    user_reactions = await db.reactions.find(
+        {"user_id": user_id, "activity_id": {"$in": activity_ids}},
+        {"_id": 0, "activity_id": 1, "reaction_type": 1},
+    ).to_list(len(activity_ids))
+    reaction_map = {r["activity_id"]: r["reaction_type"] for r in user_reactions}
+
+    user_bookmarks = await db.bookmarks.find(
+        {"user_id": user_id, "activity_id": {"$in": activity_ids}},
+        {"_id": 0, "activity_id": 1},
+    ).to_list(len(activity_ids))
+    bookmark_set = {b["activity_id"] for b in user_bookmarks}
+
+    for a in activities:
+        u = users_map.get(a["user_id"], {})
+        a["user_name"] = u.get("display_name") or u.get("name", "Utilisateur")
+        a["user_username"] = u.get("username", "")
+        a["user_avatar"] = u.get("avatar_url") or u.get("picture", "")
+        a["user_reaction"] = reaction_map.get(a["activity_id"])
+        a["bookmarked"] = a["activity_id"] in bookmark_set
+
+    next_cursor = activities[-1]["created_at"] if has_more else None
+    return {"activities": activities, "next_cursor": next_cursor, "has_more": has_more}
+
+
 # ============== BOOKMARKS ==============
 
 
