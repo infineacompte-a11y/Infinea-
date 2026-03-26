@@ -30,6 +30,7 @@ import {
   X,
   Heart,
   ImagePlus,
+  Bookmark,
 } from "lucide-react";
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
@@ -307,7 +308,7 @@ function PostImageGrid({ images }) {
 }
 
 // ── Single Activity Card (Instagram-style) ──
-function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
+function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onBookmarkChange }) {
   const config = ACTIVITY_CONFIG[activity.type] || ACTIVITY_CONFIG.session_completed;
   const Icon = config.icon;
   const [showComments, setShowComments] = useState(false);
@@ -319,6 +320,7 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
   const [reportCommentId, setReportCommentId] = useState(null);
   const [reactingType, setReactingType] = useState(null);
   const [reactionsDetailOpen, setReactionsDetailOpen] = useState(false);
+  const [bookmarking, setBookmarking] = useState(false);
   // Threading state
   const [replyingTo, setReplyingTo] = useState(null); // comment_id being replied to
   const [replyText, setReplyText] = useState("");
@@ -396,6 +398,24 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
       toast.error("Erreur");
     } finally {
       setReactingType(null);
+    }
+  };
+
+  const handleBookmark = async () => {
+    setBookmarking(true);
+    try {
+      const res = await authFetch(`${API}/activities/${activity.activity_id}/bookmark`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onBookmarkChange?.(activity.activity_id, data.bookmarked);
+        toast.success(data.bookmarked ? "Sauvegardé" : "Retiré des sauvegardés");
+      }
+    } catch {
+      toast.error("Erreur");
+    } finally {
+      setBookmarking(false);
     }
   };
 
@@ -683,6 +703,20 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete }) {
               {totalReactions} réaction{totalReactions > 1 ? "s" : ""}
             </button>
           )}
+
+          {/* Bookmark — Instagram Saved */}
+          <button
+            onClick={handleBookmark}
+            disabled={bookmarking}
+            className={`flex items-center gap-1 px-2 py-1.5 rounded-full text-xs transition-all duration-200 ${
+              activity.bookmarked
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            }`}
+            title={activity.bookmarked ? "Retirer des sauvegardés" : "Sauvegarder"}
+          >
+            <Bookmark className="w-3.5 h-3.5" fill={activity.bookmarked ? "currentColor" : "none"} />
+          </button>
 
           {/* Comment toggle */}
           <button
@@ -1067,6 +1101,7 @@ const quickLinks = [
   { to: "/search", icon: Search, title: "Rechercher des membres", color: "#459492" },
   { to: "/groups", icon: Users, title: "Mes groupes", color: "#459492" },
   { to: "/challenges", icon: Trophy, title: "Défis communautaires", color: "#E48C75" },
+  { to: "/saved", icon: Bookmark, title: "Mes sauvegardés", color: "#459492" },
 ];
 
 // ── Main Page ──
@@ -1412,6 +1447,15 @@ export default function CommunityFeedPage() {
     setRefreshing(false);
   };
 
+  // Bookmark toggle — update local state
+  const handleBookmarkChange = (activityId, bookmarked) => {
+    setActivities((prev) =>
+      prev.map((a) =>
+        a.activity_id === activityId ? { ...a, bookmarked } : a
+      )
+    );
+  };
+
   // Optimistic reaction update
   const handleReactionChange = (activityId, reactionType, serverData) => {
     setActivities((prev) =>
@@ -1598,6 +1642,7 @@ export default function CommunityFeedPage() {
                       activity={activity}
                       currentUserId={user?.user_id}
                       onReactionChange={handleReactionChange}
+                      onBookmarkChange={handleBookmarkChange}
                       onDelete={handleDeleteActivity}
                     />
                   </div>

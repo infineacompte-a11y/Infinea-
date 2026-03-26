@@ -184,8 +184,17 @@ async def get_feed(
         ).to_list(len(activity_ids))
 
         reaction_map = {r["activity_id"]: r["reaction_type"] for r in user_reactions}
+
+        # Check current user's bookmarks on these activities
+        user_bookmarks = await db.bookmarks.find(
+            {"user_id": user_id, "activity_id": {"$in": activity_ids}},
+            {"_id": 0, "activity_id": 1},
+        ).to_list(len(activity_ids))
+        bookmark_set = {b["activity_id"] for b in user_bookmarks}
+
         for activity in activities:
             activity["user_reaction"] = reaction_map.get(activity["activity_id"])
+            activity["bookmarked"] = activity["activity_id"] in bookmark_set
 
     # Cursor = oldest created_at in the FULL pool (not just returned items).
     # This advances the window past all ranked content, so the next page

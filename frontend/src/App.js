@@ -39,6 +39,7 @@ import BlockedUsersPage from "@/pages/BlockedUsersPage";
 import MessagesPage from "@/pages/MessagesPage";
 import ConversationPage from "@/pages/ConversationPage";
 import AdminModerationPage from "@/pages/AdminModerationPage";
+import SavedPage from "@/pages/SavedPage";
 import NotFound from "@/pages/NotFound";
 import CoachFAB from "@/components/CoachFAB";
 import MicroInstantBanner from "@/components/MicroInstantBanner";
@@ -554,6 +555,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ConversationPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/saved"
+        element={
+          <ProtectedRoute>
+            <SavedPage />
           </ProtectedRoute>
         }
       />
