@@ -126,6 +126,7 @@ async def get_feed(
     query = {
         "user_id": {"$in": following_ids},
         "visibility": {"$in": ["public", "followers"]},
+        "moderation_status": {"$ne": "hidden"},
     }
 
     if cursor:

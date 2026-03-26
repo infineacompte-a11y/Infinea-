@@ -10,6 +10,7 @@ Design:
 - Benchmarked: Instagram DM, WhatsApp simplicity.
 """
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -158,7 +159,7 @@ async def get_messages(
 
     conv = await _get_conversation_for_user(conversation_id, user["user_id"])
 
-    query = {"conversation_id": conversation_id}
+    query = {"conversation_id": conversation_id, "moderation_status": {"$ne": "hidden"}}
     if cursor:
         query["created_at"] = {"$lt": cursor}
 
@@ -224,6 +225,18 @@ async def send_message(
     }
     await db.messages.insert_one({**message, "_id": message["message_id"]})
     message.pop("_id", None)
+
+    # Layer 2: async AI moderation on message
+    try:
+        from services.ai_moderation import moderate_content_async
+        asyncio.create_task(moderate_content_async(
+            content_id=message["message_id"],
+            content_type="message",
+            author_id=my_id,
+            text=content,
+        ))
+    except Exception:
+        pass
 
     # Update conversation denormalized fields
     await db.conversations.update_one(
