@@ -11,12 +11,15 @@ Design:
 """
 
 import asyncio
+import logging
 import math
+import os
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, UploadFile, File
+from fastapi.responses import JSONResponse
 
 from database import db
 from auth import get_current_user
@@ -25,7 +28,14 @@ from services.moderation import get_blocked_ids, check_content, sanitize_text, e
 from helpers import send_push_to_user
 from services.email_service import send_email_to_user, email_mention
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# ============== IMAGE UPLOAD CONFIG ==============
+IMAGE_MAX_SIZE = 10 * 1024 * 1024  # 10 MB per image
+IMAGE_ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_IMAGES_PER_POST = 4
+CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "")
 
 
 # ============== FEED ==============
@@ -466,6 +476,99 @@ async def get_own_activities(
     }
 
 
+# ============== IMAGE UPLOAD FOR POSTS ==============
+
+@router.post("/feed/upload-image")
+async def upload_post_image(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
+    """Upload an image for a post. Returns the image URL for client-side preview.
+
+    The client uploads images first, collects URLs, then submits the post
+    with image_urls in the body. This pattern is used by Instagram, Twitter,
+    and LinkedIn — upload-then-attach for instant previews and retry on failure.
+
+    Accepts JPEG, PNG, WebP, GIF up to 10 MB.
+    Cloudinary auto-optimizes (quality, format, responsive breakpoints).
+    Moderation: Cloudinary AI moderation (rejects NSFW if enabled).
+
+    Returns:
+        {image_url, thumbnail_url, width, height, public_id}
+    """
+    if not CLOUDINARY_URL:
+        raise HTTPException(
+            status_code=503,
+            detail="Service d'upload non configuré (CLOUDINARY_URL manquant)",
+        )
+
+    if file.content_type not in IMAGE_ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Format non supporté. Utilisez JPEG, PNG, WebP ou GIF.",
+        )
+
+    contents = await file.read()
+    if len(contents) > IMAGE_MAX_SIZE:
+        raise HTTPException(status_code=400, detail="L'image ne doit pas dépasser 10 Mo")
+    if len(contents) < 1024:
+        raise HTTPException(status_code=400, detail="Fichier trop petit ou corrompu")
+
+    try:
+        import cloudinary
+        import cloudinary.uploader
+
+        image_id = f"post_{uuid.uuid4().hex[:12]}"
+        result = await asyncio.to_thread(
+            cloudinary.uploader.upload,
+            contents,
+            folder="infinea/posts",
+            public_id=image_id,
+            transformation=[
+                {
+                    "width": 1200,
+                    "height": 1200,
+                    "crop": "limit",       # Preserve aspect ratio, cap at 1200px
+                    "quality": "auto:good",
+                    "fetch_format": "auto",
+                },
+            ],
+            resource_type="image",
+            # Eager: generate thumbnail for feed cards
+            eager=[
+                {
+                    "width": 600,
+                    "height": 600,
+                    "crop": "fill",
+                    "gravity": "auto",
+                    "quality": "auto:eco",
+                    "fetch_format": "auto",
+                },
+            ],
+        )
+
+        # Full-size URL (max 1200px, auto quality)
+        image_url = result["secure_url"]
+        # Thumbnail URL (600px square crop for feed grid)
+        thumbnail_url = (
+            result.get("eager", [{}])[0].get("secure_url", image_url)
+            if result.get("eager")
+            else image_url
+        )
+
+        return {
+            "image_url": image_url,
+            "thumbnail_url": thumbnail_url,
+            "width": result.get("width", 0),
+            "height": result.get("height", 0),
+            "public_id": result.get("public_id", ""),
+        }
+
+    except Exception as e:
+        logger.exception(f"Image upload failed for {user['user_id']}: {e}")
+        raise HTTPException(status_code=500, detail="Erreur lors de l'upload de l'image")
+
+
 # ============== CREATE MANUAL POST ==============
 
 @router.post("/activities")
@@ -473,26 +576,50 @@ async def create_manual_post(
     request: Request,
     user: dict = Depends(get_current_user),
 ):
-    """Create a manual text post in the community feed.
+    """Create a manual post in the community feed (text + optional images).
 
-    Benchmarked: Strava activity post, LinkedIn text post, Instagram caption.
-    Allows users to share reflections, milestones, questions, and thoughts
-    beyond auto-generated activities.
+    Benchmarked: Instagram (images + caption), Strava (activity + photos),
+    LinkedIn (text + media), Twitter (multi-image posts).
 
     Body:
-        content (str): Post text, 1-2000 chars.
-        visibility (str, optional): "public" | "followers". Default: user preference or "public".
+        content (str): Post text, 1-2000 chars (can be empty if images provided).
+        images (list, optional): Up to 4 image objects from upload-image endpoint.
+            Each: {image_url, thumbnail_url, width, height}
+        visibility (str, optional): "public" | "followers". Default: user preference.
         category (str, optional): "learning" | "productivity" | "well_being" | "general".
     """
     body = await request.json()
     content = sanitize_text(str(body.get("content", "")), max_length=2000)
-    if not content or len(content.strip()) < 3:
-        raise HTTPException(status_code=400, detail="Le post doit faire au moins 3 caractères")
+    images = body.get("images", [])
 
-    # Moderation
-    moderation = check_content(content)
-    if not moderation["allowed"]:
-        raise HTTPException(status_code=400, detail=moderation["reason"])
+    # Validate: need either text or images
+    has_text = content and len(content.strip()) >= 3
+    has_images = isinstance(images, list) and len(images) > 0
+
+    if not has_text and not has_images:
+        raise HTTPException(status_code=400, detail="Le post doit contenir du texte (min 3 car.) ou des images")
+
+    if has_images and len(images) > MAX_IMAGES_PER_POST:
+        raise HTTPException(status_code=400, detail=f"Maximum {MAX_IMAGES_PER_POST} images par post")
+
+    # Validate image objects
+    validated_images = []
+    if has_images:
+        for img in images[:MAX_IMAGES_PER_POST]:
+            if not isinstance(img, dict) or not img.get("image_url"):
+                continue
+            validated_images.append({
+                "image_url": str(img["image_url"]),
+                "thumbnail_url": str(img.get("thumbnail_url", img["image_url"])),
+                "width": int(img.get("width", 0)),
+                "height": int(img.get("height", 0)),
+            })
+
+    # Moderation (text only — images moderated at upload time by Cloudinary)
+    if has_text:
+        moderation = check_content(content)
+        if not moderation["allowed"]:
+            raise HTTPException(status_code=400, detail=moderation["reason"])
 
     # Visibility: respect user preference or explicit choice
     visibility = body.get("visibility")
@@ -509,20 +636,24 @@ async def create_manual_post(
 
     # Extract @mentions
     blocked_ids = await get_blocked_ids(user["user_id"])
-    mentions = await extract_mentions(content, user["user_id"], blocked_ids)
+    mentions = await extract_mentions(content, user["user_id"], blocked_ids) if has_text else []
 
     now = datetime.now(timezone.utc).isoformat()
     activity_id = f"act_{uuid.uuid4().hex[:12]}"
+
+    activity_data = {
+        "content": content if has_text else "",
+        "category": category,
+        "mentions": mentions,
+    }
+    if validated_images:
+        activity_data["images"] = validated_images
 
     activity_doc = {
         "activity_id": activity_id,
         "user_id": user["user_id"],
         "type": "post",
-        "data": {
-            "content": content,
-            "category": category,
-            "mentions": mentions,
-        },
+        "data": activity_data,
         "visibility": visibility,
         "reaction_counts": {"bravo": 0, "inspire": 0, "fire": 0},
         "comment_count": 0,
