@@ -259,6 +259,15 @@ class ConversationCreate(BaseModel):
     """Request body for starting a DM conversation."""
     user_id: str = Field(description="User ID of the person to message")
 
+class GroupConversationCreate(BaseModel):
+    """Request body for creating a group conversation."""
+    name: str = Field(min_length=1, max_length=50)
+    member_ids: List[str] = Field(min_length=1, max_length=19)  # + creator = max 20
+
+class GroupUpdate(BaseModel):
+    """Request body for updating group name."""
+    name: str = Field(min_length=1, max_length=50)
+
 class MessageSend(BaseModel):
     """Request body for sending a message (text and/or images)."""
     content: str = Field(default="", max_length=1000)

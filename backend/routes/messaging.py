@@ -1,15 +1,14 @@
 """
-InFinea — Direct Messaging routes.
-1:1 conversations between users.
+InFinea — Messaging routes (DM + Group DM).
 
 Design:
-- Conversation-based: one conversation per pair of users.
-- Participants sorted for deduplication.
+- Direct: one conversation per pair of users (sorted participants for dedup).
+- Group: type="group", N participants (max 20), admin roles, name.
 - Cursor-based pagination on messages (oldest → newest).
 - Denormalized last_message + unread_count on conversation doc.
-- Mute: muted_by[] array on conversation doc — suppresses push/notifs.
-- Read receipts: read_at timestamp on messages for iMessage-style checks.
-- Benchmarked: Instagram DM, WhatsApp, iMessage.
+- Mute: muted_by[] array — suppresses push/notifs (both direct and group).
+- Read receipts: read_at timestamp (direct only, not group).
+- Benchmarked: WhatsApp (groups), Discord (group DM), iMessage, Instagram DM.
 """
 
 import asyncio
@@ -21,12 +20,14 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from database import db
 from auth import get_current_user
 from config import limiter
-from models import ConversationCreate, MessageSend
+from models import ConversationCreate, GroupConversationCreate, GroupUpdate, MessageSend
 from services.moderation import get_blocked_ids, check_content, sanitize_text, extract_mentions
 from helpers import send_push_to_user
 from services.email_service import send_email_to_user, email_mention
 
 router = APIRouter(tags=["messaging"])
+
+MAX_GROUP_SIZE = 20  # WhatsApp-style cap for study groups
 
 
 # ── Helpers ──
@@ -43,39 +44,72 @@ async def _get_conversation_for_user(conversation_id: str, user_id: str):
 
 
 def _other_participant(conv: dict, user_id: str) -> str:
-    """Return the other participant's user_id."""
+    """Return the other participant's user_id (direct conversations only)."""
     for p in conv["participants"]:
         if p != user_id:
             return p
     return user_id
 
 
+def _is_group(conv: dict) -> bool:
+    return conv.get("type") == "group"
+
+
 async def _enrich_conversations(conversations: list, user_id: str) -> list:
-    """Add other_user info (display_name, avatar, username) to each conversation."""
-    other_ids = [_other_participant(c, user_id) for c in conversations]
-    if not other_ids:
+    """Add enrichment to each conversation (direct → other_user, group → group_info)."""
+    # Collect all participant IDs across all conversations
+    all_user_ids = set()
+    for conv in conversations:
+        all_user_ids.update(conv["participants"])
+    all_user_ids.discard(user_id)
+
+    if not all_user_ids:
         return conversations
 
     users = await db.users.find(
-        {"user_id": {"$in": other_ids}},
+        {"user_id": {"$in": list(all_user_ids)}},
         {"_id": 0, "user_id": 1, "name": 1, "display_name": 1, "username": 1,
          "picture": 1, "avatar_url": 1, "streak_days": 1},
-    ).to_list(len(other_ids))
+    ).to_list(len(all_user_ids))
     user_map = {u["user_id"]: u for u in users}
 
     for conv in conversations:
-        other_id = _other_participant(conv, user_id)
-        other = user_map.get(other_id, {})
-        conv["other_user"] = {
-            "user_id": other_id,
-            "display_name": other.get("display_name") or other.get("name", "Utilisateur"),
-            "username": other.get("username"),
-            "avatar_url": other.get("avatar_url") or other.get("picture"),
-            "streak_days": other.get("streak_days", 0),
-        }
         conv["my_unread_count"] = conv.get("unread_count", {}).get(user_id, 0)
         conv.pop("unread_count", None)
         conv["muted"] = user_id in conv.get("muted_by", [])
+
+        if _is_group(conv):
+            # ── Group enrichment ──
+            members = []
+            for pid in conv["participants"]:
+                if pid == user_id:
+                    continue
+                u = user_map.get(pid, {})
+                members.append({
+                    "user_id": pid,
+                    "display_name": u.get("display_name") or u.get("name", "Utilisateur"),
+                    "username": u.get("username"),
+                    "avatar_url": u.get("avatar_url") or u.get("picture"),
+                })
+            conv["group_info"] = {
+                "name": conv.get("name", "Groupe"),
+                "members": members,
+                "member_count": len(conv["participants"]),
+                "admins": conv.get("admins", []),
+                "is_admin": user_id in conv.get("admins", []),
+                "created_by": conv.get("created_by"),
+            }
+        else:
+            # ── Direct enrichment (existing) ──
+            other_id = _other_participant(conv, user_id)
+            other = user_map.get(other_id, {})
+            conv["other_user"] = {
+                "user_id": other_id,
+                "display_name": other.get("display_name") or other.get("name", "Utilisateur"),
+                "username": other.get("username"),
+                "avatar_url": other.get("avatar_url") or other.get("picture"),
+                "streak_days": other.get("streak_days", 0),
+            }
 
     return conversations
 
@@ -122,6 +156,67 @@ async def create_or_get_conversation(body: ConversationCreate, user: dict = Depe
         "participants": participants,
         "last_message": None,
         "unread_count": {my_id: 0, target_id: 0},
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.conversations.insert_one({**conv, "_id": conv["conversation_id"]})
+    conv.pop("_id", None)
+
+    enriched = await _enrich_conversations([conv], my_id)
+    return enriched[0]
+
+
+@router.post("/conversations/group")
+async def create_group_conversation(
+    body: GroupConversationCreate,
+    user: dict = Depends(get_current_user),
+):
+    """Create a group conversation (WhatsApp/Discord group DM pattern).
+
+    Creator becomes the first admin. Max 20 participants.
+    Blocked users are filtered out silently.
+    """
+    my_id = user["user_id"]
+    name = body.name.strip()
+
+    # Deduplicate + remove self
+    member_ids = list(set(mid for mid in body.member_ids if mid != my_id))
+    if not member_ids:
+        raise HTTPException(status_code=400, detail="Ajoutez au moins un membre")
+
+    if len(member_ids) + 1 > MAX_GROUP_SIZE:
+        raise HTTPException(status_code=400, detail=f"Maximum {MAX_GROUP_SIZE} membres par groupe")
+
+    # Verify members exist
+    existing = await db.users.find(
+        {"user_id": {"$in": member_ids}},
+        {"user_id": 1},
+    ).to_list(len(member_ids))
+    valid_ids = {u["user_id"] for u in existing}
+
+    # Filter out blocked users
+    blocked_ids = await get_blocked_ids(my_id)
+    valid_ids -= blocked_ids
+
+    if not valid_ids:
+        raise HTTPException(status_code=400, detail="Aucun membre valide trouvé")
+
+    participants = sorted(list(valid_ids) + [my_id])
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Initialize unread counts for all participants
+    unread = {pid: 0 for pid in participants}
+
+    conv = {
+        "conversation_id": f"conv_{uuid.uuid4().hex[:12]}",
+        "type": "group",
+        "name": name,
+        "participants": participants,
+        "admins": [my_id],
+        "created_by": my_id,
+        "last_message": None,
+        "unread_count": unread,
+        "muted_by": [],
         "created_at": now,
         "updated_at": now,
     }
@@ -193,16 +288,18 @@ async def send_message(
     body: MessageSend,
     user: dict = Depends(get_current_user),
 ):
-    """Send a message in a conversation."""
+    """Send a message in a conversation (direct or group)."""
     my_id = user["user_id"]
     conv = await _get_conversation_for_user(conversation_id, my_id)
 
-    other_id = _other_participant(conv, my_id)
-
-    # Block check
+    is_grp = _is_group(conv)
     blocked_ids = await get_blocked_ids(my_id)
-    if other_id in blocked_ids:
-        raise HTTPException(status_code=403, detail="Impossible d'envoyer un message à cet utilisateur")
+
+    if not is_grp:
+        # Direct: block check against other participant
+        other_id = _other_participant(conv, my_id)
+        if other_id in blocked_ids:
+            raise HTTPException(status_code=403, detail="Impossible d'envoyer un message à cet utilisateur")
 
     # Sanitize + moderate text
     content = sanitize_text(body.content, max_length=1000) if body.content else ""
@@ -263,7 +360,11 @@ async def send_message(
     except Exception:
         pass
 
+    # ── Determine recipients (direct: 1, group: N-1) ──
+    recipient_ids = [p for p in conv["participants"] if p != my_id]
+
     # Update conversation denormalized fields
+    inc_updates = {f"unread_count.{pid}": 1 for pid in recipient_ids}
     await db.conversations.update_one(
         {"conversation_id": conversation_id},
         {
@@ -275,40 +376,42 @@ async def send_message(
                 },
                 "updated_at": now,
             },
-            "$inc": {f"unread_count.{other_id}": 1},
+            "$inc": inc_updates,
         },
     )
 
-    # Notification (non-blocking) — respect mute
+    # ── Notifications (non-blocking) — respect mute + blocks ──
     display = user.get("display_name") or user.get("name", "Quelqu'un")
-    is_muted = other_id in conv.get("muted_by", [])
-    if not is_muted:
+    muted_set = set(conv.get("muted_by", []))
+    notified_ids = set()
+
+    for rid in recipient_ids:
+        if rid in muted_set or rid in blocked_ids:
+            continue
+        notified_ids.add(rid)
         try:
             preview = (content[:80] + ("..." if len(content) > 80 else "")) if has_text else "📷 Image"
+            group_prefix = f"[{conv.get('name', 'Groupe')}] " if is_grp else ""
             await db.notifications.insert_one({
                 "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
-                "user_id": other_id,
+                "user_id": rid,
                 "type": "new_message",
                 "title": "Nouveau message",
-                "message": f"{display} : {preview}",
+                "message": f"{group_prefix}{display} : {preview}",
                 "icon": "message-circle",
                 "data": {"conversation_id": conversation_id, "sender_id": my_id},
                 "read": False,
                 "created_at": now,
             })
-            await send_push_to_user(
-                other_id,
-                f"Message de {display}",
-                preview,
-                url="/messages",
-                tag="dm",
-            )
+            push_title = f"{conv.get('name', 'Groupe')}" if is_grp else f"Message de {display}"
+            push_body = f"{display}: {preview}" if is_grp else preview
+            await send_push_to_user(rid, push_title, push_body, url="/messages", tag="dm")
         except Exception:
             pass
 
-    # Notify mentioned users (skip other participant — already notified via new_message)
+    # Notify mentioned users (skip already-notified recipients)
     for m in mentions:
-        if m["user_id"] == other_id:
+        if m["user_id"] in notified_ids or m["user_id"] == my_id:
             continue
         try:
             await db.notifications.insert_one({
@@ -330,7 +433,6 @@ async def send_message(
                 url="/messages",
                 tag="mention",
             )
-            # Email for mentions in DM
             subject, html = email_mention(display, content, "/messages")
             await send_email_to_user(m["user_id"], subject, html, email_category="social")
         except Exception:
@@ -557,6 +659,201 @@ async def toggle_message_reaction(
                 pass
 
         return {"reacted": True, "reaction_type": reaction_type, "reactions": reactions}
+
+
+# ── Group Management (WhatsApp/Discord pattern) ──
+
+
+@router.post("/conversations/{conversation_id}/members")
+async def add_group_members(
+    conversation_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """Add members to a group conversation (admin only).
+
+    Body: {member_ids: ["user_id_1", "user_id_2"]}
+    Max group size: 20 participants.
+    """
+    my_id = user["user_id"]
+    conv = await _get_conversation_for_user(conversation_id, my_id)
+
+    if not _is_group(conv):
+        raise HTTPException(status_code=400, detail="Cette action n'est disponible que pour les groupes")
+
+    if my_id not in conv.get("admins", []):
+        raise HTTPException(status_code=403, detail="Seuls les admins peuvent ajouter des membres")
+
+    body = await request.json()
+    new_ids = body.get("member_ids", [])
+    if not new_ids:
+        raise HTTPException(status_code=400, detail="Aucun membre à ajouter")
+
+    current = set(conv["participants"])
+    remaining = MAX_GROUP_SIZE - len(current)
+    if remaining <= 0:
+        raise HTTPException(status_code=400, detail=f"Le groupe est plein ({MAX_GROUP_SIZE} max)")
+
+    # Filter: exist, not already in, not blocked
+    blocked_ids = await get_blocked_ids(my_id)
+    existing_users = await db.users.find(
+        {"user_id": {"$in": new_ids}}, {"user_id": 1}
+    ).to_list(len(new_ids))
+    valid_ids = [
+        u["user_id"] for u in existing_users
+        if u["user_id"] not in current and u["user_id"] not in blocked_ids
+    ][:remaining]
+
+    if not valid_ids:
+        raise HTTPException(status_code=400, detail="Aucun membre valide à ajouter")
+
+    now = datetime.now(timezone.utc).isoformat()
+    # Initialize unread counts for new members
+    unread_set = {f"unread_count.{uid}": 0 for uid in valid_ids}
+
+    await db.conversations.update_one(
+        {"conversation_id": conversation_id},
+        {
+            "$addToSet": {"participants": {"$each": valid_ids}},
+            "$set": {**unread_set, "updated_at": now},
+        },
+    )
+
+    return {
+        "added": valid_ids,
+        "member_count": len(current) + len(valid_ids),
+    }
+
+
+@router.delete("/conversations/{conversation_id}/members/{member_id}")
+async def remove_group_member(
+    conversation_id: str,
+    member_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Remove a member from a group, or leave the group yourself.
+
+    - Admin can remove any member (except self if sole admin).
+    - Any member can remove themselves (= leave group).
+    - If last member leaves, group is deleted.
+    """
+    my_id = user["user_id"]
+    conv = await _get_conversation_for_user(conversation_id, my_id)
+
+    if not _is_group(conv):
+        raise HTTPException(status_code=400, detail="Cette action n'est disponible que pour les groupes")
+
+    admins = conv.get("admins", [])
+    is_admin = my_id in admins
+    is_leaving = member_id == my_id
+
+    if not is_leaving and not is_admin:
+        raise HTTPException(status_code=403, detail="Seuls les admins peuvent retirer des membres")
+
+    if member_id not in conv["participants"]:
+        raise HTTPException(status_code=404, detail="Ce membre n'est pas dans le groupe")
+
+    # If sole admin is leaving, promote the next participant or delete group
+    remaining = [p for p in conv["participants"] if p != member_id]
+
+    if not remaining:
+        # Last member leaving — delete the group and its messages
+        await db.messages.delete_many({"conversation_id": conversation_id})
+        await db.conversations.delete_one({"conversation_id": conversation_id})
+        return {"left": True, "group_deleted": True}
+
+    now = datetime.now(timezone.utc).isoformat()
+    update = {
+        "$pull": {"participants": member_id, "admins": member_id, "muted_by": member_id},
+        "$unset": {f"unread_count.{member_id}": ""},
+        "$set": {"updated_at": now},
+    }
+
+    # If removing the last admin, promote the earliest remaining participant
+    new_admins = [a for a in admins if a != member_id]
+    if not new_admins and remaining:
+        update["$addToSet"] = {"admins": remaining[0]}
+
+    await db.conversations.update_one(
+        {"conversation_id": conversation_id},
+        update,
+    )
+
+    return {
+        "left": is_leaving,
+        "removed": member_id,
+        "member_count": len(remaining),
+    }
+
+
+@router.put("/conversations/{conversation_id}/group")
+async def update_group(
+    conversation_id: str,
+    body: GroupUpdate,
+    user: dict = Depends(get_current_user),
+):
+    """Update group name (admin only)."""
+    my_id = user["user_id"]
+    conv = await _get_conversation_for_user(conversation_id, my_id)
+
+    if not _is_group(conv):
+        raise HTTPException(status_code=400, detail="Cette action n'est disponible que pour les groupes")
+
+    if my_id not in conv.get("admins", []):
+        raise HTTPException(status_code=403, detail="Seuls les admins peuvent modifier le groupe")
+
+    name = body.name.strip()
+    await db.conversations.update_one(
+        {"conversation_id": conversation_id},
+        {"$set": {"name": name, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+
+    return {"name": name}
+
+
+@router.post("/conversations/{conversation_id}/admin")
+async def toggle_admin(
+    conversation_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """Promote or demote a group member as admin.
+
+    Body: {user_id: "target_user_id"}
+    Only existing admins can toggle. Creator can always be restored.
+    """
+    my_id = user["user_id"]
+    conv = await _get_conversation_for_user(conversation_id, my_id)
+
+    if not _is_group(conv):
+        raise HTTPException(status_code=400, detail="Cette action n'est disponible que pour les groupes")
+
+    if my_id not in conv.get("admins", []):
+        raise HTTPException(status_code=403, detail="Seuls les admins peuvent gérer les rôles")
+
+    body_data = await request.json()
+    target_id = body_data.get("user_id", "")
+
+    if target_id not in conv["participants"]:
+        raise HTTPException(status_code=404, detail="Cet utilisateur n'est pas dans le groupe")
+
+    admins = conv.get("admins", [])
+    if target_id in admins:
+        # Demote — but at least 1 admin must remain
+        if len(admins) <= 1:
+            raise HTTPException(status_code=400, detail="Le groupe doit avoir au moins un admin")
+        await db.conversations.update_one(
+            {"conversation_id": conversation_id},
+            {"$pull": {"admins": target_id}},
+        )
+        return {"user_id": target_id, "is_admin": False}
+    else:
+        # Promote
+        await db.conversations.update_one(
+            {"conversation_id": conversation_id},
+            {"$addToSet": {"admins": target_id}},
+        )
+        return {"user_id": target_id, "is_admin": True}
 
 
 @router.post("/conversations/{conversation_id}/mute")
