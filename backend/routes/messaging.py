@@ -7,7 +7,9 @@ Design:
 - Participants sorted for deduplication.
 - Cursor-based pagination on messages (oldest → newest).
 - Denormalized last_message + unread_count on conversation doc.
-- Benchmarked: Instagram DM, WhatsApp simplicity.
+- Mute: muted_by[] array on conversation doc — suppresses push/notifs.
+- Read receipts: read_at timestamp on messages for iMessage-style checks.
+- Benchmarked: Instagram DM, WhatsApp, iMessage.
 """
 
 import asyncio
@@ -73,6 +75,7 @@ async def _enrich_conversations(conversations: list, user_id: str) -> list:
         }
         conv["my_unread_count"] = conv.get("unread_count", {}).get(user_id, 0)
         conv.pop("unread_count", None)
+        conv["muted"] = user_id in conv.get("muted_by", [])
 
     return conversations
 
@@ -276,30 +279,32 @@ async def send_message(
         },
     )
 
-    # Notification (non-blocking)
+    # Notification (non-blocking) — respect mute
     display = user.get("display_name") or user.get("name", "Quelqu'un")
-    try:
-        preview = (content[:80] + ("..." if len(content) > 80 else "")) if has_text else "📷 Image"
-        await db.notifications.insert_one({
-            "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
-            "user_id": other_id,
-            "type": "new_message",
-            "title": "Nouveau message",
-            "message": f"{display} : {preview}",
-            "icon": "message-circle",
-            "data": {"conversation_id": conversation_id, "sender_id": my_id},
-            "read": False,
-            "created_at": now,
-        })
-        await send_push_to_user(
-            other_id,
-            f"Message de {display}",
-            preview,
-            url="/messages",
-            tag="dm",
-        )
-    except Exception:
-        pass
+    is_muted = other_id in conv.get("muted_by", [])
+    if not is_muted:
+        try:
+            preview = (content[:80] + ("..." if len(content) > 80 else "")) if has_text else "📷 Image"
+            await db.notifications.insert_one({
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": other_id,
+                "type": "new_message",
+                "title": "Nouveau message",
+                "message": f"{display} : {preview}",
+                "icon": "message-circle",
+                "data": {"conversation_id": conversation_id, "sender_id": my_id},
+                "read": False,
+                "created_at": now,
+            })
+            await send_push_to_user(
+                other_id,
+                f"Message de {display}",
+                preview,
+                url="/messages",
+                tag="dm",
+            )
+        except Exception:
+            pass
 
     # Notify mentioned users (skip other participant — already notified via new_message)
     for m in mentions:
@@ -552,6 +557,37 @@ async def toggle_message_reaction(
                 pass
 
         return {"reacted": True, "reaction_type": reaction_type, "reactions": reactions}
+
+
+@router.post("/conversations/{conversation_id}/mute")
+async def toggle_mute_conversation(
+    conversation_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Toggle mute on a conversation (WhatsApp/Discord pattern).
+
+    Muted conversations still receive messages (visible in inbox),
+    but suppress push notifications and in-app notification creation.
+    The muted_by array on the conversation doc tracks which participants muted.
+    """
+    my_id = user["user_id"]
+    conv = await _get_conversation_for_user(conversation_id, my_id)
+
+    muted_by = conv.get("muted_by", [])
+    if my_id in muted_by:
+        # Unmute
+        await db.conversations.update_one(
+            {"conversation_id": conversation_id},
+            {"$pull": {"muted_by": my_id}},
+        )
+        return {"muted": False}
+    else:
+        # Mute
+        await db.conversations.update_one(
+            {"conversation_id": conversation_id},
+            {"$addToSet": {"muted_by": my_id}},
+        )
+        return {"muted": True}
 
 
 @router.get("/messages/unread-count")

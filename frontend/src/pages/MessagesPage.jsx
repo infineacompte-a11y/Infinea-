@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Sidebar from "@/components/Sidebar";
-import { MessageCircle, ArrowLeft, Loader2, Sparkles } from "lucide-react";
+import { MessageCircle, ArrowLeft, Loader2, Sparkles, BellOff } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch } from "@/App";
 
@@ -142,8 +142,9 @@ export default function MessagesPage() {
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
-                              <span className={`font-medium text-sm truncate ${unread > 0 ? "text-foreground font-semibold" : "text-foreground"}`}>
+                              <span className={`font-medium text-sm truncate flex items-center gap-1 ${unread > 0 ? "text-foreground font-semibold" : "text-foreground"}`}>
                                 {other.display_name}
+                                {conv.muted && <BellOff className="w-3 h-3 text-muted-foreground/40 shrink-0" />}
                               </span>
                               {lastMsg && (
                                 <span className="text-xs text-muted-foreground shrink-0">

@@ -7,7 +7,7 @@ import Sidebar from "@/components/Sidebar";
 import SafetyMenu from "@/components/SafetyMenu";
 import MentionInput from "@/components/MentionInput";
 import MentionText from "@/components/MentionText";
-import { ArrowLeft, Send, Loader2, MessageCircle, Sparkles, Trash2, Pencil, Check, X, SmilePlus, ImagePlus } from "lucide-react";
+import { ArrowLeft, Send, Loader2, MessageCircle, Sparkles, Trash2, Pencil, Check, X, SmilePlus, ImagePlus, BellOff, Bell, CheckCheck } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
 import { sanitize } from "@/lib/sanitize";
@@ -164,6 +164,9 @@ export default function ConversationPage() {
   // Image upload state
   const [pendingImages, setPendingImages] = useState([]);  // [{file, preview, uploading, uploaded: {image_url, ...}}]
   const imageInputRef = useRef(null);
+  // Mute state
+  const [muted, setMuted] = useState(false);
+  const [togglingMute, setTogglingMute] = useState(false);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -179,7 +182,10 @@ export default function ConversationPage() {
           const conv = (data.conversations || []).find(
             (c) => c.conversation_id === conversationId
           );
-          if (conv) setConversation(conv);
+          if (conv) {
+            setConversation(conv);
+            setMuted(conv.muted || false);
+          }
         }
       } catch { /* silent */ }
     })();
@@ -438,6 +444,22 @@ export default function ConversationPage() {
     }
   };
 
+  const handleToggleMute = async () => {
+    setTogglingMute(true);
+    try {
+      const res = await authFetch(`${API}/conversations/${conversationId}/mute`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setMuted(data.muted);
+        toast.success(data.muted ? "Conversation muette" : "Notifications réactivées");
+      }
+    } catch {
+      toast.error("Erreur");
+    } finally {
+      setTogglingMute(false);
+    }
+  };
+
   const other = conversation?.other_user || {};
   const myId = currentUser?.user_id;
 
@@ -486,6 +508,19 @@ export default function ConversationPage() {
                 )}
               </div>
             </Link>
+            {/* Mute toggle */}
+            <button
+              onClick={handleToggleMute}
+              disabled={togglingMute}
+              className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${
+                muted
+                  ? "text-white/90 bg-white/15"
+                  : "text-white/40 hover:text-white/70 hover:bg-white/10"
+              }`}
+              title={muted ? "Réactiver les notifications" : "Couper les notifications"}
+            >
+              {muted ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+            </button>
             {other.user_id && (
               <SafetyMenu
                 userId={other.user_id}
@@ -658,6 +693,21 @@ export default function ConversationPage() {
                           <div className={`${isMine ? "self-end" : "self-start"}`}>
                             <MessageReactionDisplay reactions={msg.reactions} myId={myId} />
                           </div>
+                          {/* Read receipt — iMessage double-check */}
+                          {isMine && (
+                            <div className="self-end flex items-center gap-1 mt-0.5">
+                              <span className="text-[9px] text-muted-foreground/40">
+                                {formatTime(msg.created_at)}
+                              </span>
+                              <CheckCheck
+                                className={`w-3 h-3 ${
+                                  msg.read_at
+                                    ? "text-[#459492]"
+                                    : "text-muted-foreground/30"
+                                }`}
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
                       {/* Reaction picker for own messages — right side */}
