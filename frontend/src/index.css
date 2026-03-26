@@ -111,6 +111,28 @@ code {
     body {
         @apply bg-background text-foreground;
     }
+    /* Ensure form elements always use the correct text color —
+       prevents invisible text on light backgrounds (fixes inheritance
+       issues when inputs sit inside containers with color: white) */
+    input,
+    textarea,
+    select {
+        color: hsl(var(--foreground));
+        caret-color: hsl(var(--foreground));
+    }
+    /* Dark section inputs should use white text */
+    .section-dark input,
+    .section-dark textarea,
+    .section-dark select,
+    .section-dark-header input,
+    .section-dark-header textarea,
+    .section-dark-header select,
+    .section-dark-rounded input,
+    .section-dark-rounded textarea,
+    .section-dark-rounded select {
+        color: #FFFFFF;
+        caret-color: #FFFFFF;
+    }
 }
 
 /* Override browser autofill — light mode */

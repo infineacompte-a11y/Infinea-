@@ -188,7 +188,7 @@ export default function SearchPage() {
                 placeholder={tab === "users" ? "Nom ou @identifiant..." : "Rechercher dans les posts..."}
                 autoComplete="off"
                 autoFocus
-                className="pl-10 h-12 rounded-xl bg-[#1a3a3d] border-white/15 text-white placeholder:text-white/40 focus:bg-[#1f4447] focus:border-white/30 caret-white transition-all"
+                className="pl-10 h-12 rounded-xl bg-[#1a3a3d] border-white/15 text-white placeholder:text-white/40 focus:bg-[#1f4447] focus-visible:bg-[#1f4447] focus:border-white/30 focus-visible:border-white/30 focus-visible:shadow-none caret-white transition-all"
               />
               {isSearching && (
                 <Loader2 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 animate-spin" />
