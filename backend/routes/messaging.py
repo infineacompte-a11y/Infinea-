@@ -451,6 +451,87 @@ async def delete_message(message_id: str, user: dict = Depends(get_current_user)
     return {"message": "Message supprimé"}
 
 
+# ── Message Reactions (iMessage/Instagram DM pattern) ──
+# One reaction per user per message, toggle behavior, denormalized on message doc.
+# Same curated set as feed reactions: bravo, inspire, fire — InFinea identity.
+
+MESSAGE_REACTION_TYPES = {"bravo", "inspire", "fire"}
+
+
+@router.post("/messages/{message_id}/reactions")
+async def toggle_message_reaction(
+    message_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Toggle a reaction on a DM message.
+
+    Behavior (iMessage/Instagram DM pattern):
+    - Same reaction type → remove (toggle off)
+    - Different reaction type → switch
+    - No existing reaction → add
+
+    Reactions stored denormalized on message doc:
+      reactions: {user_id: "bravo", user_id2: "fire"}
+
+    Returns: {reacted: bool, reaction_type: str|null, reactions: dict}
+    """
+    body = await request.json()
+    reaction_type = body.get("reaction_type", "")
+
+    if reaction_type not in MESSAGE_REACTION_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Type de réaction invalide. Choix : {', '.join(sorted(MESSAGE_REACTION_TYPES))}",
+        )
+
+    msg = await db.messages.find_one({"message_id": message_id})
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message introuvable")
+
+    # Verify user is participant in this conversation
+    conv = await _get_conversation_for_user(msg["conversation_id"], user["user_id"])
+
+    my_id = user["user_id"]
+    reactions = msg.get("reactions", {})
+    existing = reactions.get(my_id)
+
+    if existing == reaction_type:
+        # Toggle off — remove reaction
+        await db.messages.update_one(
+            {"message_id": message_id},
+            {"$unset": {f"reactions.{my_id}": ""}},
+        )
+        reactions.pop(my_id, None)
+        return {"reacted": False, "reaction_type": None, "reactions": reactions}
+    else:
+        # Add or switch reaction
+        await db.messages.update_one(
+            {"message_id": message_id},
+            {"$set": {f"reactions.{my_id}": reaction_type}},
+        )
+        reactions[my_id] = reaction_type
+
+        # Notify message author (non-blocking, skip self-reaction)
+        if msg["sender_id"] != my_id:
+            try:
+                display = user.get("display_name") or user.get("name", "Quelqu'un")
+                reaction_labels = {"bravo": "bravo 👏", "inspire": "inspire ✨", "fire": "fire 🔥"}
+                label = reaction_labels.get(reaction_type, reaction_type)
+                await send_push_to_user(
+                    msg["sender_id"],
+                    f"Réaction {label}",
+                    f"{display} a réagi à ton message",
+                    url="/messages",
+                    tag="dm_reaction",
+                )
+            except Exception:
+                pass
+
+        return {"reacted": True, "reaction_type": reaction_type, "reactions": reactions}
+
+
 @router.get("/messages/unread-count")
 async def get_unread_messages_count(user: dict = Depends(get_current_user)):
     """Total unread messages across all conversations (for sidebar badge)."""

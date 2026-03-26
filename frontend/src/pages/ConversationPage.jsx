@@ -7,7 +7,7 @@ import Sidebar from "@/components/Sidebar";
 import SafetyMenu from "@/components/SafetyMenu";
 import MentionInput from "@/components/MentionInput";
 import MentionText from "@/components/MentionText";
-import { ArrowLeft, Send, Loader2, MessageCircle, Sparkles, Trash2, Pencil, Check, X } from "lucide-react";
+import { ArrowLeft, Send, Loader2, MessageCircle, Sparkles, Trash2, Pencil, Check, X, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
 import { sanitize } from "@/lib/sanitize";
@@ -33,6 +33,68 @@ function formatTime(iso) {
 function getInitials(name) {
   if (!name) return "U";
   return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+}
+
+// ── Reaction config (InFinea curated set — same as feed) ──
+const REACTIONS = [
+  { type: "bravo", emoji: "👏", label: "Bravo" },
+  { type: "inspire", emoji: "✨", label: "Inspire" },
+  { type: "fire", emoji: "🔥", label: "Fire" },
+];
+
+// Compact reaction picker — appears on hover, iMessage tapback style
+function ReactionPicker({ onReact, myReaction }) {
+  return (
+    <div className="flex items-center gap-0.5 bg-card/95 backdrop-blur-sm border border-border/50 rounded-full px-1 py-0.5 shadow-lg">
+      {REACTIONS.map(({ type, emoji, label }) => (
+        <button
+          key={type}
+          onClick={() => onReact(type)}
+          className={`w-7 h-7 flex items-center justify-center rounded-full text-sm transition-all duration-150 hover:scale-125 ${
+            myReaction === type
+              ? "bg-primary/20 ring-1 ring-primary/30 scale-110"
+              : "hover:bg-muted/80"
+          }`}
+          title={label}
+        >
+          {emoji}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Inline reaction display under a message bubble
+function MessageReactionDisplay({ reactions, myId }) {
+  if (!reactions || Object.keys(reactions).length === 0) return null;
+
+  // Group by reaction type and count
+  const grouped = {};
+  for (const [userId, type] of Object.entries(reactions)) {
+    if (!grouped[type]) grouped[type] = { count: 0, isMine: false };
+    grouped[type].count++;
+    if (userId === myId) grouped[type].isMine = true;
+  }
+
+  const reactionEmoji = { bravo: "👏", inspire: "✨", fire: "🔥" };
+
+  return (
+    <div className="flex items-center gap-1 mt-0.5">
+      {Object.entries(grouped).map(([type, { count, isMine }]) => (
+        <span
+          key={type}
+          className={`inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded-full border ${
+            isMine
+              ? "bg-primary/10 border-primary/20 text-primary"
+              : "bg-muted/50 border-border/30 text-muted-foreground"
+          }`}
+        >
+          {reactionEmoji[type] || type}
+          {count > 1 && <span className="text-[10px] font-medium">{count}</span>}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 export default function ConversationPage() {
@@ -238,6 +300,29 @@ export default function ConversationPage() {
     }
   };
 
+  // React to a message (toggle)
+  const handleReactMessage = async (messageId, reactionType) => {
+    try {
+      const res = await authFetch(`${API}/messages/${messageId}/reactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reaction_type: reactionType }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.message_id === messageId
+              ? { ...m, reactions: data.reactions }
+              : m
+          )
+        );
+      }
+    } catch {
+      // Silent — reaction is non-critical UX
+    }
+  };
+
   const other = conversation?.other_user || {};
   const myId = currentUser?.user_id;
 
@@ -371,6 +456,7 @@ export default function ConversationPage() {
                       </div>
                     )}
                     <div className={`group flex items-end gap-1 ${isMine ? "justify-end" : "justify-start"}`}>
+                      {/* Actions: edit/delete (own messages) + reaction picker */}
                       {isMine && editingMessageId !== msg.message_id && (
                         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 mb-0.5">
                           {canEditMessage(msg.created_at) && (
@@ -389,6 +475,15 @@ export default function ConversationPage() {
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
+                        </div>
+                      )}
+                      {/* Reaction picker — appears on hover for received messages, left side for own */}
+                      {!isMine && editingMessageId !== msg.message_id && (
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 mb-0.5 order-last ml-1">
+                          <ReactionPicker
+                            onReact={(type) => handleReactMessage(msg.message_id, type)}
+                            myReaction={msg.reactions?.[myId]}
+                          />
                         </div>
                       )}
                       {editingMessageId === msg.message_id ? (
@@ -413,26 +508,41 @@ export default function ConversationPage() {
                           </button>
                         </div>
                       ) : (
-                        <div
-                          className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
-                            isMine
-                              ? "bg-gradient-to-br from-[#459492] to-[#55B3AE] text-white rounded-br-md"
-                              : "bg-card border border-border/50 text-foreground rounded-bl-md"
-                          }`}
-                        >
-                          <p className="whitespace-pre-wrap break-words">
-                            <MentionText
-                              content={msg.content}
-                              mentions={msg.mentions}
-                              currentUserId={myId}
-                              variant={isMine ? "dark" : "light"}
-                            />
-                          </p>
-                          {msg.edited_at && (
-                            <span className={`text-[9px] italic mt-0.5 block ${isMine ? "text-white/60" : "text-muted-foreground/50"}`}>
-                              (modifié)
-                            </span>
-                          )}
+                        <div className="max-w-[75%] flex flex-col">
+                          <div
+                            className={`relative px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
+                              isMine
+                                ? "bg-gradient-to-br from-[#459492] to-[#55B3AE] text-white rounded-br-md"
+                                : "bg-card border border-border/50 text-foreground rounded-bl-md"
+                            }`}
+                          >
+                            <p className="whitespace-pre-wrap break-words">
+                              <MentionText
+                                content={msg.content}
+                                mentions={msg.mentions}
+                                currentUserId={myId}
+                                variant={isMine ? "dark" : "light"}
+                              />
+                            </p>
+                            {msg.edited_at && (
+                              <span className={`text-[9px] italic mt-0.5 block ${isMine ? "text-white/60" : "text-muted-foreground/50"}`}>
+                                (modifié)
+                              </span>
+                            )}
+                          </div>
+                          {/* Reaction display under bubble */}
+                          <div className={`${isMine ? "self-end" : "self-start"}`}>
+                            <MessageReactionDisplay reactions={msg.reactions} myId={myId} />
+                          </div>
+                        </div>
+                      )}
+                      {/* Reaction picker for own messages — right side */}
+                      {isMine && editingMessageId !== msg.message_id && (
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 mb-0.5 order-first mr-1">
+                          <ReactionPicker
+                            onReact={(type) => handleReactMessage(msg.message_id, type)}
+                            myReaction={msg.reactions?.[myId]}
+                          />
                         </div>
                       )}
                     </div>
