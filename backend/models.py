@@ -260,5 +260,6 @@ class ConversationCreate(BaseModel):
     user_id: str = Field(description="User ID of the person to message")
 
 class MessageSend(BaseModel):
-    """Request body for sending a message."""
-    content: str = Field(min_length=1, max_length=1000)
+    """Request body for sending a message (text and/or images)."""
+    content: str = Field(default="", max_length=1000)
+    images: list = Field(default_factory=list)  # [{image_url, thumbnail_url, width, height}]

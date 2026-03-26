@@ -7,7 +7,7 @@ import Sidebar from "@/components/Sidebar";
 import SafetyMenu from "@/components/SafetyMenu";
 import MentionInput from "@/components/MentionInput";
 import MentionText from "@/components/MentionText";
-import { ArrowLeft, Send, Loader2, MessageCircle, Sparkles, Trash2, Pencil, Check, X, SmilePlus } from "lucide-react";
+import { ArrowLeft, Send, Loader2, MessageCircle, Sparkles, Trash2, Pencil, Check, X, SmilePlus, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
 import { sanitize } from "@/lib/sanitize";
@@ -97,6 +97,52 @@ function MessageReactionDisplay({ reactions, myId }) {
   );
 }
 
+// Image display in message bubble (WhatsApp/iMessage style)
+function MessageImages({ images, isMine }) {
+  const [lightboxIdx, setLightboxIdx] = useState(null);
+  if (!images || images.length === 0) return null;
+
+  return (
+    <>
+      <div className={`flex flex-wrap gap-1 ${images.length === 1 ? "" : "max-w-[280px]"}`}>
+        {images.map((img, i) => (
+          <img
+            key={i}
+            src={img.thumbnail_url || img.image_url}
+            alt=""
+            onClick={() => setLightboxIdx(i)}
+            className={`rounded-lg cursor-pointer object-cover ${
+              images.length === 1
+                ? "max-w-[280px] max-h-[300px] w-auto"
+                : "w-[136px] h-[136px]"
+            }`}
+          />
+        ))}
+      </div>
+      {/* Lightbox */}
+      {lightboxIdx !== null && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+          onClick={() => setLightboxIdx(null)}
+        >
+          <img
+            src={images[lightboxIdx].image_url}
+            alt=""
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setLightboxIdx(null)}
+            className="absolute top-4 right-4 text-white/70 hover:text-white p-2"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function ConversationPage() {
   const { conversationId } = useParams();
   const { user: currentUser } = useAuth();
@@ -115,6 +161,9 @@ export default function ConversationPage() {
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editText, setEditText] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  // Image upload state
+  const [pendingImages, setPendingImages] = useState([]);  // [{file, preview, uploading, uploaded: {image_url, ...}}]
+  const imageInputRef = useRef(null);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -203,24 +252,90 @@ export default function ConversationPage() {
     return () => clearInterval(pollRef.current);
   }, [conversationId]);
 
-  // Send message
+  // Image selection + async upload (upload-then-attach, same as feed posts)
+  const handleImageSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    // Max 4 images total
+    const remaining = 4 - pendingImages.length;
+    const toUpload = files.slice(0, remaining);
+
+    for (const file of toUpload) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error("Image trop lourde (max 10 MB)");
+        continue;
+      }
+      const preview = URL.createObjectURL(file);
+      const idx = pendingImages.length;
+      setPendingImages((prev) => [...prev, { file, preview, uploading: true, uploaded: null }]);
+
+      // Upload to Cloudinary via existing endpoint
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await authFetch(`${API}/feed/upload-image`, {
+          method: "POST",
+          body: formData,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setPendingImages((prev) =>
+            prev.map((img, i) =>
+              img.preview === preview
+                ? { ...img, uploading: false, uploaded: data }
+                : img
+            )
+          );
+        } else {
+          toast.error("Échec de l'upload");
+          setPendingImages((prev) => prev.filter((img) => img.preview !== preview));
+        }
+      } catch {
+        toast.error("Erreur d'upload");
+        setPendingImages((prev) => prev.filter((img) => img.preview !== preview));
+      }
+    }
+    // Reset input
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  };
+
+  const removeImage = (preview) => {
+    setPendingImages((prev) => prev.filter((img) => img.preview !== preview));
+  };
+
+  // Send message (text and/or images)
   const handleSend = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const text = messageText.trim();
-    if (!text || sending) return;
+    const uploadedImages = pendingImages
+      .filter((img) => img.uploaded)
+      .map((img) => img.uploaded);
+    const hasText = text.length > 0;
+    const hasImages = uploadedImages.length > 0;
+
+    if ((!hasText && !hasImages) || sending) return;
+    // Wait for all uploads to complete
+    if (pendingImages.some((img) => img.uploading)) {
+      toast.info("Upload en cours, un instant...");
+      return;
+    }
     setSending(true);
 
     try {
+      const payload = { content: text };
+      if (hasImages) payload.images = uploadedImages;
+
       const res = await authFetch(`${API}/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         const newMsg = await res.json();
         setMessages((prev) => [...prev, newMsg]);
         setMessageText("");
         setMessageMentions([]);
+        setPendingImages([]);
       } else {
         const err = await res.json().catch(() => ({}));
         toast.error(err.detail || "Erreur lors de l'envoi");
@@ -509,6 +624,14 @@ export default function ConversationPage() {
                         </div>
                       ) : (
                         <div className="max-w-[75%] flex flex-col">
+                          {/* Images above text bubble */}
+                          {msg.images && msg.images.length > 0 && (
+                            <div className={`mb-1 ${isMine ? "self-end" : "self-start"}`}>
+                              <MessageImages images={msg.images} isMine={isMine} />
+                            </div>
+                          )}
+                          {/* Text bubble (skip if image-only with no text) */}
+                          {msg.content && (
                           <div
                             className={`relative px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
                               isMine
@@ -530,6 +653,7 @@ export default function ConversationPage() {
                               </span>
                             )}
                           </div>
+                          )}
                           {/* Reaction display under bubble */}
                           <div className={`${isMine ? "self-end" : "self-start"}`}>
                             <MessageReactionDisplay reactions={msg.reactions} myId={myId} />
@@ -572,7 +696,50 @@ export default function ConversationPage() {
                 ))}
               </div>
             )}
+            {/* Pending image previews */}
+            {pendingImages.length > 0 && (
+              <div className="flex items-center gap-2 mb-2 overflow-x-auto scrollbar-thin pb-1">
+                {pendingImages.map((img, i) => (
+                  <div key={i} className="relative shrink-0">
+                    <img
+                      src={img.preview}
+                      alt=""
+                      className="w-16 h-16 object-cover rounded-lg border border-border/50"
+                    />
+                    {img.uploading && (
+                      <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center">
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      </div>
+                    )}
+                    <button
+                      onClick={() => removeImage(img.preview)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-white rounded-full flex items-center justify-center text-[10px] shadow"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <form onSubmit={handleSend} className="flex items-center gap-2">
+              {/* Image upload button */}
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                multiple
+                className="hidden"
+                onChange={handleImageSelect}
+              />
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={pendingImages.length >= 4}
+                className="h-10 w-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors shrink-0 disabled:opacity-40"
+                title="Ajouter une image"
+              >
+                <ImagePlus className="w-5 h-5" />
+              </button>
               <MentionInput
                 value={messageText}
                 onChange={setMessageText}
@@ -589,7 +756,7 @@ export default function ConversationPage() {
               <Button
                 type="submit"
                 size="icon"
-                disabled={!messageText.trim() || sending}
+                disabled={(!messageText.trim() && pendingImages.filter(i => i.uploaded).length === 0) || sending}
                 className="h-10 w-10 rounded-full bg-gradient-to-r from-[#459492] to-[#55B3AE] hover:from-[#275255] hover:to-[#459492] text-white shadow-md shrink-0"
               >
                 {sending ? (

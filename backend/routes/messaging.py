@@ -201,17 +201,34 @@ async def send_message(
     if other_id in blocked_ids:
         raise HTTPException(status_code=403, detail="Impossible d'envoyer un message à cet utilisateur")
 
-    # Sanitize + moderate
-    content = sanitize_text(body.content, max_length=1000)
-    if not content:
+    # Sanitize + moderate text
+    content = sanitize_text(body.content, max_length=1000) if body.content else ""
+    has_text = bool(content.strip())
+
+    # Validate images (max 4, same pattern as feed posts)
+    images = body.images or []
+    validated_images = []
+    for img in images[:4]:
+        if not isinstance(img, dict) or not img.get("image_url"):
+            continue
+        validated_images.append({
+            "image_url": str(img["image_url"]),
+            "thumbnail_url": str(img.get("thumbnail_url", img["image_url"])),
+            "width": int(img.get("width", 0)),
+            "height": int(img.get("height", 0)),
+        })
+    has_images = bool(validated_images)
+
+    if not has_text and not has_images:
         raise HTTPException(status_code=400, detail="Le message ne peut pas être vide")
 
-    moderation = check_content(content)
-    if not moderation["allowed"]:
-        raise HTTPException(status_code=400, detail=moderation["reason"])
+    if has_text:
+        moderation = check_content(content)
+        if not moderation["allowed"]:
+            raise HTTPException(status_code=400, detail=moderation["reason"])
 
     # Extract @mentions
-    mentions = await extract_mentions(content, my_id, blocked_ids)
+    mentions = await extract_mentions(content, my_id, blocked_ids) if has_text else []
 
     now = datetime.now(timezone.utc).isoformat()
     message = {
@@ -223,17 +240,22 @@ async def send_message(
         "created_at": now,
         "read_at": None,
     }
+    if validated_images:
+        message["images"] = validated_images
+
     await db.messages.insert_one({**message, "_id": message["message_id"]})
     message.pop("_id", None)
 
-    # Layer 2: async AI moderation on message
+    # Layer 2: async AI moderation on message (text + images)
     try:
         from services.ai_moderation import moderate_content_async
+        image_urls = [img["image_url"] for img in validated_images] if validated_images else None
         asyncio.create_task(moderate_content_async(
             content_id=message["message_id"],
             content_type="message",
             author_id=my_id,
-            text=content,
+            text=content if has_text else "",
+            image_urls=image_urls,
         ))
     except Exception:
         pass
@@ -244,7 +266,7 @@ async def send_message(
         {
             "$set": {
                 "last_message": {
-                    "content": content[:100],
+                    "content": content[:100] if has_text else "📷 Image",
                     "sender_id": my_id,
                     "created_at": now,
                 },
@@ -257,7 +279,7 @@ async def send_message(
     # Notification (non-blocking)
     display = user.get("display_name") or user.get("name", "Quelqu'un")
     try:
-        preview = content[:80] + ("..." if len(content) > 80 else "")
+        preview = (content[:80] + ("..." if len(content) > 80 else "")) if has_text else "📷 Image"
         await db.notifications.insert_one({
             "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
             "user_id": other_id,
