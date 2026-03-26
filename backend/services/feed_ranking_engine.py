@@ -148,6 +148,46 @@ AFFINITY_LOOKBACK_DAYS = 30
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# DISCOVER FEED — Exploration-optimized ranking
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# The discover feed shows public content from ALL users (not just followed).
+# No affinity signal — you don't know these people yet. Instead, trending
+# (engagement velocity) surfaces content the community is engaging with NOW.
+#
+# Benchmarked against: Instagram Explore, Twitter/X Trending, Strava Discover.
+
+DISCOVER_WEIGHTS = {
+    "quality":  0.30,   # Intrinsic engagement (higher than personal feed)
+    "trending": 0.25,   # Engagement velocity — the differentiator for discover
+    "type":     0.15,   # Activity type importance
+    "freshness": 0.30,  # Time decay (multiplicative)
+}
+
+# Trending: engagement per hour, log-normalized.
+# ceiling = the velocity at which score = 1.0
+# 5 reactions/hour = extremely trending for InFinea's scale.
+TRENDING_VELOCITY_CEILING = 5.0
+
+# Discover-specific half-lives: longer than personal feed.
+# Good discover content should surface for longer since there's more of it.
+DISCOVER_HALF_LIFE_HOURS = {
+    "challenge_completed": 48,
+    "badge_earned":        36,
+    "streak_milestone":    36,
+    "post":                24,
+    "session_completed":   12,
+}
+DISCOVER_DEFAULT_HALF_LIFE = 18
+
+# Discover pool: larger pool for richer ranking (4× instead of 3×)
+DISCOVER_POOL_MULTIPLIER = 4
+
+# Stricter diversity in discover — you want to see many different people
+DISCOVER_MAX_SAME_AUTHOR = 2
+DISCOVER_DIVERSITY_PENALTY = 0.45
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # PUBLIC API
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -596,6 +636,181 @@ async def _compute_affinities_batch(
         affinities[author_id] = min(score, 1.0)
 
     return affinities
+
+
+async def rank_discover(
+    activities: list[dict],
+    viewer_id: str,
+) -> list[dict]:
+    """
+    Rank a pool of activities for the discover/explore feed.
+
+    Fundamentally different from rank_feed:
+    - NO affinity (you don't follow these people — you don't know them yet)
+    - TRENDING signal (engagement velocity — reactions+comments per hour)
+    - Higher quality weight (intrinsic engagement is king in discovery)
+    - Stricter diversity (you want to see many different creators)
+    - Longer half-lives (good discover content should surface longer)
+    - Contextual boost still applies (learning journey relevance)
+
+    Args:
+        activities: Raw public activities from MongoDB (chronological pool).
+        viewer_id: The user exploring the feed.
+
+    Returns:
+        Activities sorted by discover composite score (highest first).
+    """
+    if not activities or len(activities) <= 1:
+        return activities
+
+    viewer_ctx = await _get_viewer_context(viewer_id)
+    now = datetime.now(timezone.utc)
+
+    for activity in activities:
+        activity["_score"] = _score_discover(activity, viewer_id, viewer_ctx, now)
+
+    activities.sort(key=lambda a: a["_score"], reverse=True)
+
+    # Stricter diversity for discover
+    activities = _apply_discover_diversity(activities)
+
+    for a in activities:
+        a.pop("_score", None)
+
+    return activities
+
+
+def _score_discover(
+    activity: dict,
+    viewer_id: str,
+    viewer_ctx: dict,
+    now: datetime,
+) -> float:
+    """Compute discover composite score. Pure function, zero I/O."""
+
+    activity_type = activity.get("type", "session_completed")
+
+    # ── Signal 1: Content Quality (same as personal feed) ──
+    quality = _content_quality(activity)
+
+    # ── Signal 2: Trending — engagement velocity ──
+    trending = _trending_score(activity, now)
+
+    # ── Signal 3: Type Weight ──
+    type_score = TYPE_SCORES.get(activity_type, 0.50)
+
+    # ── Signal 4: Freshness (discover-specific half-lives) ──
+    freshness = _discover_time_decay(activity, now)
+
+    # ── Base score: weighted sum (no affinity) ──
+    base = (
+        DISCOVER_WEIGHTS["quality"] * quality
+        + DISCOVER_WEIGHTS["trending"] * trending
+        + DISCOVER_WEIGHTS["type"] * type_score
+    )
+
+    # Multiplicative freshness (same pattern as personal feed)
+    freshness_floor = DISCOVER_WEIGHTS["freshness"]
+    score = base * (freshness_floor + (1.0 - freshness_floor) * freshness)
+
+    # ── Contextual Boost (learning journey awareness) ──
+    boost = _contextual_boost(activity, viewer_id, viewer_ctx)
+    score *= boost
+
+    return score
+
+
+def _trending_score(activity: dict, now: datetime) -> float:
+    """
+    Engagement velocity: how fast is content getting reactions/comments.
+
+    Formula: velocity = total_engagement / max(age_hours, 1)
+    Then log-normalized against TRENDING_VELOCITY_CEILING.
+
+    A post with 5 reactions in 1 hour is more trending than
+    a post with 10 reactions in 24 hours. This surfaces content
+    the community is engaging with RIGHT NOW.
+
+    Comments weighted 2× (high-effort engagement signal).
+    """
+    rc = activity.get("reaction_counts", {})
+    total_reactions = sum(rc.values())
+    comment_count = activity.get("comment_count", 0)
+
+    total_engagement = total_reactions + (comment_count * 2)
+
+    if total_engagement == 0:
+        return 0.0
+
+    # Compute age in hours
+    created_str = activity.get("created_at", "")
+    if not created_str:
+        return 0.0
+
+    try:
+        if isinstance(created_str, str):
+            created = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+        else:
+            created = created_str
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        age_hours = max(1.0, (now - created).total_seconds() / 3600.0)
+    except (ValueError, TypeError):
+        age_hours = 1.0
+
+    velocity = total_engagement / age_hours
+
+    # Log-scale normalization (diminishing returns past ceiling)
+    return min(
+        math.log1p(velocity) / math.log1p(TRENDING_VELOCITY_CEILING),
+        1.0,
+    )
+
+
+def _discover_time_decay(activity: dict, now: datetime) -> float:
+    """Exponential decay with discover-specific (longer) half-lives."""
+    created_str = activity.get("created_at", "")
+    if not created_str:
+        return 0.5
+
+    try:
+        if isinstance(created_str, str):
+            created = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+        else:
+            created = created_str
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        age_hours = max(0.0, (now - created).total_seconds() / 3600.0)
+    except (ValueError, TypeError):
+        return 0.5
+
+    activity_type = activity.get("type", "session_completed")
+    half_life = DISCOVER_HALF_LIFE_HOURS.get(activity_type, DISCOVER_DEFAULT_HALF_LIFE)
+
+    return 2.0 ** (-age_hours / half_life)
+
+
+def _apply_discover_diversity(activities: list[dict]) -> list[dict]:
+    """
+    Stricter diversity for discover: max 2 from same author (vs 3 in personal feed).
+    Harsher penalty (0.45× vs 0.60×) — in discover, variety is paramount.
+    """
+    if len(activities) <= DISCOVER_MAX_SAME_AUTHOR:
+        return activities
+
+    author_counts: dict[str, int] = {}
+
+    for activity in activities:
+        author = activity["user_id"]
+        count = author_counts.get(author, 0)
+
+        if count >= DISCOVER_MAX_SAME_AUTHOR:
+            activity["_score"] = activity.get("_score", 0) * DISCOVER_DIVERSITY_PENALTY
+
+        author_counts[author] = count + 1
+
+    activities.sort(key=lambda a: a.get("_score", 0), reverse=True)
+    return activities
 
 
 async def _empty_list():

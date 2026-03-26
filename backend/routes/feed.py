@@ -62,31 +62,53 @@ async def get_discover_feed(
     limit: int = 20,
 ):
     """
-    Discover feed: public activities from ALL users.
-    Instagram Explore equivalent — always has content, even for new users.
+    Discover feed: public activities from ALL users, ranked by discover algorithm.
+    Instagram Explore equivalent — surfaces trending, high-quality, diverse content.
+
+    Flow:
+    1. Fetch a larger pool (DISCOVER_POOL_MULTIPLIER × limit) chronologically.
+    2. Rank by 4 signals: quality, trending (velocity), type weight, freshness.
+    3. Apply contextual boost (learning journey awareness).
+    4. Apply strict diversity (max 2 per author).
+    5. Return top `limit` activities.
     """
+    from services.feed_ranking_engine import rank_discover, DISCOVER_POOL_MULTIPLIER
+
     if limit > 50:
         limit = 50
 
     # Filter out blocked users from discover
     blocked_ids = await get_blocked_ids(user["user_id"])
 
-    query = {"visibility": "public"}
+    query = {"visibility": "public", "moderation_status": {"$ne": "hidden"}}
     if blocked_ids:
         query["user_id"] = {"$nin": list(blocked_ids)}
     if cursor:
         query["created_at"] = {"$lt": cursor}
 
-    activities = (
+    # Fetch larger pool for ranking depth
+    pool_size = limit * DISCOVER_POOL_MULTIPLIER
+
+    pool = (
         await db.activities.find(query, {"_id": 0})
         .sort("created_at", -1)
-        .limit(limit + 1)
-        .to_list(limit + 1)
+        .limit(pool_size + 1)
+        .to_list(pool_size + 1)
     )
 
-    has_more = len(activities) > limit
+    has_more = len(pool) > pool_size
     if has_more:
-        activities = activities[:limit]
+        pool = pool[:pool_size]
+
+    # Rank the pool — trending, quality, type, freshness, contextual boost, diversity
+    if len(pool) > 1:
+        try:
+            pool = await rank_discover(pool, viewer_id=user["user_id"])
+        except Exception:
+            logger.exception("Discover ranking failed — falling back to chronological")
+
+    # Take top `limit` from ranked pool
+    activities = pool[:limit]
 
     # Enrich with user info
     if activities:
@@ -114,7 +136,8 @@ async def get_discover_feed(
         for activity in activities:
             activity["user_reaction"] = reaction_map.get(activity["activity_id"])
 
-    next_cursor = activities[-1]["created_at"] if activities and has_more else None
+    # Cursor = oldest created_at in the FULL pool (advances past all ranked content)
+    next_cursor = pool[-1]["created_at"] if pool and has_more else None
     return {"activities": activities, "next_cursor": next_cursor, "has_more": has_more}
 
 
@@ -452,7 +475,7 @@ async def get_own_activities(
     if limit > 50:
         limit = 50
 
-    query = {"user_id": user["user_id"]}
+    query = {"user_id": user["user_id"], "moderation_status": {"$ne": "hidden"}}
     if cursor:
         query["created_at"] = {"$lt": cursor}
 
@@ -661,6 +684,20 @@ async def create_manual_post(
     }
 
     await db.activities.insert_one(activity_doc)
+
+    # Layer 2: async AI moderation (fire-and-forget, never blocks)
+    try:
+        from services.ai_moderation import moderate_content_async
+        image_urls = [img["image_url"] for img in validated_images] if validated_images else None
+        asyncio.create_task(moderate_content_async(
+            content_id=activity_id,
+            content_type="post",
+            author_id=user["user_id"],
+            text=content if has_text else "",
+            image_urls=image_urls,
+        ))
+    except Exception:
+        pass  # Moderation failure must never block post creation
 
     # Notify mentioned users
     display = user.get("display_name") or user.get("name", "Quelqu'un")
@@ -935,6 +972,18 @@ async def add_comment(
         {"$inc": {"comment_count": 1}},
     )
 
+    # Layer 2: async AI moderation on comment
+    try:
+        from services.ai_moderation import moderate_content_async
+        asyncio.create_task(moderate_content_async(
+            content_id=comment_id,
+            content_type="comment",
+            author_id=user["user_id"],
+            text=content,
+        ))
+    except Exception:
+        pass
+
     # Increment reply_count on parent comment
     if parent_id:
         await db.comments.update_one(
@@ -1081,7 +1130,7 @@ async def get_comments(
 
     # Filter out comments from blocked users
     blocked_ids = await get_blocked_ids(user["user_id"])
-    comment_query = {"activity_id": activity_id}
+    comment_query = {"activity_id": activity_id, "moderation_status": {"$ne": "hidden"}}
     if blocked_ids:
         comment_query["user_id"] = {"$nin": list(blocked_ids)}
 
