@@ -15,7 +15,7 @@ import ReportDialog from "@/components/ReportDialog";
  *
  * Props:
  *   userId: string — the user to block/report
- *   targetType: "user" | "activity" | "comment" | "group"
+ *   targetType: "user" | "activity" | "comment" | "group" | "message"
  *   targetId: string — the content ID to report
  *   isBlocked: boolean
  *   onBlockChange: (blocked: boolean) => void
