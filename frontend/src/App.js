@@ -42,6 +42,7 @@ import AdminModerationPage from "@/pages/AdminModerationPage";
 import SavedPage from "@/pages/SavedPage";
 import HashtagFeedPage from "@/pages/HashtagFeedPage";
 import NewGroupPage from "@/pages/NewGroupPage";
+import ActivityDetailPage from "@/pages/ActivityDetailPage";
 import NotFound from "@/pages/NotFound";
 import CoachFAB from "@/components/CoachFAB";
 import MicroInstantBanner from "@/components/MicroInstantBanner";
@@ -581,6 +582,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <HashtagFeedPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/activity/:activityId"
+        element={
+          <ProtectedRoute>
+            <ActivityDetailPage />
           </ProtectedRoute>
         }
       />
