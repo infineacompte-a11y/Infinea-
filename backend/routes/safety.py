@@ -108,11 +108,17 @@ async def get_blocked_users(user: dict = Depends(get_current_user)):
 
 # ============== REPORT ==============
 
-REPORT_TYPES = {"user", "comment", "activity", "group"}
+REPORT_TYPES = {"user", "comment", "activity", "group", "message"}
 REPORT_REASONS = {
     "harassment", "spam", "hate_speech", "inappropriate_content",
     "impersonation", "self_harm", "other",
 }
+
+# ── Auto-escalation thresholds (Discord/Instagram benchmark) ──
+# When a piece of content reaches this many unique reports, it's auto-hidden.
+# This prevents pile-on abuse while catching genuinely problematic content.
+AUTO_HIDE_THRESHOLD = 3        # 3 unique reporters → auto-hide content
+AUTO_SUSPEND_THRESHOLD = 10    # 10 unique reports on a user → auto-suspend
 
 
 @router.post("/report")
@@ -164,7 +170,117 @@ async def report_content(
         "created_at": now,
     })
 
+    # ── Auto-escalation: check report count thresholds ──
+    try:
+        await _check_auto_escalation(target_type, target_id, now)
+    except Exception:
+        pass  # Escalation failure must never block the report
+
     return {"message": "Signalement enregistré. Merci.", "report_id": report_id}
+
+
+# ── Auto-escalation engine ──
+
+async def _check_auto_escalation(target_type: str, target_id: str, now: str):
+    """
+    Check if a target has crossed report thresholds and take automatic action.
+
+    Thresholds (benchmarked from Discord Trust & Safety, Instagram):
+    - AUTO_HIDE_THRESHOLD (3): content auto-hidden, author notified
+    - AUTO_SUSPEND_THRESHOLD (10): user auto-suspended (requires user target)
+
+    Uses count of UNIQUE reporters (not total reports) to prevent abuse
+    where one person submits multiple reports.
+    """
+    # Count unique reporters for this target
+    unique_reporters = await db.reports.distinct(
+        "reporter_id",
+        {"target_type": target_type, "target_id": target_id, "status": "pending"},
+    )
+    report_count = len(unique_reporters)
+
+    # ── Auto-hide content at threshold ──
+    if report_count >= AUTO_HIDE_THRESHOLD:
+        if target_type == "activity":
+            # Check if not already hidden
+            activity = await db.activities.find_one(
+                {"activity_id": target_id, "moderation_status": {"$ne": "hidden"}},
+                {"user_id": 1},
+            )
+            if activity:
+                await db.activities.update_one(
+                    {"activity_id": target_id},
+                    {"$set": {"moderation_status": "hidden"}},
+                )
+                await db.notifications.insert_one({
+                    "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                    "user_id": activity["user_id"],
+                    "type": "moderation",
+                    "message": "Ta publication a été masquée suite à plusieurs signalements. Elle sera examinée par notre équipe.",
+                    "data": {"reason": "multiple_reports", "target_id": target_id},
+                    "read": False,
+                    "created_at": now,
+                })
+                logger.info(f"Auto-hide: activity {target_id} ({report_count} reports)")
+
+        elif target_type == "comment":
+            comment = await db.comments.find_one(
+                {"comment_id": target_id, "moderation_status": {"$ne": "hidden"}},
+                {"user_id": 1},
+            )
+            if comment:
+                await db.comments.update_one(
+                    {"comment_id": target_id},
+                    {"$set": {"moderation_status": "hidden"}},
+                )
+                await db.notifications.insert_one({
+                    "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                    "user_id": comment["user_id"],
+                    "type": "moderation",
+                    "message": "Ton commentaire a été masqué suite à plusieurs signalements.",
+                    "data": {"reason": "multiple_reports", "target_id": target_id},
+                    "read": False,
+                    "created_at": now,
+                })
+                logger.info(f"Auto-hide: comment {target_id} ({report_count} reports)")
+
+        elif target_type == "message":
+            msg = await db.messages.find_one(
+                {"message_id": target_id, "moderation_status": {"$ne": "hidden"}},
+                {"sender_id": 1},
+            )
+            if msg:
+                await db.messages.update_one(
+                    {"message_id": target_id},
+                    {"$set": {"moderation_status": "hidden"}},
+                )
+                logger.info(f"Auto-hide: message {target_id} ({report_count} reports)")
+
+    # ── Auto-suspend user at higher threshold ──
+    if target_type == "user" and report_count >= AUTO_SUSPEND_THRESHOLD:
+        user_doc = await db.users.find_one(
+            {"user_id": target_id, "suspended": {"$ne": True}},
+            {"user_id": 1},
+        )
+        if user_doc:
+            await db.users.update_one(
+                {"user_id": target_id},
+                {"$set": {
+                    "suspended": True,
+                    "suspended_at": now,
+                    "suspended_reason": "auto_escalation_multiple_reports",
+                }},
+            )
+            await db.notifications.insert_one({
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": target_id,
+                "type": "account_suspended",
+                "message": "Ton compte a été temporairement suspendu suite à de nombreux signalements. Contacte le support.",
+                "data": {"reason": "auto_escalation"},
+                "read": False,
+                "created_at": now,
+            })
+            logger.info(f"Auto-suspend: user {target_id} ({report_count} reports)")
 
 
 # ============== ADMIN MODERATION ==============
@@ -295,6 +411,8 @@ async def get_report_detail(report_id: str, user: dict = Depends(get_current_use
         )
     elif tt == "group":
         target = await db.groups.find_one({"group_id": tid}, {"_id": 0})
+    elif tt == "message":
+        target = await db.messages.find_one({"message_id": tid}, {"_id": 0})
 
     report["target"] = target
 
@@ -359,6 +477,9 @@ async def moderate_report(
         elif target_type == "activity":
             activity = await db.activities.find_one({"activity_id": target_id}, {"user_id": 1})
             warned_user_id = activity["user_id"] if activity else None
+        elif target_type == "message":
+            message = await db.messages.find_one({"message_id": target_id}, {"sender_id": 1})
+            warned_user_id = message["sender_id"] if message else None
 
         if warned_user_id:
             await db.notifications.insert_one({
@@ -384,6 +505,9 @@ async def moderate_report(
             await db.reactions.delete_many({"activity_id": target_id})
             await db.comments.delete_many({"activity_id": target_id})
             result_message = f"Activity + reactions + comments deleted ({del_result.deleted_count})"
+        elif target_type == "message":
+            del_result = await db.messages.delete_one({"message_id": target_id})
+            result_message = f"Message deleted ({del_result.deleted_count})"
         else:
             result_message = f"Cannot remove content for target_type={target_type}"
 

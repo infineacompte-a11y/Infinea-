@@ -27,7 +27,7 @@ const REASONS = [
  * Props:
  *   open: boolean
  *   onOpenChange: (open) => void
- *   targetType: "user" | "comment" | "activity" | "group"
+ *   targetType: "user" | "comment" | "activity" | "group" | "message"
  *   targetId: string
  */
 export default function ReportDialog({ open, onOpenChange, targetType, targetId }) {
