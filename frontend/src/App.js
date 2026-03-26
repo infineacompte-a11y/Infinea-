@@ -41,6 +41,7 @@ import ConversationPage from "@/pages/ConversationPage";
 import AdminModerationPage from "@/pages/AdminModerationPage";
 import SavedPage from "@/pages/SavedPage";
 import HashtagFeedPage from "@/pages/HashtagFeedPage";
+import NewGroupPage from "@/pages/NewGroupPage";
 import NotFound from "@/pages/NotFound";
 import CoachFAB from "@/components/CoachFAB";
 import MicroInstantBanner from "@/components/MicroInstantBanner";
@@ -548,6 +549,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <MessagesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/messages/new-group"
+        element={
+          <ProtectedRoute>
+            <NewGroupPage />
           </ProtectedRoute>
         }
       />

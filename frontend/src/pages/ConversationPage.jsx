@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Sidebar from "@/components/Sidebar";
 import SafetyMenu from "@/components/SafetyMenu";
 import MentionInput from "@/components/MentionInput";
 import MentionText from "@/components/MentionText";
-import { ArrowLeft, Send, Loader2, MessageCircle, Sparkles, Trash2, Pencil, Check, X, SmilePlus, ImagePlus, BellOff, Bell, CheckCheck } from "lucide-react";
+import {
+  ArrowLeft, Send, Loader2, MessageCircle, Sparkles, Trash2, Pencil,
+  Check, X, SmilePlus, ImagePlus, BellOff, Bell, CheckCheck,
+  Users, Settings, UserPlus, LogOut, Shield, ShieldOff, Crown,
+} from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
 import { sanitize } from "@/lib/sanitize";
@@ -68,7 +71,6 @@ function ReactionPicker({ onReact, myReaction }) {
 function MessageReactionDisplay({ reactions, myId }) {
   if (!reactions || Object.keys(reactions).length === 0) return null;
 
-  // Group by reaction type and count
   const grouped = {};
   for (const [userId, type] of Object.entries(reactions)) {
     if (!grouped[type]) grouped[type] = { count: 0, isMine: false };
@@ -98,7 +100,7 @@ function MessageReactionDisplay({ reactions, myId }) {
 }
 
 // Image display in message bubble (WhatsApp/iMessage style)
-function MessageImages({ images, isMine }) {
+function MessageImages({ images }) {
   const [lightboxIdx, setLightboxIdx] = useState(null);
   if (!images || images.length === 0) return null;
 
@@ -119,7 +121,6 @@ function MessageImages({ images, isMine }) {
           />
         ))}
       </div>
-      {/* Lightbox */}
       {lightboxIdx !== null && (
         <div
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
@@ -143,6 +144,296 @@ function MessageImages({ images, isMine }) {
   );
 }
 
+/* ── Group member panel (slide-over, Discord pattern) ── */
+function GroupMemberPanel({
+  conversation, myId, onClose, onRefresh,
+}) {
+  const navigate = useNavigate();
+  const groupInfo = conversation?.group_info;
+  const isAdmin = groupInfo?.is_admin;
+  const members = groupInfo?.members || [];
+  const admins = new Set(groupInfo?.admins || []);
+  const [loading, setLoading] = useState(false);
+  const [addSearchQuery, setAddSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [groupName, setGroupName] = useState(groupInfo?.name || "");
+
+  // Search users to add
+  const handleSearch = async (q) => {
+    setAddSearchQuery(q);
+    if (q.length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    try {
+      const res = await authFetch(`${API}/search/users?q=${encodeURIComponent(q)}&limit=10`);
+      if (res.ok) {
+        const data = await res.json();
+        const currentIds = new Set(conversation.participants || []);
+        setSearchResults((data.users || []).filter((u) => !currentIds.has(u.user_id)));
+      }
+    } catch { /* silent */ }
+    setSearching(false);
+  };
+
+  const handleAddMember = async (userId) => {
+    setLoading(true);
+    try {
+      const res = await authFetch(`${API}/conversations/${conversation.conversation_id}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ member_ids: [userId] }),
+      });
+      if (res.ok) {
+        toast.success("Membre ajouté");
+        setSearchResults((prev) => prev.filter((u) => u.user_id !== userId));
+        onRefresh();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || "Erreur");
+      }
+    } catch { toast.error("Erreur de connexion"); }
+    setLoading(false);
+  };
+
+  const handleRemoveMember = async (memberId) => {
+    setLoading(true);
+    try {
+      const res = await authFetch(
+        `${API}/conversations/${conversation.conversation_id}/members/${memberId}`,
+        { method: "DELETE" },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.left && memberId === myId) {
+          toast.success("Vous avez quitté le groupe");
+          navigate("/messages");
+          return;
+        }
+        toast.success("Membre retiré");
+        onRefresh();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || "Erreur");
+      }
+    } catch { toast.error("Erreur de connexion"); }
+    setLoading(false);
+  };
+
+  const handleToggleAdmin = async (userId) => {
+    setLoading(true);
+    try {
+      const res = await authFetch(
+        `${API}/conversations/${conversation.conversation_id}/admin`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId }),
+        },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(data.is_admin ? "Promu admin" : "Rôle admin retiré");
+        onRefresh();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || "Erreur");
+      }
+    } catch { toast.error("Erreur de connexion"); }
+    setLoading(false);
+  };
+
+  const handleSaveName = async () => {
+    if (!groupName.trim() || groupName.trim() === groupInfo?.name) {
+      setEditingName(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await authFetch(
+        `${API}/conversations/${conversation.conversation_id}/group`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: groupName.trim() }),
+        },
+      );
+      if (res.ok) {
+        toast.success("Nom du groupe mis à jour");
+        setEditingName(false);
+        onRefresh();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || "Erreur");
+      }
+    } catch { toast.error("Erreur de connexion"); }
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40" />
+      <div
+        className="relative w-full max-w-sm bg-background border-l border-border shadow-xl flex flex-col h-full animate-slide-in-right"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Panel header */}
+        <div className="px-4 py-4 border-b border-border/50 flex items-center justify-between shrink-0">
+          <h2 className="text-sm font-semibold">Membres du groupe</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+          {/* Group name (editable for admins) */}
+          <div>
+            <label className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">Nom du groupe</label>
+            {editingName ? (
+              <div className="flex items-center gap-1.5 mt-1">
+                <input
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  maxLength={50}
+                  className="flex-1 h-8 text-sm rounded-lg border border-primary/30 bg-primary/[0.03] px-2.5 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") setEditingName(false); }}
+                />
+                <button onClick={handleSaveName} disabled={loading} className="p-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20">
+                  <Check className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => setEditingName(false)} className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted/50">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-sm font-medium">{groupInfo?.name}</span>
+                {isAdmin && (
+                  <button onClick={() => { setGroupName(groupInfo?.name || ""); setEditingName(true); }} className="p-1 rounded hover:bg-muted/50 text-muted-foreground/50 hover:text-muted-foreground">
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Member list */}
+          <div>
+            <label className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">
+              {groupInfo?.member_count || 0} membres
+            </label>
+            <div className="space-y-1 mt-2">
+              {/* Self (always first) */}
+              <div className="flex items-center gap-2.5 p-2 rounded-lg bg-primary/[0.03]">
+                <Avatar className="w-8 h-8">
+                  <AvatarFallback className="bg-primary/10 text-primary text-xs">Toi</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium truncate block">Toi</span>
+                  {admins.has(myId) && (
+                    <span className="text-[10px] text-[#459492] flex items-center gap-0.5"><Crown className="w-2.5 h-2.5" /> Admin</span>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleRemoveMember(myId)}
+                  disabled={loading}
+                  className="text-xs text-destructive/70 hover:text-destructive flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-destructive/10 transition-colors"
+                >
+                  <LogOut className="w-3 h-3" />
+                  Quitter
+                </button>
+              </div>
+
+              {/* Other members */}
+              {members.map((m) => (
+                <div key={m.user_id} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted/30 transition-colors">
+                  <Avatar
+                    className="w-8 h-8 cursor-pointer"
+                    onClick={() => navigate(`/users/${m.user_id}`)}
+                  >
+                    <AvatarImage src={m.avatar_url} alt={m.display_name} />
+                    <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                      {getInitials(m.display_name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium truncate block">{m.display_name}</span>
+                    {admins.has(m.user_id) && (
+                      <span className="text-[10px] text-[#459492] flex items-center gap-0.5"><Crown className="w-2.5 h-2.5" /> Admin</span>
+                    )}
+                  </div>
+                  {/* Admin actions */}
+                  {isAdmin && (
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        onClick={() => handleToggleAdmin(m.user_id)}
+                        disabled={loading}
+                        className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                        title={admins.has(m.user_id) ? "Retirer admin" : "Promouvoir admin"}
+                      >
+                        {admins.has(m.user_id) ? <ShieldOff className="w-3.5 h-3.5" /> : <Shield className="w-3.5 h-3.5" />}
+                      </button>
+                      <button
+                        onClick={() => handleRemoveMember(m.user_id)}
+                        disabled={loading}
+                        className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground/50 hover:text-destructive transition-colors"
+                        title="Retirer du groupe"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Add members (admin only) */}
+          {isAdmin && (
+            <div>
+              <label className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1">
+                <UserPlus className="w-3 h-3" /> Ajouter un membre
+              </label>
+              <input
+                value={addSearchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder="Rechercher un utilisateur..."
+                className="w-full h-8 mt-1.5 text-sm rounded-lg border border-border/50 bg-muted/30 px-2.5 focus:outline-none focus:ring-1 focus:ring-primary/40"
+              />
+              {searching && (
+                <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-primary" /></div>
+              )}
+              {searchResults.length > 0 && (
+                <div className="space-y-1 mt-2">
+                  {searchResults.map((u) => (
+                    <div key={u.user_id} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted/30 transition-colors">
+                      <Avatar className="w-7 h-7">
+                        <AvatarImage src={u.avatar_url || u.picture} alt={u.display_name || u.name} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-[10px]">
+                          {getInitials(u.display_name || u.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm truncate flex-1">{u.display_name || u.name}</span>
+                      <button
+                        onClick={() => handleAddMember(u.user_id)}
+                        disabled={loading}
+                        className="text-xs text-primary px-2 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors"
+                      >
+                        Ajouter
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ConversationPage() {
   const { conversationId } = useParams();
   const { user: currentUser } = useAuth();
@@ -162,34 +453,57 @@ export default function ConversationPage() {
   const [editText, setEditText] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   // Image upload state
-  const [pendingImages, setPendingImages] = useState([]);  // [{file, preview, uploading, uploaded: {image_url, ...}}]
+  const [pendingImages, setPendingImages] = useState([]);
   const imageInputRef = useRef(null);
   // Mute state
   const [muted, setMuted] = useState(false);
   const [togglingMute, setTogglingMute] = useState(false);
+  // Group panel
+  const [showMemberPanel, setShowMemberPanel] = useState(false);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const pollRef = useRef(null);
 
+  const isGroup = conversation?.type === "group";
+  const groupInfo = conversation?.group_info;
+  const other = conversation?.other_user || {};
+  const myId = currentUser?.user_id;
+
+  // ── Sender map for group messages (display name + avatar by sender_id) ──
+  const senderMap = React.useMemo(() => {
+    if (!isGroup || !groupInfo) return {};
+    const map = {};
+    for (const m of groupInfo.members || []) {
+      map[m.user_id] = m;
+    }
+    // Add self
+    if (myId) {
+      map[myId] = { user_id: myId, display_name: "Toi", avatar_url: currentUser?.picture };
+    }
+    return map;
+  }, [isGroup, groupInfo, myId, currentUser?.picture]);
+
   // Fetch conversation info
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await authFetch(`${API}/conversations`);
-        if (res.ok) {
-          const data = await res.json();
-          const conv = (data.conversations || []).find(
-            (c) => c.conversation_id === conversationId
-          );
-          if (conv) {
-            setConversation(conv);
-            setMuted(conv.muted || false);
-          }
+  const fetchConversation = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API}/conversations`);
+      if (res.ok) {
+        const data = await res.json();
+        const conv = (data.conversations || []).find(
+          (c) => c.conversation_id === conversationId
+        );
+        if (conv) {
+          setConversation(conv);
+          setMuted(conv.muted || false);
         }
-      } catch { /* silent */ }
-    })();
+      }
+    } catch { /* silent */ }
   }, [conversationId]);
+
+  useEffect(() => {
+    fetchConversation();
+  }, [fetchConversation]);
 
   // Fetch messages
   const fetchMessages = useCallback(async (cursorVal = null) => {
@@ -208,7 +522,6 @@ export default function ConversationPage() {
         if (isInitial) {
           setMessages(newMsgs);
         } else {
-          // Prepend older messages
           setMessages((prev) => [...newMsgs, ...prev]);
         }
         setCursor(data.next_cursor);
@@ -250,7 +563,6 @@ export default function ConversationPage() {
         if (res.ok) {
           const data = await res.json();
           setMessages(data.messages || []);
-          // Mark as read silently
           authFetch(`${API}/conversations/${conversationId}/read`, { method: "PUT" }).catch(() => {});
         }
       } catch { /* silent */ }
@@ -258,11 +570,10 @@ export default function ConversationPage() {
     return () => clearInterval(pollRef.current);
   }, [conversationId]);
 
-  // Image selection + async upload (upload-then-attach, same as feed posts)
+  // Image selection + async upload
   const handleImageSelect = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-    // Max 4 images total
     const remaining = 4 - pendingImages.length;
     const toUpload = files.slice(0, remaining);
 
@@ -272,10 +583,8 @@ export default function ConversationPage() {
         continue;
       }
       const preview = URL.createObjectURL(file);
-      const idx = pendingImages.length;
       setPendingImages((prev) => [...prev, { file, preview, uploading: true, uploaded: null }]);
 
-      // Upload to Cloudinary via existing endpoint
       try {
         const formData = new FormData();
         formData.append("file", file);
@@ -286,10 +595,8 @@ export default function ConversationPage() {
         if (res.ok) {
           const data = await res.json();
           setPendingImages((prev) =>
-            prev.map((img, i) =>
-              img.preview === preview
-                ? { ...img, uploading: false, uploaded: data }
-                : img
+            prev.map((img) =>
+              img.preview === preview ? { ...img, uploading: false, uploaded: data } : img
             )
           );
         } else {
@@ -301,7 +608,6 @@ export default function ConversationPage() {
         setPendingImages((prev) => prev.filter((img) => img.preview !== preview));
       }
     }
-    // Reset input
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
 
@@ -309,7 +615,7 @@ export default function ConversationPage() {
     setPendingImages((prev) => prev.filter((img) => img.preview !== preview));
   };
 
-  // Send message (text and/or images)
+  // Send message
   const handleSend = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const text = messageText.trim();
@@ -320,7 +626,6 @@ export default function ConversationPage() {
     const hasImages = uploadedImages.length > 0;
 
     if ((!hasText && !hasImages) || sending) return;
-    // Wait for all uploads to complete
     if (pendingImages.some((img) => img.uploading)) {
       toast.info("Upload en cours, un instant...");
       return;
@@ -353,11 +658,8 @@ export default function ConversationPage() {
     }
   };
 
-  // Load older messages
   const handleLoadMore = () => {
-    if (hasMore && cursor && !loadingMore) {
-      fetchMessages(cursor);
-    }
+    if (hasMore && cursor && !loadingMore) fetchMessages(cursor);
   };
 
   // Delete own message
@@ -421,7 +723,7 @@ export default function ConversationPage() {
     }
   };
 
-  // React to a message (toggle)
+  // React to a message
   const handleReactMessage = async (messageId, reactionType) => {
     try {
       const res = await authFetch(`${API}/messages/${messageId}/reactions`, {
@@ -433,15 +735,11 @@ export default function ConversationPage() {
         const data = await res.json();
         setMessages((prev) =>
           prev.map((m) =>
-            m.message_id === messageId
-              ? { ...m, reactions: data.reactions }
-              : m
+            m.message_id === messageId ? { ...m, reactions: data.reactions } : m
           )
         );
       }
-    } catch {
-      // Silent — reaction is non-critical UX
-    }
+    } catch { /* silent */ }
   };
 
   const handleToggleMute = async () => {
@@ -460,12 +758,9 @@ export default function ConversationPage() {
     }
   };
 
-  const other = conversation?.other_user || {};
-  const myId = currentUser?.user_id;
-
-  // AI suggestions based on other user's profile
+  // AI suggestions based on other user's profile (direct only)
   const aiSuggestions = (() => {
-    if (!other.user_id) return [];
+    if (isGroup || !other.user_id) return [];
     const suggestions = [];
     if (other.streak_days > 0) {
       suggestions.push(`Bravo pour ton streak de ${other.streak_days} jour${other.streak_days > 1 ? "s" : ""} !`);
@@ -483,7 +778,7 @@ export default function ConversationPage() {
     <div className="min-h-screen app-bg-mesh">
       <Sidebar />
       <main className="lg:ml-64 pt-14 lg:pt-0 pb-0 flex flex-col h-screen lg:h-screen">
-        {/* Header */}
+        {/* Header — adapts to direct vs group */}
         <div className="section-dark-header px-4 lg:px-8 py-4 shrink-0">
           <div className="max-w-3xl mx-auto flex items-center gap-3">
             <Link
@@ -492,46 +787,80 @@ export default function ConversationPage() {
             >
               <ArrowLeft className="w-5 h-5" />
             </Link>
-            <Link to={other.user_id ? `/users/${other.user_id}` : "#"} className="flex items-center gap-3 flex-1 min-w-0">
-              <Avatar className="w-10 h-10 ring-2 ring-white/10">
-                <AvatarImage src={other.avatar_url} alt={other.display_name} />
-                <AvatarFallback className="bg-white/10 text-white text-sm">
-                  {getInitials(other.display_name)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <p className="text-white font-semibold text-sm truncate">
-                  {other.display_name || "Conversation"}
-                </p>
-                {other.username && (
-                  <p className="text-white/40 text-xs">@{other.username}</p>
-                )}
-              </div>
-            </Link>
-            {/* Mute toggle */}
-            <button
-              onClick={handleToggleMute}
-              disabled={togglingMute}
-              className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${
-                muted
-                  ? "text-white/90 bg-white/15"
-                  : "text-white/40 hover:text-white/70 hover:bg-white/10"
-              }`}
-              title={muted ? "Réactiver les notifications" : "Couper les notifications"}
-            >
-              {muted ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
-            </button>
-            {other.user_id && (
-              <SafetyMenu
-                userId={other.user_id}
-                targetType="user"
-                targetId={other.user_id}
-                size="sm"
-                onBlockChange={(blocked) => {
-                  if (blocked) navigate("/messages");
-                }}
-              />
+
+            {isGroup ? (
+              /* ── Group header ── */
+              <button
+                onClick={() => setShowMemberPanel(true)}
+                className="flex items-center gap-3 flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
+              >
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#459492]/30 to-[#55B3AE]/15 flex items-center justify-center ring-2 ring-white/10">
+                  <Users className="w-5 h-5 text-white/80" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-white font-semibold text-sm truncate">
+                    {groupInfo?.name || "Groupe"}
+                  </p>
+                  <p className="text-white/40 text-xs">
+                    {groupInfo?.member_count || 0} membres
+                  </p>
+                </div>
+              </button>
+            ) : (
+              /* ── Direct header (existing) ── */
+              <Link to={other.user_id ? `/users/${other.user_id}` : "#"} className="flex items-center gap-3 flex-1 min-w-0">
+                <Avatar className="w-10 h-10 ring-2 ring-white/10">
+                  <AvatarImage src={other.avatar_url} alt={other.display_name} />
+                  <AvatarFallback className="bg-white/10 text-white text-sm">
+                    {getInitials(other.display_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-white font-semibold text-sm truncate">
+                    {other.display_name || "Conversation"}
+                  </p>
+                  {other.username && (
+                    <p className="text-white/40 text-xs">@{other.username}</p>
+                  )}
+                </div>
+              </Link>
             )}
+
+            {/* Right actions */}
+            <div className="flex items-center gap-1">
+              {isGroup && (
+                <button
+                  onClick={() => setShowMemberPanel(true)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full text-white/40 hover:text-white/70 hover:bg-white/10 transition-all"
+                  title="Membres"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              )}
+              <button
+                onClick={handleToggleMute}
+                disabled={togglingMute}
+                className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${
+                  muted
+                    ? "text-white/90 bg-white/15"
+                    : "text-white/40 hover:text-white/70 hover:bg-white/10"
+                }`}
+                title={muted ? "Réactiver les notifications" : "Couper les notifications"}
+              >
+                {muted ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+              </button>
+              {!isGroup && other.user_id && (
+                <SafetyMenu
+                  userId={other.user_id}
+                  targetType="user"
+                  targetId={other.user_id}
+                  size="sm"
+                  onBlockChange={(blocked) => {
+                    if (blocked) navigate("/messages");
+                  }}
+                />
+              )}
+            </div>
           </div>
         </div>
 
@@ -541,7 +870,6 @@ export default function ConversationPage() {
           className="flex-1 overflow-y-auto px-4 lg:px-8"
         >
           <div className="max-w-3xl mx-auto py-4 space-y-1">
-            {/* Load more */}
             {hasMore && (
               <div className="flex justify-center py-2">
                 <button
@@ -568,9 +896,9 @@ export default function ConversationPage() {
                   <MessageCircle className="w-7 h-7 text-primary" />
                 </div>
                 <p className="text-muted-foreground text-sm mb-4">
-                  Envoyez le premier message
+                  {isGroup ? "Envoyez le premier message dans ce groupe" : "Envoyez le premier message"}
                 </p>
-                {aiSuggestions.length > 0 && (
+                {!isGroup && aiSuggestions.length > 0 && (
                   <div className="flex flex-col gap-2 w-full max-w-xs">
                     <div className="flex items-center justify-center gap-1.5 text-xs text-primary/60 mb-1">
                       <Sparkles className="w-3.5 h-3.5" />
@@ -595,6 +923,11 @@ export default function ConversationPage() {
                 const showTime =
                   !prevMsg ||
                   new Date(msg.created_at).getTime() - new Date(prevMsg.created_at).getTime() > 300000;
+                // In groups, show sender info when sender changes or after time gap
+                const showSender = isGroup && !isMine && (
+                  !prevMsg || prevMsg.sender_id !== msg.sender_id || showTime
+                );
+                const sender = senderMap[msg.sender_id];
 
                 return (
                   <React.Fragment key={msg.message_id}>
@@ -602,6 +935,20 @@ export default function ConversationPage() {
                       <div className="flex justify-center py-2">
                         <span className="text-[10px] text-muted-foreground/60 bg-muted/50 px-2 py-0.5 rounded-full">
                           {timeAgo(msg.created_at)} · {formatTime(msg.created_at)}
+                        </span>
+                      </div>
+                    )}
+                    {/* Sender name for group messages (Discord pattern) */}
+                    {showSender && sender && (
+                      <div className="flex items-center gap-1.5 ml-1 mt-2 mb-0.5">
+                        <Avatar className="w-5 h-5">
+                          <AvatarImage src={sender.avatar_url} alt={sender.display_name} />
+                          <AvatarFallback className="bg-primary/10 text-primary text-[8px]">
+                            {getInitials(sender.display_name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-[11px] font-semibold text-foreground/60">
+                          {sender.display_name}
                         </span>
                       </div>
                     )}
@@ -627,7 +974,7 @@ export default function ConversationPage() {
                           </button>
                         </div>
                       )}
-                      {/* Reaction picker — appears on hover for received messages, left side for own */}
+                      {/* Reaction picker for received messages */}
                       {!isMine && editingMessageId !== msg.message_id && (
                         <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 mb-0.5 order-last ml-1">
                           <ReactionPicker
@@ -637,7 +984,6 @@ export default function ConversationPage() {
                         </div>
                       )}
                       {editingMessageId === msg.message_id ? (
-                        /* ── Inline edit mode ── */
                         <div className="max-w-[75%] flex items-center gap-1.5">
                           <input
                             value={editText}
@@ -659,13 +1005,11 @@ export default function ConversationPage() {
                         </div>
                       ) : (
                         <div className="max-w-[75%] flex flex-col">
-                          {/* Images above text bubble */}
                           {msg.images && msg.images.length > 0 && (
                             <div className={`mb-1 ${isMine ? "self-end" : "self-start"}`}>
-                              <MessageImages images={msg.images} isMine={isMine} />
+                              <MessageImages images={msg.images} />
                             </div>
                           )}
-                          {/* Text bubble (skip if image-only with no text) */}
                           {msg.content && (
                           <div
                             className={`relative px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${
@@ -693,8 +1037,8 @@ export default function ConversationPage() {
                           <div className={`${isMine ? "self-end" : "self-start"}`}>
                             <MessageReactionDisplay reactions={msg.reactions} myId={myId} />
                           </div>
-                          {/* Read receipt — iMessage double-check */}
-                          {isMine && (
+                          {/* Read receipt — direct only (iMessage double-check) */}
+                          {isMine && !isGroup && (
                             <div className="self-end flex items-center gap-1 mt-0.5">
                               <span className="text-[9px] text-muted-foreground/40">
                                 {formatTime(msg.created_at)}
@@ -708,9 +1052,17 @@ export default function ConversationPage() {
                               />
                             </div>
                           )}
+                          {/* Time for group own messages */}
+                          {isMine && isGroup && (
+                            <div className="self-end mt-0.5">
+                              <span className="text-[9px] text-muted-foreground/40">
+                                {formatTime(msg.created_at)}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )}
-                      {/* Reaction picker for own messages — right side */}
+                      {/* Reaction picker for own messages */}
                       {isMine && editingMessageId !== msg.message_id && (
                         <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 mb-0.5 order-first mr-1">
                           <ReactionPicker
@@ -731,8 +1083,8 @@ export default function ConversationPage() {
         {/* Input bar */}
         <div className="shrink-0 border-t border-border/30 bg-background/80 backdrop-blur-sm px-4 lg:px-8 py-3">
           <div className="max-w-3xl mx-auto">
-            {/* AI quick suggestions — visible when input empty and conversation has few messages */}
-            {!messageText && messages.length > 0 && messages.length <= 3 && aiSuggestions.length > 0 && (
+            {/* AI quick suggestions — direct only, visible when input empty and conversation has few messages */}
+            {!isGroup && !messageText && messages.length > 0 && messages.length <= 3 && aiSuggestions.length > 0 && (
               <div className="flex items-center gap-2 mb-2 overflow-x-auto scrollbar-thin">
                 <Sparkles className="w-3.5 h-3.5 text-primary/50 shrink-0" />
                 {aiSuggestions.map((s, i) => (
@@ -772,7 +1124,6 @@ export default function ConversationPage() {
               </div>
             )}
             <form onSubmit={handleSend} className="flex items-center gap-2">
-              {/* Image upload button */}
               <input
                 ref={imageInputRef}
                 type="file"
@@ -797,7 +1148,7 @@ export default function ConversationPage() {
                 onMentionsChange={setMessageMentions}
                 context="message"
                 contextId={conversationId}
-                placeholder="Écris un message..."
+                placeholder={isGroup ? `Message dans ${groupInfo?.name || "le groupe"}...` : "Écris un message..."}
                 maxLength={1000}
                 autoFocus
                 className="flex-1 h-10 rounded-full border-border/50 bg-muted/30 focus:bg-white px-4 text-sm"
@@ -819,6 +1170,16 @@ export default function ConversationPage() {
           </div>
         </div>
       </main>
+
+      {/* Group member panel (slide-over) */}
+      {showMemberPanel && isGroup && (
+        <GroupMemberPanel
+          conversation={conversation}
+          myId={myId}
+          onClose={() => setShowMemberPanel(false)}
+          onRefresh={() => { setShowMemberPanel(false); fetchConversation(); }}
+        />
+      )}
     </div>
   );
 }
