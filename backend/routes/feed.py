@@ -133,8 +133,17 @@ async def get_discover_feed(
             {"_id": 0, "activity_id": 1, "reaction_type": 1},
         ).to_list(len(activity_ids))
         reaction_map = {r["activity_id"]: r["reaction_type"] for r in user_reactions}
+
+        # Check current user's bookmarks
+        user_bookmarks = await db.bookmarks.find(
+            {"user_id": user["user_id"], "activity_id": {"$in": activity_ids}},
+            {"_id": 0, "activity_id": 1},
+        ).to_list(len(activity_ids))
+        bookmark_set = {b["activity_id"] for b in user_bookmarks}
+
         for activity in activities:
             activity["user_reaction"] = reaction_map.get(activity["activity_id"])
+            activity["bookmarked"] = activity["activity_id"] in bookmark_set
 
     # Cursor = oldest created_at in the FULL pool (advances past all ranked content)
     next_cursor = pool[-1]["created_at"] if pool and has_more else None
@@ -1340,3 +1349,118 @@ async def toggle_comment_like(
                 pass
 
         return {"liked": True, "like_count": new_count}
+
+
+# ============== BOOKMARKS ==============
+
+
+@router.post("/activities/{activity_id}/bookmark")
+async def toggle_bookmark(
+    activity_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Toggle bookmark on an activity (Instagram Saved pattern).
+
+    First call bookmarks, second call un-bookmarks.
+    Collection: bookmarks {user_id, activity_id, created_at}
+    """
+    activity = await db.activities.find_one(
+        {"activity_id": activity_id, "moderation_status": {"$ne": "hidden"}},
+        {"activity_id": 1},
+    )
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activité introuvable")
+
+    user_id = user["user_id"]
+    existing = await db.bookmarks.find_one(
+        {"user_id": user_id, "activity_id": activity_id}
+    )
+
+    if existing:
+        await db.bookmarks.delete_one({"_id": existing["_id"]})
+        return {"bookmarked": False}
+
+    await db.bookmarks.insert_one({
+        "user_id": user_id,
+        "activity_id": activity_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"bookmarked": True}
+
+
+@router.get("/bookmarks")
+async def get_bookmarks(
+    cursor: str = "",
+    limit: int = 20,
+    user: dict = Depends(get_current_user),
+):
+    """List user's bookmarked activities (newest first, cursor-based).
+
+    Returns full activity data enriched the same way as the main feed.
+    """
+    user_id = user["user_id"]
+    limit = min(max(limit, 1), 50)
+
+    # Build query for bookmarks
+    query = {"user_id": user_id}
+    if cursor:
+        query["created_at"] = {"$lt": cursor}
+
+    bookmarks = await db.bookmarks.find(
+        query, {"_id": 0, "activity_id": 1, "created_at": 1}
+    ).sort("created_at", -1).limit(limit + 1).to_list(limit + 1)
+
+    has_more = len(bookmarks) > limit
+    bookmarks = bookmarks[:limit]
+
+    if not bookmarks:
+        return {"bookmarks": [], "next_cursor": None}
+
+    # Fetch the actual activities
+    activity_ids = [b["activity_id"] for b in bookmarks]
+    blocked_ids = await get_blocked_ids(user_id)
+
+    activities = await db.activities.find(
+        {
+            "activity_id": {"$in": activity_ids},
+            "moderation_status": {"$ne": "hidden"},
+            "user_id": {"$nin": blocked_ids},
+        },
+        {"_id": 0},
+    ).to_list(len(activity_ids))
+
+    # Index by activity_id for ordering
+    act_map = {a["activity_id"]: a for a in activities}
+
+    # Enrich with user info + bookmark metadata
+    enriched_user_ids = list({a["user_id"] for a in activities})
+    users_cursor = db.users.find(
+        {"user_id": {"$in": enriched_user_ids}},
+        {"_id": 0, "user_id": 1, "display_name": 1, "name": 1,
+         "username": 1, "avatar_url": 1, "picture": 1},
+    )
+    users_map = {u["user_id"]: u async for u in users_cursor}
+
+    # Check which activities the user has reacted to
+    user_reactions = await db.reactions.find(
+        {"user_id": user_id, "activity_id": {"$in": activity_ids}},
+        {"_id": 0, "activity_id": 1, "reaction_type": 1},
+    ).to_list(len(activity_ids))
+    reaction_map = {r["activity_id"]: r["reaction_type"] for r in user_reactions}
+
+    result = []
+    for bk in bookmarks:
+        act = act_map.get(bk["activity_id"])
+        if not act:
+            continue  # Activity deleted or hidden since bookmark
+        u = users_map.get(act["user_id"], {})
+        act["user_display_name"] = u.get("display_name") or u.get("name", "")
+        act["user_avatar"] = u.get("avatar_url") or u.get("picture", "")
+        act["user_username"] = u.get("username", "")
+        act["user_reaction"] = reaction_map.get(act["activity_id"])
+        act["bookmarked"] = True
+        act["bookmarked_at"] = bk["created_at"]
+        result.append(act)
+
+    next_cursor = bookmarks[-1]["created_at"] if has_more else None
+    return {"bookmarks": result, "next_cursor": next_cursor}
