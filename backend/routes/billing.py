@@ -166,6 +166,21 @@ async def stripe_webhook(request: Request):
             logger.error("STRIPE_WEBHOOK_SECRET not set — rejecting unsigned webhook")
             raise HTTPException(status_code=403, detail="Webhook secret not configured")
 
+        # ── Idempotency: prevent duplicate webhook processing ──
+        # Stripe may retry webhooks; guard against double-processing.
+        # Pattern: Stripe docs, benchmarked against Shopify webhook handling.
+        event_id = event.get("id") if isinstance(event, dict) else event["id"]
+        if event_id:
+            existing = await db.webhook_events.find_one({"event_id": event_id})
+            if existing:
+                logger.info(f"Stripe webhook {event_id} already processed — skipping")
+                return {"status": "ok", "duplicate": True}
+            await db.webhook_events.insert_one({
+                "event_id": event_id,
+                "event_type": event.get("type", "") if isinstance(event, dict) else event["type"],
+                "processed_at": datetime.now(timezone.utc).isoformat(),
+            })
+
         event_type = event.get("type", "") if isinstance(event, dict) else event["type"]
         event_data = (event.get("data", {}).get("object", {}) if isinstance(event, dict)
                       else event["data"]["object"])

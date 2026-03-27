@@ -188,6 +188,9 @@ async def startup_event():
     await db.event_log.create_index("user_id")
     await db.event_log.create_index([("event_type", 1), ("timestamp", -1)])
     await db.event_log.create_index("timestamp", expireAfterSeconds=90 * 24 * 3600)
+    # Stripe webhook idempotency — auto-cleanup after 90 days
+    await db.webhook_events.create_index("event_id", unique=True)
+    await db.webhook_events.create_index("processed_at", expireAfterSeconds=90 * 24 * 3600)
     await db.user_features.create_index("user_id", unique=True)
     await db.user_features.create_index("computed_at")
     await db.action_signals.create_index([("user_id", 1), ("action_id", 1)], unique=True)
