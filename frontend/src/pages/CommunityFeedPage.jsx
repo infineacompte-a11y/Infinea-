@@ -48,6 +48,16 @@ import SafetyMenu from "@/components/SafetyMenu";
 import ReportDialog from "@/components/ReportDialog";
 import MentionInput from "@/components/MentionInput";
 import MentionText from "@/components/MentionText";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import ReactionsDetailDialog from "@/components/ReactionsDetailDialog";
 import SocialOnboardingCard from "@/components/SocialOnboardingCard";
 import LinkPreviewCard from "@/components/LinkPreviewCard";
@@ -338,7 +348,7 @@ function PostImageGrid({ images }) {
 }
 
 // ── Single Activity Card (Instagram-style) ──
-function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onPin, onBookmarkChange }) {
+function ActivityCard({ activity, currentUserId, isAdmin, onReactionChange, onDelete, onEditPost, onPin, onBookmarkChange }) {
   const config = ACTIVITY_CONFIG[activity.type] || ACTIVITY_CONFIG.session_completed;
   const Icon = config.icon;
   const [showComments, setShowComments] = useState(false);
@@ -362,6 +372,12 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onP
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editText, setEditText] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  // Post edit state (60-min window — Twitter/X benchmark)
+  const [editingPost, setEditingPost] = useState(false);
+  const [editPostText, setEditPostText] = useState("");
+  const [savingPostEdit, setSavingPostEdit] = useState(false);
+  // Delete confirmation (AlertDialog — replaces window.confirm)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const totalReactions = Object.values(activity.reaction_counts || {}).reduce((sum, v) => sum + (v || 0), 0);
 
@@ -612,6 +628,35 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onP
     }
   };
 
+  // ── Edit post (60-min window — Twitter/X benchmark) ──
+  const canEditPost = () => {
+    if (activity.type !== "post") return false;
+    if (activity.user_id !== currentUserId) return false;
+    const created = new Date(activity.created_at);
+    return (Date.now() - created.getTime()) < 60 * 60 * 1000;
+  };
+
+  const startPostEdit = () => {
+    setEditingPost(true);
+    setEditPostText(activity.data?.content || "");
+  };
+
+  const cancelPostEdit = () => {
+    setEditingPost(false);
+    setEditPostText("");
+  };
+
+  const handleSavePostEdit = async () => {
+    if (!editPostText.trim() || savingPostEdit) return;
+    setSavingPostEdit(true);
+    try {
+      const ok = await onEditPost?.(activity.activity_id, editPostText.trim());
+      if (ok) cancelPostEdit();
+    } finally {
+      setSavingPostEdit(false);
+    }
+  };
+
   // ── Like comment (Instagram benchmark — heart toggle) ──
   const handleLikeComment = async (commentId, parentId = null) => {
     try {
@@ -674,9 +719,19 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onP
               )}
               <span className="text-[11px] text-muted-foreground/50 ml-auto shrink-0">
                 {timeAgo(activity.created_at)}
+                {activity.edited_at && <span className="ml-1 italic">(modifié)</span>}
               </span>
               {activity.user_id === currentUserId ? (
                 <div className="flex items-center gap-0.5">
+                  {canEditPost() && !editingPost && (
+                    <button
+                      onClick={startPostEdit}
+                      className="text-muted-foreground/40 hover:text-primary transition-colors p-1"
+                      title="Modifier"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={() => onPin?.(activity.activity_id, !activity.pinned)}
                     className={`transition-colors p-1 ${activity.pinned ? "text-primary" : "text-muted-foreground/40 hover:text-primary"}`}
@@ -685,9 +740,7 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onP
                     <Pin className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => {
-                      if (window.confirm("Supprimer cette activité ?")) onDelete?.(activity.activity_id);
-                    }}
+                    onClick={() => setDeleteDialogOpen(true)}
                     className="text-muted-foreground/40 hover:text-destructive transition-colors p-1"
                     title="Supprimer"
                   >
@@ -695,21 +748,70 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onP
                   </button>
                 </div>
               ) : (
-                <SafetyMenu
-                  userId={activity.user_id}
-                  targetType="activity"
-                  targetId={activity.activity_id}
-                  size="sm"
-                  onBlockChange={(blocked) => {
-                    if (blocked) window.location.reload();
-                  }}
-                />
+                <div className="flex items-center gap-0.5">
+                  {isAdmin && (
+                    <button
+                      onClick={() => setDeleteDialogOpen(true)}
+                      className="text-muted-foreground/40 hover:text-destructive transition-colors p-1"
+                      title="Supprimer (admin)"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <SafetyMenu
+                    userId={activity.user_id}
+                    targetType="activity"
+                    targetId={activity.activity_id}
+                    size="sm"
+                    onBlockChange={(blocked) => {
+                      if (blocked) window.location.reload();
+                    }}
+                  />
+                </div>
               )}
             </div>
             {config.isPost ? (
               /* Manual post: text + optional images (Instagram pattern) */
               <div className="mt-2">
-                {activity.data?.content && (
+                {editingPost ? (
+                  /* ── Inline post edit mode (Twitter/X pattern) ── */
+                  <div className="space-y-2">
+                    <textarea
+                      value={editPostText}
+                      onChange={(e) => setEditPostText(e.target.value)}
+                      maxLength={2000}
+                      rows={3}
+                      className="w-full text-sm rounded-lg border border-primary/30 bg-primary/[0.03] px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary/40 resize-none"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleSavePostEdit(); }
+                        if (e.key === "Escape") cancelPostEdit();
+                      }}
+                    />
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground/50">
+                        {editPostText.length}/2000 · Ctrl+Entrée pour sauvegarder
+                        {activity.edit_count > 0 && ` · ${activity.edit_count}/5 modifications`}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={cancelPostEdit}
+                          className="px-3 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md"
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          onClick={handleSavePostEdit}
+                          disabled={savingPostEdit || !editPostText.trim() || editPostText.trim() === (activity.data?.content || "")}
+                          className="px-3 py-1 text-xs font-medium text-white bg-primary hover:bg-primary/90 disabled:opacity-40 rounded-md transition-colors flex items-center gap-1"
+                        >
+                          {savingPostEdit ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                          Enregistrer
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : activity.data?.content ? (
                   <p className="text-sm text-foreground/90 whitespace-pre-wrap break-words leading-relaxed">
                     <MentionText
                       content={activity.data.content}
@@ -717,7 +819,7 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onP
                       currentUserId={currentUserId}
                     />
                   </p>
-                )}
+                ) : null}
                 {/* Post images grid */}
                 {activity.data?.images?.length > 0 && (
                   <PostImageGrid images={activity.data.images} />
@@ -1196,6 +1298,29 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onP
           activityId={activity.activity_id}
           reactionCounts={activity.reaction_counts}
         />
+
+        {/* Delete confirmation dialog (replaces window.confirm) */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Supprimer cette publication ?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {isAdmin && activity.user_id !== currentUserId
+                  ? "En tant qu'administrateur, cette suppression sera notifiée à l'auteur."
+                  : "Cette action est irréversible."}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Annuler</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => onDelete?.(activity.activity_id)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Supprimer
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );
@@ -1680,18 +1805,52 @@ export default function CommunityFeedPage() {
     return () => observer.disconnect();
   }, [hasMore, loadingMore, cursor, tab, fetchFeed]);
 
-  // Delete own activity
+  // Delete activity (owner or admin — optimistic UI)
   const handleDeleteActivity = async (activityId) => {
+    const removed = activities.find((a) => a.activity_id === activityId);
+    setActivities((prev) => prev.filter((a) => a.activity_id !== activityId));
     try {
       const res = await authFetch(`${API}/activities/${activityId}`, { method: "DELETE" });
       if (res.ok) {
-        setActivities((prev) => prev.filter((a) => a.activity_id !== activityId));
         toast.success("Activité supprimée");
       } else {
+        // Revert optimistic removal
+        if (removed) setActivities((prev) => [removed, ...prev].sort((a, b) => b.created_at?.localeCompare(a.created_at)));
         toast.error("Erreur lors de la suppression");
       }
     } catch {
+      if (removed) setActivities((prev) => [removed, ...prev].sort((a, b) => b.created_at?.localeCompare(a.created_at)));
       toast.error("Erreur de connexion");
+    }
+  };
+
+  // Edit post content (60-min window — Twitter/X pattern)
+  const handleEditPost = async (activityId, newContent) => {
+    try {
+      const res = await authFetch(`${API}/activities/${activityId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: newContent }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActivities((prev) =>
+          prev.map((a) =>
+            a.activity_id === activityId
+              ? { ...a, data: { ...a.data, content: data.content, mentions: data.mentions }, edited_at: data.edited_at, edit_count: data.edit_count }
+              : a,
+          ),
+        );
+        toast.success("Publication modifiée");
+        return true;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || "Impossible de modifier");
+        return false;
+      }
+    } catch {
+      toast.error("Erreur de connexion");
+      return false;
     }
   };
 
@@ -1979,9 +2138,11 @@ export default function CommunityFeedPage() {
                     <ActivityCard
                       activity={activity}
                       currentUserId={user?.user_id}
+                      isAdmin={!!user?.is_admin}
                       onReactionChange={handleReactionChange}
                       onBookmarkChange={handleBookmarkChange}
                       onDelete={handleDeleteActivity}
+                      onEditPost={handleEditPost}
                       onPin={handlePinActivity}
                     />
                   </div>
