@@ -122,6 +122,7 @@ Intègre 1-2 sessions de révision par semaine (review: true) à partir de la se
                     json={
                         "model": ai_model,
                         "max_tokens": 2000,
+                        "cache_control": {"type": "ephemeral"},
                         "system": system_prompt,
                         "messages": [{"role": "user", "content": prompt}],
                     }
@@ -130,7 +131,7 @@ Intègre 1-2 sessions de révision par semaine (review: true) à partir de la se
                 data = resp.json()
                 text = data["content"][0]["text"]
 
-                # Track token usage
+                # Track token usage (including cache metrics)
                 usage = data.get("usage", {})
                 await track_ai_usage(
                     model=ai_model,
@@ -138,6 +139,8 @@ Intègre 1-2 sessions de révision par semaine (review: true) à partir de la se
                     input_tokens=usage.get("input_tokens", 0),
                     output_tokens=usage.get("output_tokens", 0),
                     user_id=user.get("user_id"),
+                    cache_read_input_tokens=usage.get("cache_read_input_tokens", 0),
+                    cache_creation_input_tokens=usage.get("cache_creation_input_tokens", 0),
                 )
 
                 # Parse JSON from response
