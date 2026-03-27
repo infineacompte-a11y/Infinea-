@@ -32,7 +32,8 @@ def get_ai_model(user: dict = None) -> str:
 
 
 async def call_ai(session_suffix: str, system_message: str, prompt: str, model: str = None) -> Optional[str]:
-    """Shared AI call wrapper using Anthropic Claude API via httpx."""
+    """Shared AI call wrapper using Anthropic Claude API via httpx.
+    Prompt caching enabled — repeated system prompts are cached for 90% savings."""
     api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return None
@@ -49,6 +50,7 @@ async def call_ai(session_suffix: str, system_message: str, prompt: str, model: 
                 json={
                     "model": ai_model,
                     "max_tokens": 1000,
+                    "cache_control": {"type": "ephemeral"},
                     "system": system_message,
                     "messages": [
                         {"role": "user", "content": prompt}
@@ -57,13 +59,15 @@ async def call_ai(session_suffix: str, system_message: str, prompt: str, model: 
             )
             resp.raise_for_status()
             data = resp.json()
-            # Track token usage
+            # Track token usage (including cache metrics)
             usage = data.get("usage", {})
             await track_ai_usage(
                 model=ai_model,
                 caller=session_suffix,
                 input_tokens=usage.get("input_tokens", 0),
                 output_tokens=usage.get("output_tokens", 0),
+                cache_read_input_tokens=usage.get("cache_read_input_tokens", 0),
+                cache_creation_input_tokens=usage.get("cache_creation_input_tokens", 0),
             )
             return data["content"][0]["text"]
     except Exception as e:
@@ -77,17 +81,31 @@ async def track_ai_usage(
     input_tokens: int,
     output_tokens: int,
     user_id: str = None,
+    cache_read_input_tokens: int = 0,
+    cache_creation_input_tokens: int = 0,
 ):
-    """Log AI token usage to MongoDB for cost monitoring. Non-blocking, silent fail."""
-    # Pricing per million tokens (USD) — updated May 2025
+    """Log AI token usage to MongoDB for cost monitoring. Non-blocking, silent fail.
+    Tracks prompt caching metrics: cache hits save 90% on input token costs."""
+    # Pricing per million tokens (USD) — Anthropic pricing March 2026
     PRICING = {
-        "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.00},
-        "claude-sonnet-4-20250514": {"input": 3.00, "output": 15.00},
+        "claude-haiku-4-5-20251001": {
+            "input": 1.00, "output": 5.00,
+            "cache_write": 1.25, "cache_read": 0.10,
+        },
+        "claude-sonnet-4-20250514": {
+            "input": 3.00, "output": 15.00,
+            "cache_write": 3.75, "cache_read": 0.30,
+        },
     }
     pricing = PRICING.get(model, PRICING["claude-haiku-4-5-20251001"])
-    cost = (input_tokens * pricing["input"] + output_tokens * pricing["output"]) / 1_000_000
+    cost = (
+        input_tokens * pricing["input"]
+        + output_tokens * pricing["output"]
+        + cache_creation_input_tokens * pricing["cache_write"]
+        + cache_read_input_tokens * pricing["cache_read"]
+    ) / 1_000_000
     try:
-        await db.ai_usage.insert_one({
+        doc = {
             "user_id": user_id,
             "model": model,
             "caller": caller,
@@ -95,7 +113,12 @@ async def track_ai_usage(
             "output_tokens": output_tokens,
             "estimated_cost_usd": round(cost, 6),
             "created_at": datetime.now(timezone.utc).isoformat(),
-        })
+        }
+        if cache_read_input_tokens or cache_creation_input_tokens:
+            doc["cache_read_input_tokens"] = cache_read_input_tokens
+            doc["cache_creation_input_tokens"] = cache_creation_input_tokens
+            doc["cache_hit"] = cache_read_input_tokens > 0
+        await db.ai_usage.insert_one(doc)
     except Exception:
         pass
 

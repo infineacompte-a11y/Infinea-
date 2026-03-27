@@ -264,6 +264,7 @@ async def _call_moderation_ai(
                 json={
                     "model": MODERATION_MODEL,
                     "max_tokens": 200,
+                    "cache_control": {"type": "ephemeral"},
                     "system": MODERATION_SYSTEM_PROMPT,
                     "messages": [{"role": "user", "content": content_parts}],
                 },
@@ -271,13 +272,15 @@ async def _call_moderation_ai(
             resp.raise_for_status()
             data = resp.json()
 
-            # Track token usage
+            # Track token usage (including cache metrics)
             usage = data.get("usage", {})
             await track_ai_usage(
                 model=MODERATION_MODEL,
                 caller="ai_moderation",
                 input_tokens=usage.get("input_tokens", 0),
                 output_tokens=usage.get("output_tokens", 0),
+                cache_read_input_tokens=usage.get("cache_read_input_tokens", 0),
+                cache_creation_input_tokens=usage.get("cache_creation_input_tokens", 0),
             )
 
             raw_text = data["content"][0]["text"]

@@ -111,19 +111,22 @@ async def _call_generation_ai(system_message: str, prompt: str) -> Optional[str]
                 json={
                     "model": "claude-haiku-4-5-20251001",
                     "max_tokens": 4000,
+                    "cache_control": {"type": "ephemeral"},
                     "system": system_message,
                     "messages": [{"role": "user", "content": prompt}],
                 },
             )
             resp.raise_for_status()
             data = resp.json()
-            # Track token usage
+            # Track token usage (including cache metrics)
             usage = data.get("usage", {})
             await track_ai_usage(
                 model="claude-haiku-4-5-20251001",
                 caller="action_generator",
                 input_tokens=usage.get("input_tokens", 0),
                 output_tokens=usage.get("output_tokens", 0),
+                cache_read_input_tokens=usage.get("cache_read_input_tokens", 0),
+                cache_creation_input_tokens=usage.get("cache_creation_input_tokens", 0),
             )
             return data["content"][0]["text"]
     except Exception as e:
