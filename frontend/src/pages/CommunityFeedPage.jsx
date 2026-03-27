@@ -32,6 +32,7 @@ import ReportDialog from "@/components/ReportDialog";
 import MentionInput from "@/components/MentionInput";
 import MentionText from "@/components/MentionText";
 import ReactionsDetailDialog from "@/components/ReactionsDetailDialog";
+import SocialOnboardingCard from "@/components/SocialOnboardingCard";
 import { sanitize } from "@/lib/sanitize";
 
 // ── Reaction config (InFinea DNA) ──
@@ -652,7 +653,18 @@ export default function CommunityFeedPage() {
 
         <div className="px-4 lg:px-8">
           <div className="max-w-2xl mx-auto mt-5">
-            {/* Suggested users — show on feed tab when feed is empty or on discover tab */}
+            {/* Social onboarding card — shown on feed tab when onboarding needed */}
+            {tab === "feed" && (
+              <SocialOnboardingCard
+                currentUserId={user?.user_id}
+                onFollowChange={() => {
+                  // Refresh feed after a follow to potentially show new content
+                  setTimeout(() => fetchFeed(null, "feed"), 1500);
+                }}
+              />
+            )}
+
+            {/* Suggested users — show on discover tab or feed tab when empty */}
             {(tab === "discover" || (tab === "feed" && !loading && activities.length === 0)) && (
               <SuggestedUsers currentUserId={user?.user_id} />
             )}
