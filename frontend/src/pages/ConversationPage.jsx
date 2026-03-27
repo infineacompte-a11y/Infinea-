@@ -9,7 +9,7 @@ import MentionText from "@/components/MentionText";
 import {
   ArrowLeft, Send, Loader2, MessageCircle, Sparkles, Trash2, Pencil,
   Check, X, SmilePlus, ImagePlus, BellOff, Bell, CheckCheck,
-  Users, Settings, UserPlus, LogOut, Shield, ShieldOff, Crown,
+  Users, Settings, UserPlus, LogOut, Shield, ShieldOff, Crown, Reply,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
@@ -467,6 +467,8 @@ export default function ConversationPage() {
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editText, setEditText] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  // Reply-to state (WhatsApp/Telegram pattern)
+  const [replyTo, setReplyTo] = useState(null); // {message_id, sender_id, sender_name, content}
   // Image upload state
   const [pendingImages, setPendingImages] = useState([]);
   const imageInputRef = useRef(null);
@@ -679,6 +681,7 @@ export default function ConversationPage() {
     try {
       const payload = { content: text };
       if (hasImages) payload.images = uploadedImages;
+      if (replyTo) payload.reply_to = replyTo.message_id;
 
       const res = await authFetch(`${API}/conversations/${conversationId}/messages`, {
         method: "POST",
@@ -691,6 +694,7 @@ export default function ConversationPage() {
         setMessageText("");
         setMessageMentions([]);
         setPendingImages([]);
+        setReplyTo(null);
       } else {
         const err = await res.json().catch(() => ({}));
         toast.error(err.detail || "Erreur lors de l'envoi");
@@ -1019,10 +1023,17 @@ export default function ConversationPage() {
                         </span>
                       </div>
                     )}
-                    <div className={`group flex items-end gap-1 ${isMine ? "justify-end" : "justify-start"}`}>
-                      {/* Actions: edit/delete (own messages) + reaction picker */}
+                    <div id={`msg-${msg.message_id}`} className={`group flex items-end gap-1 transition-all duration-300 ${isMine ? "justify-end" : "justify-start"}`}>
+                      {/* Actions: reply + edit/delete (own messages) + reaction picker */}
                       {isMine && editingMessageId !== msg.message_id && (
                         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 mb-0.5">
+                          <button
+                            onClick={() => setReplyTo({ message_id: msg.message_id, sender_id: msg.sender_id, sender_name: "Toi", content: msg.content })}
+                            className="p-1 rounded-full hover:bg-primary/10 text-muted-foreground/50 hover:text-primary"
+                            title="Répondre"
+                          >
+                            <Reply className="w-3 h-3" />
+                          </button>
                           {canEditMessage(msg.created_at) && (
                             <button
                               onClick={() => startEditMessage(msg)}
@@ -1041,9 +1052,19 @@ export default function ConversationPage() {
                           </button>
                         </div>
                       )}
-                      {/* Reaction picker for received messages */}
+                      {/* Reply + Reaction picker for received messages */}
                       {!isMine && editingMessageId !== msg.message_id && (
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 mb-0.5 order-last ml-1">
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 mb-0.5 order-last ml-1">
+                          <button
+                            onClick={() => {
+                              const sName = senderMap[msg.sender_id]?.display_name || other?.display_name || other?.name || "Utilisateur";
+                              setReplyTo({ message_id: msg.message_id, sender_id: msg.sender_id, sender_name: sName, content: msg.content });
+                            }}
+                            className="p-1 rounded-full hover:bg-primary/10 text-muted-foreground/50 hover:text-primary"
+                            title="Répondre"
+                          >
+                            <Reply className="w-3 h-3" />
+                          </button>
                           <ReactionPicker
                             onReact={(type) => handleReactMessage(msg.message_id, type)}
                             myReaction={msg.reactions?.[myId]}
@@ -1085,6 +1106,27 @@ export default function ConversationPage() {
                                 : "bg-card border border-border/50 text-foreground rounded-bl-md"
                             }`}
                           >
+                            {/* Reply-to context (WhatsApp quoted message) */}
+                            {msg.reply_to && (
+                              <button
+                                onClick={() => {
+                                  const el = document.getElementById(`msg-${msg.reply_to.message_id}`);
+                                  if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("ring-2", "ring-primary/40"); setTimeout(() => el.classList.remove("ring-2", "ring-primary/40"), 2000); }
+                                }}
+                                className={`w-full text-left mb-1.5 px-2.5 py-1.5 rounded-lg border-l-2 ${
+                                  isMine
+                                    ? "bg-white/10 border-white/40"
+                                    : "bg-muted/50 border-primary/40"
+                                }`}
+                              >
+                                <span className={`text-[11px] font-semibold block ${isMine ? "text-white/80" : "text-primary"}`}>
+                                  {msg.reply_to.sender_name || "Utilisateur"}
+                                </span>
+                                <span className={`text-[11px] line-clamp-2 ${isMine ? "text-white/60" : "text-muted-foreground"}`}>
+                                  {msg.reply_to.content || (msg.reply_to.has_images ? "📷 Image" : "...")}
+                                </span>
+                              </button>
+                            )}
                             <p className="whitespace-pre-wrap break-words">
                               <MentionText
                                 content={msg.content}
@@ -1206,6 +1248,26 @@ export default function ConversationPage() {
                     </button>
                   </div>
                 ))}
+              </div>
+            )}
+            {/* Reply-to preview bar (WhatsApp/Telegram pattern) */}
+            {replyTo && (
+              <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/15">
+                <div className="w-0.5 h-8 rounded-full bg-primary/60 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-[11px] font-semibold text-primary block">
+                    {replyTo.sender_name || "Utilisateur"}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground truncate block">
+                    {replyTo.content || "📷 Image"}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setReplyTo(null)}
+                  className="p-1 rounded-full hover:bg-muted/60 text-muted-foreground/50 hover:text-muted-foreground shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
             <form onSubmit={handleSend} className="flex items-center gap-2">
