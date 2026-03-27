@@ -11,8 +11,30 @@ from starlette.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+
 from config import limiter, logger
 from database import db, client
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses (OWASP best practices)."""
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' https://res.cloudinary.com data:; "
+            "connect-src 'self' https://*.anthropic.com https://*.stripe.com https://*.resend.com; "
+            "frame-ancestors 'none'"
+        )
+        return response
 
 # ── App & Router ──
 app = FastAPI(title="InFinea API")
@@ -20,6 +42,7 @@ api_router = APIRouter(prefix="/api")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ── Route Modules ──
 from routes.auth_routes import router as auth_router
@@ -125,6 +148,16 @@ async def health_check():
 app.include_router(api_router)
 
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+
+# Security: reject wildcard or insecure origins in production
+_is_prod = os.environ.get("RENDER", "") or os.environ.get("PRODUCTION", "")
+if _is_prod:
+    for origin in ALLOWED_ORIGINS:
+        if origin.strip() == "*":
+            raise RuntimeError("CORS wildcard '*' is not allowed in production")
+        if origin.strip().startswith("http://") and "localhost" not in origin:
+            logger.warning(f"CORS: insecure origin in production: {origin}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
