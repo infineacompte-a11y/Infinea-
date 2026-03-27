@@ -40,6 +40,7 @@ import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
 import XPProgressBar from "@/components/XPProgressBar";
 import SafetyMenu from "@/components/SafetyMenu";
+import ActivityHeatmap from "@/components/ActivityHeatmap";
 
 // ── Active status helper (Instagram/Discord benchmark) ──
 function activeStatus(lastActive) {
@@ -561,6 +562,19 @@ export default function PublicProfilePage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Activity Heatmap (GitHub contributions pattern) */}
+            <Card className="mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "320ms", animationFillMode: "forwards" }}>
+              <CardHeader className="pb-2">
+                <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-[#459492]" />
+                  Activité
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ActivityHeatmap userId={userId} />
+              </CardContent>
+            </Card>
 
             {/* Featured Badges Vitrine (Duolingo/Xbox pattern) */}
             {profile.featured_badges && profile.featured_badges.length > 0 && (

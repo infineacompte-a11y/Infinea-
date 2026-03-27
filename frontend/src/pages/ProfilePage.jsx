@@ -10,7 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import Sidebar from "@/components/Sidebar";
+import ActivityHeatmap from "@/components/ActivityHeatmap";
 import {
+  Activity,
   BarChart3,
   LogOut,
   Crown,
@@ -384,6 +386,21 @@ export default function ProfilePage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Activity Heatmap (GitHub contributions pattern) */}
+            {user?.user_id && (
+              <Card className="mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "240ms", animationFillMode: "forwards" }}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-[#459492]" />
+                    Mon activité
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ActivityHeatmap userId={user.user_id} />
+                </CardContent>
+              </Card>
+            )}
 
             {/* Privacy settings */}
             {privacySettings && (
