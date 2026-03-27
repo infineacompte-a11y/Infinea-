@@ -47,6 +47,7 @@ import MentionInput from "@/components/MentionInput";
 import MentionText from "@/components/MentionText";
 import ReactionsDetailDialog from "@/components/ReactionsDetailDialog";
 import SocialOnboardingCard from "@/components/SocialOnboardingCard";
+import LinkPreviewCard from "@/components/LinkPreviewCard";
 import { sanitize } from "@/lib/sanitize";
 
 // ── Reaction config (InFinea DNA) ──
@@ -716,6 +717,10 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onP
                 {/* Post images grid */}
                 {activity.data?.images?.length > 0 && (
                   <PostImageGrid images={activity.data.images} />
+                )}
+                {/* Link preview OG card (Slack/Discord pattern) */}
+                {activity.data?.link_preview && (
+                  <LinkPreviewCard preview={activity.data.link_preview} />
                 )}
               </div>
             ) : (
