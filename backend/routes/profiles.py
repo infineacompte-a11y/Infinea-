@@ -1233,3 +1233,72 @@ async def get_presence_status(request: Request, user: dict = Depends(get_current
 
     presence = await get_presence_batch(user_ids)
     return {"presence": presence}
+
+
+# ============== PUBLIC SHARE PAGE (no auth — virality) ==============
+
+public_router = APIRouter(tags=["share"])
+
+
+@public_router.get("/share/profile/{user_id}")
+async def public_share_profile(user_id: str):
+    """
+    Public profile share page data — NO auth required.
+    Returns limited profile info for share cards / social previews.
+
+    Pattern: Strava share, Spotify Wrapped, Duolingo streak share.
+    Only exposes data the user has set to public.
+    """
+    user = await db.users.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "user_id": 1, "display_name": 1, "name": 1, "username": 1,
+         "avatar_url": 1, "picture": 1, "bio": 1, "privacy": 1,
+         "streak_days": 1, "total_time_invested": 1, "total_xp": 1,
+         "level": 1, "badges": 1, "created_at": 1, "subscription_tier": 1},
+    )
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    # Respect privacy
+    privacy = user.get("privacy", {})
+    if not privacy.get("profile_visible", True):
+        raise HTTPException(status_code=403, detail="Profil privé")
+
+    # Build public profile
+    show_stats = privacy.get("show_stats", True)
+    show_badges = privacy.get("show_badges", True)
+
+    # Badge vitrine (only featured ones, capped)
+    badges = user.get("badges", []) if show_badges else []
+    featured = [b for b in badges if b.get("featured")][:5]
+    if not featured and badges:
+        featured = badges[:3]
+
+    # Social counts
+    followers_count = await db.follows.count_documents(
+        {"following_id": user_id, "status": "active"}
+    )
+
+    result = {
+        "user_id": user_id,
+        "display_name": user.get("display_name") or user.get("name", "Utilisateur"),
+        "username": user.get("username"),
+        "avatar_url": user.get("avatar_url") or user.get("picture"),
+        "bio": user.get("bio", ""),
+        "subscription_tier": user.get("subscription_tier", "free"),
+        "created_at": user.get("created_at"),
+        "followers_count": followers_count,
+    }
+
+    if show_stats:
+        result["streak_days"] = user.get("streak_days", 0)
+        result["total_time_invested"] = user.get("total_time_invested", 0)
+        result["level"] = user.get("level", 1)
+
+    if featured:
+        result["badges"] = [
+            {"name": b.get("name", ""), "icon": b.get("icon", "")}
+            for b in featured
+        ]
+
+    return result

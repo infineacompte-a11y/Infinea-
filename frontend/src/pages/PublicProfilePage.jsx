@@ -35,6 +35,7 @@ import {
   Heart,
   Star,
   ImageIcon,
+  Share2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
@@ -494,6 +495,17 @@ export default function PublicProfilePage() {
                         initialFollowing={profile.is_following}
                         onToggle={handleFollowToggle}
                       />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 rounded-xl"
+                        onClick={() => {
+                          const url = `${window.location.origin}/share/profile/${userId}`;
+                          navigator.clipboard.writeText(url).then(() => toast.success("Lien copié !")).catch(() => {});
+                        }}
+                      >
+                        <Share2 className="w-4 h-4" />
+                      </Button>
                       <SafetyMenu
                         userId={userId}
                         targetType="user"
