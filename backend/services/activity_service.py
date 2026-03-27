@@ -280,9 +280,27 @@ async def get_feed(
         ).to_list(len(activity_ids))
         bookmark_set = {b["activity_id"] for b in user_bookmarks}
 
+        # Check poll votes for poll activities
+        poll_activity_ids = [
+            a["activity_id"] for a in activities
+            if a.get("data", {}).get("poll")
+        ]
+        poll_vote_map = {}
+        if poll_activity_ids:
+            user_poll_votes = await db.poll_votes.find(
+                {"user_id": user_id, "activity_id": {"$in": poll_activity_ids}},
+                {"_id": 0, "activity_id": 1, "option_index": 1},
+            ).to_list(len(poll_activity_ids))
+            poll_vote_map = {v["activity_id"]: v["option_index"] for v in user_poll_votes}
+
         for activity in activities:
             activity["user_reaction"] = reaction_map.get(activity["activity_id"])
             activity["bookmarked"] = activity["activity_id"] in bookmark_set
+            # Inject user's poll vote if applicable
+            if activity.get("data", {}).get("poll"):
+                vote = poll_vote_map.get(activity["activity_id"])
+                if vote is not None:
+                    activity["data"]["poll"]["my_vote"] = vote
 
     # Cursor = oldest created_at in the FULL pool (not just returned items).
     # This advances the window past all ranked content, so the next page

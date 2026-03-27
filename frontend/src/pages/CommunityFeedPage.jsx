@@ -36,6 +36,9 @@ import {
   Star,
   Share2,
   Pin,
+  BarChart3,
+  Plus,
+  Minus,
 } from "lucide-react";
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
@@ -48,6 +51,7 @@ import MentionText from "@/components/MentionText";
 import ReactionsDetailDialog from "@/components/ReactionsDetailDialog";
 import SocialOnboardingCard from "@/components/SocialOnboardingCard";
 import LinkPreviewCard from "@/components/LinkPreviewCard";
+import PollDisplay from "@/components/PollDisplay";
 import { sanitize } from "@/lib/sanitize";
 
 // ── Reaction config (InFinea DNA) ──
@@ -722,6 +726,22 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onP
                 {activity.data?.link_preview && (
                   <LinkPreviewCard preview={activity.data.link_preview} />
                 )}
+                {/* Poll (Twitter/LinkedIn pattern) */}
+                {activity.data?.poll && (
+                  <PollDisplay
+                    poll={activity.data.poll}
+                    activityId={activity.activity_id}
+                    onVote={(updatedPoll) => {
+                      setActivities((prev) =>
+                        prev.map((a) =>
+                          a.activity_id === activity.activity_id
+                            ? { ...a, data: { ...a.data, poll: updatedPoll } }
+                            : a,
+                        ),
+                      );
+                    }}
+                  />
+                )}
               </div>
             ) : (
               <div className="flex items-center gap-1.5 mt-1">
@@ -1251,11 +1271,17 @@ function PostComposer({ user, onPost }) {
   const [images, setImages] = useState([]); // [{image_url, thumbnail_url, width, height, uploading?, file?}]
   const [posting, setPosting] = useState(false);
   const fileInputRef = useRef(null);
+  // Poll state (Twitter/LinkedIn pattern)
+  const [showPoll, setShowPoll] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState(["", ""]);
+  const [pollDuration, setPollDuration] = useState(24); // hours
 
+  const hasPoll = showPoll && pollQuestion.trim().length >= 3 && pollOptions.filter((o) => o.trim()).length >= 2;
   const canSubmit =
     !posting &&
     !images.some((img) => img.uploading) &&
-    (text.trim().length >= 3 || images.filter((i) => !i.uploading).length > 0);
+    (text.trim().length >= 3 || images.filter((i) => !i.uploading).length > 0 || hasPoll);
 
   const handleImageSelect = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -1328,10 +1354,18 @@ function PostComposer({ user, onPost }) {
       .map(({ image_url, thumbnail_url, width, height }) => ({
         image_url, thumbnail_url, width, height,
       }));
-    const ok = await onPost(text.trim(), uploadedImages);
+    const pollPayload = hasPoll ? {
+      question: pollQuestion.trim(),
+      options: pollOptions.filter((o) => o.trim()),
+      duration_hours: pollDuration,
+    } : null;
+    const ok = await onPost(text.trim(), uploadedImages, pollPayload);
     if (ok) {
       setText("");
       setImages([]);
+      setShowPoll(false);
+      setPollQuestion("");
+      setPollOptions(["", ""]);
       setExpanded(false);
     }
     setPosting(false);
@@ -1341,6 +1375,9 @@ function PostComposer({ user, onPost }) {
     setExpanded(false);
     setText("");
     setImages([]);
+    setShowPoll(false);
+    setPollQuestion("");
+    setPollOptions(["", ""]);
   };
 
   // Image preview grid: 1 image full width, 2 side by side, 3-4 grid
@@ -1420,17 +1457,82 @@ function PostComposer({ user, onPost }) {
                   </div>
                 )}
 
+                {/* Poll builder (Twitter/LinkedIn inline poll creator) */}
+                {showPoll && (
+                  <div className="mt-2 p-3 rounded-xl border border-[#459492]/20 bg-[#459492]/5 space-y-2">
+                    <input
+                      type="text"
+                      value={pollQuestion}
+                      onChange={(e) => setPollQuestion(e.target.value)}
+                      placeholder="Ta question..."
+                      maxLength={280}
+                      className="w-full text-sm font-semibold rounded-lg border border-border/50 bg-background px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#459492]/40 placeholder:text-muted-foreground/40"
+                    />
+                    {pollOptions.map((opt, i) => (
+                      <div key={i} className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={opt}
+                          onChange={(e) => {
+                            const next = [...pollOptions];
+                            next[i] = e.target.value;
+                            setPollOptions(next);
+                          }}
+                          placeholder={`Option ${i + 1}`}
+                          maxLength={100}
+                          className="flex-1 text-sm rounded-lg border border-border/50 bg-background px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#459492]/40 placeholder:text-muted-foreground/40"
+                        />
+                        {pollOptions.length > 2 && (
+                          <button type="button" onClick={() => setPollOptions(pollOptions.filter((_, j) => j !== i))} className="p-1 rounded-full text-muted-foreground/40 hover:text-destructive">
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between">
+                      {pollOptions.length < 6 && (
+                        <button type="button" onClick={() => setPollOptions([...pollOptions, ""])} className="flex items-center gap-1 text-[11px] text-[#459492] hover:text-[#275255]">
+                          <Plus className="w-3 h-3" /> Ajouter une option
+                        </button>
+                      )}
+                      <select
+                        value={pollDuration}
+                        onChange={(e) => setPollDuration(Number(e.target.value))}
+                        className="text-[11px] rounded-md border border-border/50 bg-background px-2 py-1 text-muted-foreground"
+                      >
+                        <option value={1}>1 heure</option>
+                        <option value={6}>6 heures</option>
+                        <option value={24}>1 jour</option>
+                        <option value={72}>3 jours</option>
+                        <option value={168}>7 jours</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between mt-2">
                   <div className="flex items-center gap-2">
                     {/* Image upload button */}
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={images.length >= 4}
+                      disabled={images.length >= 4 || showPoll}
                       className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-primary transition-colors disabled:opacity-30"
                     >
                       <ImagePlus className="w-4 h-4" />
                       <span className="hidden sm:inline">{images.length > 0 ? `${images.length}/4` : "Photo"}</span>
+                    </button>
+                    {/* Poll toggle button */}
+                    <button
+                      type="button"
+                      onClick={() => setShowPoll(!showPoll)}
+                      disabled={images.length > 0}
+                      className={`flex items-center gap-1 text-xs transition-colors disabled:opacity-30 ${
+                        showPoll ? "text-[#459492]" : "text-muted-foreground/60 hover:text-primary"
+                      }`}
+                    >
+                      <BarChart3 className="w-4 h-4" />
+                      <span className="hidden sm:inline">Sondage</span>
                     </button>
                     <input
                       ref={fileInputRef}
@@ -1616,10 +1718,11 @@ export default function CommunityFeedPage() {
   };
 
   // Create manual post
-  const handleCreatePost = async (content, images = []) => {
+  const handleCreatePost = async (content, images = [], poll = null) => {
     try {
       const payload = { content };
       if (images.length > 0) payload.images = images;
+      if (poll) payload.poll = poll;
       const res = await authFetch(`${API}/activities`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
