@@ -1232,6 +1232,13 @@ function TrendingHashtags() {
           </Link>
         ))}
       </div>
+      <Link
+        to="/trending"
+        className="inline-flex items-center gap-1 mt-2 text-[11px] text-[#459492] hover:text-[#275255] font-medium transition-colors"
+      >
+        Voir toutes les tendances
+        <ChevronRight className="w-3 h-3" />
+      </Link>
     </div>
   );
 }

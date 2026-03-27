@@ -53,6 +53,7 @@ const SavedPage = lazy(() => import("@/pages/SavedPage"));
 const HashtagFeedPage = lazy(() => import("@/pages/HashtagFeedPage"));
 const NewGroupPage = lazy(() => import("@/pages/NewGroupPage"));
 const ActivityDetailPage = lazy(() => import("@/pages/ActivityDetailPage"));
+const TrendingPage = lazy(() => import("@/pages/TrendingPage"));
 import { identifyUser, resetAnalytics, track } from "@/lib/analytics";
 
 // In production on Vercel, REACT_APP_BACKEND_URL can be "" (empty) to use
@@ -588,6 +589,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <SavedPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/trending"
+        element={
+          <ProtectedRoute>
+            <TrendingPage />
           </ProtectedRoute>
         }
       />
