@@ -20,10 +20,11 @@ from fastapi import APIRouter, HTTPException, Depends, Query, Request, UploadFil
 
 from database import db
 from auth import get_current_user
-from helpers import send_push_to_user
+from helpers import send_push_to_user, create_notification_deduped
 from services.moderation import get_blocked_ids, check_content, sanitize_text
 from services.email_service import send_email_to_user, email_new_follower
 from services.presence_service import get_presence_batch
+from config import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -368,12 +369,18 @@ async def update_privacy_settings(
 # ============== USER SEARCH ==============
 
 @router.get("/users/search")
+@limiter.limit("30/minute")
 async def search_users(
+    request: Request,
     q: str = Query(..., min_length=2),
     user: dict = Depends(get_current_user),
     limit: int = Query(20, ge=1, le=50),
 ):
-    """Search users by name, display_name, or username."""
+    """Search users by name, display_name, or username.
+
+    Uses MongoDB $text index (French stemming) for quality full-text search.
+    Falls back to $regex for short queries or exact username lookup.
+    """
     # Strip @ prefix if user searches "@john.doe"
     search_q = q.lstrip("@")
 
@@ -381,20 +388,39 @@ async def search_users(
     blocked_ids = await get_blocked_ids(user["user_id"])
     exclude_ids = list(blocked_ids | {user["user_id"]})
 
-    query = {
-        "$or": [
-            {"name": {"$regex": search_q, "$options": "i"}},
-            {"display_name": {"$regex": search_q, "$options": "i"}},
-            {"username": {"$regex": search_q, "$options": "i"}},
-        ],
-        "user_id": {"$nin": exclude_ids},
+    projection = {
+        "_id": 0, "user_id": 1, "name": 1, "display_name": 1, "username": 1,
+        "avatar_url": 1, "picture": 1, "privacy": 1,
     }
 
-    users = await db.users.find(
-        query,
-        {"_id": 0, "user_id": 1, "name": 1, "display_name": 1, "username": 1,
-         "avatar_url": 1, "picture": 1, "privacy": 1},
-    ).limit(limit).to_list(limit)
+    # Strategy: try $text index first (better ranking, handles French stemming)
+    # Fall back to $regex for very short queries or if text search returns nothing
+    users = []
+    if len(search_q) >= 3:
+        try:
+            text_query = {
+                "$text": {"$search": search_q},
+                "user_id": {"$nin": exclude_ids},
+            }
+            text_proj = {**projection, "score": {"$meta": "textScore"}}
+            users = await db.users.find(text_query, text_proj).sort(
+                [("score", {"$meta": "textScore"})]
+            ).limit(limit).to_list(limit)
+        except Exception:
+            pass  # Text index may not exist — fall back to regex
+
+    # Fallback: $regex prefix match (for short queries or empty text results)
+    if not users:
+        regex_q = re.escape(search_q)
+        query = {
+            "$or": [
+                {"name": {"$regex": regex_q, "$options": "i"}},
+                {"display_name": {"$regex": regex_q, "$options": "i"}},
+                {"username": {"$regex": regex_q, "$options": "i"}},
+            ],
+            "user_id": {"$nin": exclude_ids},
+        }
+        users = await db.users.find(query, projection).limit(limit).to_list(limit)
 
     # Filter out private profiles
     visible = []
@@ -773,7 +799,8 @@ async def get_user_activities(
 # ============== FOLLOW / UNFOLLOW ==============
 
 @router.post("/users/{user_id}/follow")
-async def follow_user(user_id: str, user: dict = Depends(get_current_user)):
+@limiter.limit("20/minute")
+async def follow_user(request: Request, user_id: str, user: dict = Depends(get_current_user)):
     """Follow a user."""
     if user["user_id"] == user_id:
         raise HTTPException(status_code=400, detail="Impossible de se suivre soi-même")
@@ -807,21 +834,20 @@ async def follow_user(user_id: str, user: dict = Depends(get_current_user)):
             "followed_at": now,
         })
 
-    # Notify the followed user (non-blocking, silent fail)
+    # Notify the followed user (non-blocking, silent fail, dedup 24h)
     try:
         display = user.get("display_name") or user.get("name", "Quelqu'un")
-        await db.notifications.insert_one({
-            "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
-            "user_id": user_id,
-            "type": "new_follower",
-            "message": f"{display} a commencé à te suivre",
-            "data": {
+        created = await create_notification_deduped(
+            user_id=user_id,
+            notif_type="new_follower",
+            message=f"{display} a commencé à te suivre",
+            data={
                 "follower_id": user["user_id"],
                 "follower_name": display,
             },
-            "read": False,
-            "created_at": now,
-        })
+        )
+        if not created:
+            return {"message": "Abonné", "is_following": True}
         await send_push_to_user(
             user_id,
             "Nouveau follower",
@@ -854,47 +880,62 @@ async def unfollow_user(user_id: str, user: dict = Depends(get_current_user)):
 # ============== FOLLOWERS / FOLLOWING LISTS ==============
 
 @router.get("/users/{user_id}/followers")
-async def get_followers(user_id: str, user: dict = Depends(get_current_user)):
-    """List users who follow this user."""
+async def get_followers(
+    user_id: str,
+    user: dict = Depends(get_current_user),
+    cursor: str = None,
+    limit: int = 50,
+):
+    """List users who follow this user. Cursor-based pagination."""
+    limit = min(limit, 100)  # Cap at 100
+
+    query = {"following_id": user_id, "status": "active"}
+    if cursor:
+        query["followed_at"] = {"$lt": cursor}
+
     follows = await db.follows.find(
-        {"following_id": user_id, "status": "active"},
-        {"_id": 0, "follower_id": 1},
-    ).to_list(200)
+        query, {"_id": 0, "follower_id": 1, "followed_at": 1},
+    ).sort("followed_at", -1).to_list(limit + 1)
+
+    has_more = len(follows) > limit
+    follows = follows[:limit]
+    next_cursor = follows[-1]["followed_at"] if has_more and follows else None
 
     follower_ids = [f["follower_id"] for f in follows]
     if not follower_ids:
-        return {"followers": []}
+        return {"followers": [], "next_cursor": None, "has_more": False}
 
     users = await db.users.find(
         {"user_id": {"$in": follower_ids}},
         {"_id": 0, "user_id": 1, "name": 1, "display_name": 1, "username": 1,
          "avatar_url": 1, "picture": 1},
-    ).to_list(200)
+    ).to_list(limit)
 
     # Check which ones the current user follows back
-    my_follows = set()
     follow_docs = await db.follows.find(
         {"follower_id": user["user_id"], "status": "active",
          "following_id": {"$in": follower_ids}},
         {"_id": 0, "following_id": 1},
-    ).to_list(200)
+    ).to_list(limit)
     my_follows = {f["following_id"] for f in follow_docs}
 
-    # Check which ones follow the current user back (for "te suit" indicator)
-    follows_me = set()
+    # Check which ones follow the current user back
     if user["user_id"] == user_id:
-        # Viewing own followers — they all follow me by definition
         follows_me = set(follower_ids)
     else:
         follows_me_docs = await db.follows.find(
             {"following_id": user["user_id"], "status": "active",
              "follower_id": {"$in": follower_ids}},
             {"_id": 0, "follower_id": 1},
-        ).to_list(200)
+        ).to_list(limit)
         follows_me = {f["follower_id"] for f in follows_me_docs}
 
+    user_map = {u["user_id"]: u for u in users}
     results = []
-    for u in users:
+    for f in follows:
+        u = user_map.get(f["follower_id"])
+        if not u:
+            continue
         results.append({
             "user_id": u["user_id"],
             "display_name": u.get("display_name", u.get("name", "Utilisateur")),
@@ -904,35 +945,48 @@ async def get_followers(user_id: str, user: dict = Depends(get_current_user)):
             "follows_back": u["user_id"] in follows_me,
         })
 
-    return {"followers": results}
+    return {"followers": results, "next_cursor": next_cursor, "has_more": has_more}
 
 
 @router.get("/users/{user_id}/following")
-async def get_following(user_id: str, user: dict = Depends(get_current_user)):
-    """List users this user follows."""
+async def get_following(
+    user_id: str,
+    user: dict = Depends(get_current_user),
+    cursor: str = None,
+    limit: int = 50,
+):
+    """List users this user follows. Cursor-based pagination."""
+    limit = min(limit, 100)
+
+    query = {"follower_id": user_id, "status": "active"}
+    if cursor:
+        query["followed_at"] = {"$lt": cursor}
+
     follows = await db.follows.find(
-        {"follower_id": user_id, "status": "active"},
-        {"_id": 0, "following_id": 1},
-    ).to_list(200)
+        query, {"_id": 0, "following_id": 1, "followed_at": 1},
+    ).sort("followed_at", -1).to_list(limit + 1)
+
+    has_more = len(follows) > limit
+    follows = follows[:limit]
+    next_cursor = follows[-1]["followed_at"] if has_more and follows else None
 
     following_ids = [f["following_id"] for f in follows]
     if not following_ids:
-        return {"following": []}
+        return {"following": [], "next_cursor": None, "has_more": False}
 
     users = await db.users.find(
         {"user_id": {"$in": following_ids}},
         {"_id": 0, "user_id": 1, "name": 1, "display_name": 1, "username": 1,
          "avatar_url": 1, "picture": 1},
-    ).to_list(200)
+    ).to_list(limit)
 
     # Check which ones the current user follows
-    my_follows = set()
     if user["user_id"] != user_id:
         follow_docs = await db.follows.find(
             {"follower_id": user["user_id"], "status": "active",
              "following_id": {"$in": following_ids}},
             {"_id": 0, "following_id": 1},
-        ).to_list(200)
+        ).to_list(limit)
         my_follows = {f["following_id"] for f in follow_docs}
     else:
         my_follows = set(following_ids)
@@ -941,11 +995,15 @@ async def get_following(user_id: str, user: dict = Depends(get_current_user)):
     follows_back_docs = await db.follows.find(
         {"follower_id": {"$in": following_ids}, "following_id": user_id, "status": "active"},
         {"_id": 0, "follower_id": 1},
-    ).to_list(200)
+    ).to_list(limit)
     follows_back_set = {f["follower_id"] for f in follows_back_docs}
 
+    user_map = {u["user_id"]: u for u in users}
     results = []
-    for u in users:
+    for f in follows:
+        u = user_map.get(f["following_id"])
+        if not u:
+            continue
         results.append({
             "user_id": u["user_id"],
             "display_name": u.get("display_name", u.get("name", "Utilisateur")),
@@ -955,7 +1013,7 @@ async def get_following(user_id: str, user: dict = Depends(get_current_user)):
             "follows_back": u["user_id"] in follows_back_set,
         })
 
-    return {"following": results}
+    return {"following": results, "next_cursor": next_cursor, "has_more": has_more}
 
 
 # ============== SOCIAL ONBOARDING STATUS ==============
