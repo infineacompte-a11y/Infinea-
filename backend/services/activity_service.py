@@ -144,6 +144,7 @@ async def get_feed(
         "user_id": {"$in": following_ids},
         "visibility": {"$in": ["public", "followers"]},
         "moderation_status": {"$ne": "hidden"},
+        "deleted": {"$ne": True},
     }
 
     if cursor:
@@ -178,6 +179,7 @@ async def get_feed(
                 "hashtags": {"$in": followed_tags},
                 "visibility": "public",
                 "moderation_status": {"$ne": "hidden"},
+                "deleted": {"$ne": True},
                 "user_id": {"$nin": list(exclude_ids)},
                 "activity_id": {"$nin": list(existing_ids)},
             }
@@ -208,6 +210,7 @@ async def get_feed(
         discover_query = {
             "visibility": "public",
             "moderation_status": {"$ne": "hidden"},
+            "deleted": {"$ne": True},
             "user_id": {"$nin": list(exclude_ids | {user_id})},
             "activity_id": {"$nin": list(existing_ids)},
         }

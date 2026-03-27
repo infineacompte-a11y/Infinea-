@@ -71,6 +71,7 @@ async def get_new_post_count(
         "user_id": {"$in": following_ids},
         "visibility": {"$in": ["public", "followers"]},
         "moderation_status": {"$ne": "hidden"},
+        "deleted": {"$ne": True},
         "created_at": {"$gt": since},
     })
 
@@ -125,7 +126,7 @@ async def get_discover_feed(
     )
     exclude_ids = blocked_ids | muted_ids
 
-    query = {"visibility": "public", "moderation_status": {"$ne": "hidden"}}
+    query = {"visibility": "public", "moderation_status": {"$ne": "hidden"}, "deleted": {"$ne": True}}
     if exclude_ids:
         query["user_id"] = {"$nin": list(exclude_ids)}
     if cursor:
@@ -683,7 +684,7 @@ async def get_own_activities(
     if limit > 50:
         limit = 50
 
-    query = {"user_id": user["user_id"], "moderation_status": {"$ne": "hidden"}}
+    query = {"user_id": user["user_id"], "moderation_status": {"$ne": "hidden"}, "deleted": {"$ne": True}}
     if cursor:
         query["created_at"] = {"$lt": cursor}
 
@@ -1020,30 +1021,208 @@ async def create_manual_post(
     }
 
 
-# ============== DELETE ACTIVITY ==============
+# ============== DELETE ACTIVITY (Soft delete — recoverable) ==============
 
 @router.delete("/activities/{activity_id}")
 async def delete_activity(activity_id: str, user: dict = Depends(get_current_user)):
-    """Delete own activity and cascade-delete associated reactions and comments."""
+    """Soft-delete an activity. Owner can delete own posts; admins can delete any.
+
+    Benchmarked:
+    - Instagram: hard delete, no recovery
+    - Reddit: soft delete ("[deleted]"), comments preserved
+    - Twitter/X: hard delete
+
+    InFinea pattern: soft delete (preserves data graph — reactions, comments, bookmarks
+    remain in DB for analytics/recovery). Activity becomes invisible in all feeds.
+    Admin delete sends a notification to the author.
+    """
     activity = await db.activities.find_one({"activity_id": activity_id})
     if not activity:
         raise HTTPException(status_code=404, detail="Activité introuvable")
+    if activity.get("deleted"):
+        raise HTTPException(status_code=404, detail="Activité déjà supprimée")
 
-    if activity["user_id"] != user["user_id"]:
+    is_owner = activity["user_id"] == user["user_id"]
+    is_admin = user.get("is_admin", False) or user.get("role") == "admin"
+
+    if not is_owner and not is_admin:
         raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres activités")
 
-    # Cascade delete: reactions + comments + bookmarks
-    await db.reactions.delete_many({"activity_id": activity_id})
-    await db.comments.delete_many({"activity_id": activity_id})
-    await db.bookmarks.delete_many({"activity_id": activity_id})
-    await db.activities.delete_one({"activity_id": activity_id})
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Soft delete: mark as deleted, preserve data graph
+    await db.activities.update_one(
+        {"activity_id": activity_id},
+        {"$set": {
+            "deleted": True,
+            "deleted_at": now,
+            "deleted_by": user["user_id"],
+            "deleted_reason": "admin" if (is_admin and not is_owner) else "owner",
+        }},
+    )
 
     # Decrement hashtag stats (fire-and-forget)
     deleted_tags = activity.get("hashtags", [])
     if deleted_tags:
         asyncio.create_task(update_hashtag_stats(deleted_tags, increment=-1))
 
+    # Admin delete → notify the author
+    if is_admin and not is_owner:
+        try:
+            await db.notifications.insert_one({
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": activity["user_id"],
+                "type": "content_removed",
+                "message": "Une de vos publications a été supprimée par la modération",
+                "data": {"activity_id": activity_id, "admin_id": user["user_id"]},
+                "read": False,
+                "created_at": now,
+            })
+        except Exception:
+            pass
+
     return {"message": "Activité supprimée"}
+
+
+# ============== EDIT ACTIVITY (Twitter/X pattern: 60-min window, history, max 5 edits) ==============
+
+EDIT_WINDOW_SECONDS_POST = 60 * 60  # 60 minutes (generous vs Twitter's 30 min)
+MAX_EDITS_PER_POST = 5  # Twitter/X allows 5
+
+
+@router.put("/activities/{activity_id}")
+async def edit_activity(
+    activity_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """Edit own post within 60-minute window.
+
+    Benchmarked:
+    - Twitter/X: 30-min window, 5 edits max, full edit history
+    - Instagram: no edit (delete & repost only)
+    - LinkedIn: unlimited edits, no history
+
+    InFinea pattern: 60-min window, 5 edits max, full edit history stored,
+    re-moderation on each edit, re-extraction of mentions & hashtags.
+    Shows "(modifié)" indicator. History viewable by anyone who can see the post.
+    """
+    activity = await db.activities.find_one({"activity_id": activity_id})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activité introuvable")
+
+    # Only own posts, and only type "post" (system activities are immutable)
+    if activity["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres publications")
+    if activity.get("type") != "post":
+        raise HTTPException(status_code=400, detail="Seules les publications peuvent être modifiées")
+
+    # Enforce 60-minute edit window
+    created = datetime.fromisoformat(activity["created_at"])
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    elapsed = (datetime.now(timezone.utc) - created).total_seconds()
+    if elapsed > EDIT_WINDOW_SECONDS_POST:
+        raise HTTPException(status_code=403, detail="La fenêtre de modification de 60 minutes est expirée")
+
+    # Max 5 edits
+    edit_history = activity.get("edit_history", [])
+    if len(edit_history) >= MAX_EDITS_PER_POST:
+        raise HTTPException(status_code=400, detail=f"Maximum {MAX_EDITS_PER_POST} modifications par publication")
+
+    body = await request.json()
+    new_content = sanitize_text(str(body.get("content", "")), max_length=2000)
+    if not new_content:
+        raise HTTPException(status_code=400, detail="Le contenu doit faire entre 1 et 2000 caractères")
+
+    # Skip if content unchanged
+    old_content = (activity.get("data") or {}).get("content", "")
+    if new_content == old_content:
+        raise HTTPException(status_code=400, detail="Le contenu est identique — aucune modification")
+
+    # Re-moderation (Layer 1: regex, Layer 2: AI if needed)
+    moderation = check_content(new_content)
+    if not moderation["allowed"]:
+        raise HTTPException(status_code=400, detail=moderation["reason"])
+
+    # Re-extract @mentions and #hashtags
+    blocked_ids = await get_blocked_ids(user["user_id"])
+    mentions = await extract_mentions(new_content, user["user_id"], blocked_ids)
+    new_hashtags = extract_hashtags(new_content)
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Build edit history entry (archive previous version)
+    history_entry = {
+        "content": old_content,
+        "edited_at": activity.get("edited_at") or activity["created_at"],
+    }
+
+    # Update hashtag stats (decrement old, increment new)
+    old_hashtags = activity.get("hashtags", [])
+    removed_tags = [t for t in old_hashtags if t not in new_hashtags]
+    added_tags = [t for t in new_hashtags if t not in old_hashtags]
+    if removed_tags:
+        asyncio.create_task(update_hashtag_stats(removed_tags, increment=-1))
+    if added_tags:
+        asyncio.create_task(update_hashtag_stats(added_tags))
+
+    # Atomic update
+    update_ops = {
+        "$set": {
+            "data.content": new_content,
+            "data.mentions": mentions,
+            "edited_at": now,
+            "hashtags": new_hashtags,
+        },
+        "$push": {"edit_history": history_entry},
+    }
+
+    await db.activities.update_one({"activity_id": activity_id}, update_ops)
+
+    return {
+        "activity_id": activity_id,
+        "content": new_content,
+        "mentions": mentions,
+        "hashtags": new_hashtags,
+        "edited_at": now,
+        "edit_count": len(edit_history) + 1,
+    }
+
+
+# ============== EDIT HISTORY (Twitter/X "View edit history") ==============
+
+@router.get("/activities/{activity_id}/edit-history")
+async def get_edit_history(
+    activity_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Get edit history for an activity. Public read for anyone who can see the post."""
+    activity = await db.activities.find_one(
+        {"activity_id": activity_id},
+        {"edit_history": 1, "edited_at": 1, "data.content": 1, "created_at": 1, "user_id": 1,
+         "visibility": 1, "moderation_status": 1, "deleted": 1},
+    )
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activité introuvable")
+    if activity.get("deleted"):
+        raise HTTPException(status_code=404, detail="Activité supprimée")
+    if activity.get("moderation_status") == "hidden":
+        raise HTTPException(status_code=404, detail="Activité masquée")
+
+    history = activity.get("edit_history", [])
+    # Add current version as the latest entry
+    current = {
+        "content": (activity.get("data") or {}).get("content", ""),
+        "edited_at": activity.get("edited_at") or activity["created_at"],
+        "current": True,
+    }
+
+    return {
+        "activity_id": activity_id,
+        "edit_count": len(history),
+        "versions": history + [current],
+    }
 
 
 # ============== PIN ACTIVITY (LinkedIn Featured / Twitter Pinned) ==============
@@ -1111,6 +1290,7 @@ async def get_pinned_activities(
             "user_id": user_id,
             "pinned": True,
             "moderation_status": {"$ne": "hidden"},
+            "deleted": {"$ne": True},
         },
         {"_id": 0},
     ).sort("pinned_at", -1).limit(MAX_PINS).to_list(MAX_PINS)
@@ -1147,7 +1327,7 @@ async def get_activity_detail(
     Benchmarked: Instagram post detail, Twitter/X tweet detail, Strava activity.
     """
     activity = await db.activities.find_one(
-        {"activity_id": activity_id, "moderation_status": {"$ne": "hidden"}},
+        {"activity_id": activity_id, "moderation_status": {"$ne": "hidden"}, "deleted": {"$ne": True}},
         {"_id": 0},
     )
     if not activity:
@@ -1698,12 +1878,15 @@ async def delete_comment(
     comment_id: str,
     user: dict = Depends(get_current_user),
 ):
-    """Delete own comment. Cascade-deletes replies if top-level."""
+    """Delete own comment (or admin delete). Cascade-deletes replies if top-level."""
     comment = await db.comments.find_one({"comment_id": comment_id})
     if not comment:
         raise HTTPException(status_code=404, detail="Commentaire introuvable")
 
-    if comment["user_id"] != user["user_id"]:
+    is_owner = comment["user_id"] == user["user_id"]
+    is_admin = user.get("is_admin", False) or user.get("role") == "admin"
+
+    if not is_owner and not is_admin:
         raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres commentaires")
 
     deleted_count = 1  # The comment itself
@@ -1834,6 +2017,7 @@ async def search_activities(
         "$text": {"$search": q},
         "visibility": "public",
         "moderation_status": {"$ne": "hidden"},
+        "deleted": {"$ne": True},
     }
     if exclude_ids:
         query["user_id"] = {"$nin": exclude_ids}
@@ -1901,7 +2085,7 @@ async def toggle_bookmark(
     Collection: bookmarks {user_id, activity_id, created_at}
     """
     activity = await db.activities.find_one(
-        {"activity_id": activity_id, "moderation_status": {"$ne": "hidden"}},
+        {"activity_id": activity_id, "moderation_status": {"$ne": "hidden"}, "deleted": {"$ne": True}},
         {"activity_id": 1},
     )
     if not activity:
@@ -2034,6 +2218,7 @@ async def get_bookmarks(
         {
             "activity_id": {"$in": activity_ids},
             "moderation_status": {"$ne": "hidden"},
+            "deleted": {"$ne": True},
             "user_id": {"$nin": blocked_ids},
         },
         {"_id": 0},

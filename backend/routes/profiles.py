@@ -782,9 +782,9 @@ async def get_user_activities(
             {"follower_id": user["user_id"], "following_id": user_id, "status": "active"}
         )
         if is_follower:
-            query = {"user_id": user_id, "visibility": {"$in": ["public", "followers"]}, "moderation_status": {"$ne": "hidden"}}
+            query = {"user_id": user_id, "visibility": {"$in": ["public", "followers"]}, "moderation_status": {"$ne": "hidden"}, "deleted": {"$ne": True}}
         else:
-            query = {"user_id": user_id, "visibility": "public", "moderation_status": {"$ne": "hidden"}}
+            query = {"user_id": user_id, "visibility": "public", "moderation_status": {"$ne": "hidden"}, "deleted": {"$ne": True}}
 
     activities = (
         await db.activities.find(query, {"_id": 0})

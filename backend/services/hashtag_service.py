@@ -169,6 +169,7 @@ async def get_trending_hashtags(limit: int = 15) -> List[dict]:
                 "created_at": {"$gte": week_ago},
                 "hashtags": {"$exists": True, "$ne": []},
                 "moderation_status": {"$ne": "hidden"},
+                "deleted": {"$ne": True},
             }
         },
         {"$unwind": "$hashtags"},
@@ -221,6 +222,7 @@ async def get_hashtag_feed(
         "hashtags": normalized,
         "visibility": "public",
         "moderation_status": {"$ne": "hidden"},
+        "deleted": {"$ne": True},
     }
     if blocked_ids:
         query["user_id"] = {"$nin": list(blocked_ids)}
