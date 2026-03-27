@@ -641,6 +641,12 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onB
                 {getInitials(activity.user_name)}
               </AvatarFallback>
             </Avatar>
+            {activity.user_presence === "online" && (
+              <span
+                className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-background"
+                style={{ backgroundColor: "#22c55e" }}
+              />
+            )}
             {activity.user_level > 1 && (
               <span
                 className="absolute -bottom-0.5 -right-0.5 w-4.5 h-4.5 rounded-full flex items-center justify-center text-[8px] font-bold text-white ring-2 ring-background"

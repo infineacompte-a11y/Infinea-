@@ -23,6 +23,7 @@ from auth import get_current_user
 from helpers import send_push_to_user
 from services.moderation import get_blocked_ids, check_content, sanitize_text
 from services.email_service import send_email_to_user, email_new_follower
+from services.presence_service import get_presence_batch
 
 logger = logging.getLogger(__name__)
 
@@ -1059,3 +1060,25 @@ async def dismiss_social_onboarding(user: dict = Depends(get_current_user)):
         {"$set": {"social_onboarding_dismissed": True}},
     )
     return {"dismissed": True}
+
+
+# ============== PRESENCE / ONLINE STATUS ==============
+
+@router.post("/presence/batch")
+async def get_presence_status(request: Request, user: dict = Depends(get_current_user)):
+    """
+    Batch presence check for multiple users.
+
+    Body: {"user_ids": ["uid1", "uid2", ...]}
+    Returns: {"presence": {"uid1": {"status": "online", "label": "En ligne"}, ...}}
+
+    Respects privacy — users with show_activity_status=False appear offline.
+    Max 50 users per request.
+    """
+    body = await request.json()
+    user_ids = body.get("user_ids", [])
+    if not user_ids or len(user_ids) > 50:
+        return {"presence": {}}
+
+    presence = await get_presence_batch(user_ids)
+    return {"presence": presence}

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
+import { OnlineLabel } from "@/components/OnlineIndicator";
 import { sanitize } from "@/lib/sanitize";
 
 function timeAgo(iso) {
@@ -348,20 +349,32 @@ function GroupMemberPanel({
               {/* Other members */}
               {members.map((m) => (
                 <div key={m.user_id} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted/30 transition-colors">
-                  <Avatar
-                    className="w-8 h-8 cursor-pointer"
-                    onClick={() => navigate(`/users/${m.user_id}`)}
-                  >
-                    <AvatarImage src={m.avatar_url} alt={m.display_name} />
-                    <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                      {getInitials(m.display_name)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="relative shrink-0">
+                    <Avatar
+                      className="w-8 h-8 cursor-pointer"
+                      onClick={() => navigate(`/users/${m.user_id}`)}
+                    >
+                      <AvatarImage src={m.avatar_url} alt={m.display_name} />
+                      <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                        {getInitials(m.display_name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    {m.presence?.status === "online" && (
+                      <span
+                        className="absolute bottom-0 right-0 w-2 h-2 rounded-full ring-1.5 ring-background"
+                        style={{ backgroundColor: "#22c55e" }}
+                      />
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <span className="text-sm font-medium truncate block">{m.display_name}</span>
-                    {admins.has(m.user_id) && (
+                    {m.presence?.label ? (
+                      <span className={`text-[10px] ${m.presence.status === "online" ? "text-emerald-600" : "text-muted-foreground/60"}`}>
+                        {m.presence.label}
+                      </span>
+                    ) : admins.has(m.user_id) ? (
                       <span className="text-[10px] text-[#459492] flex items-center gap-0.5"><Crown className="w-2.5 h-2.5" /> Admin</span>
-                    )}
+                    ) : null}
                   </div>
                   {/* Admin actions */}
                   {isAdmin && (
@@ -798,30 +811,53 @@ export default function ConversationPage() {
                   <Users className="w-5 h-5 text-white/80" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-white font-semibold text-sm truncate">
+                  <p className="text-white font-semibold text-sm truncate flex items-center gap-1.5">
                     {groupInfo?.name || "Groupe"}
+                    {groupInfo?.any_online && (
+                      <span
+                        className="inline-block w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: "#22c55e" }}
+                      />
+                    )}
                   </p>
                   <p className="text-white/40 text-xs">
                     {groupInfo?.member_count || 0} membres
+                    {groupInfo?.any_online && (
+                      <span className="text-emerald-400 ml-1">
+                        · {groupInfo.members?.filter(m => m.presence?.status === "online").length || 0} en ligne
+                      </span>
+                    )}
                   </p>
                 </div>
               </button>
             ) : (
-              /* ── Direct header (existing) ── */
+              /* ── Direct header — with presence indicator ── */
               <Link to={other.user_id ? `/users/${other.user_id}` : "#"} className="flex items-center gap-3 flex-1 min-w-0">
-                <Avatar className="w-10 h-10 ring-2 ring-white/10">
-                  <AvatarImage src={other.avatar_url} alt={other.display_name} />
-                  <AvatarFallback className="bg-white/10 text-white text-sm">
-                    {getInitials(other.display_name)}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative shrink-0">
+                  <Avatar className="w-10 h-10 ring-2 ring-white/10">
+                    <AvatarImage src={other.avatar_url} alt={other.display_name} />
+                    <AvatarFallback className="bg-white/10 text-white text-sm">
+                      {getInitials(other.display_name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  {other.presence?.status === "online" && (
+                    <span
+                      className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ring-2 ring-[#275255]"
+                      style={{ backgroundColor: "#22c55e" }}
+                    />
+                  )}
+                </div>
                 <div className="min-w-0">
                   <p className="text-white font-semibold text-sm truncate">
                     {other.display_name || "Conversation"}
                   </p>
-                  {other.username && (
+                  {other.presence?.label ? (
+                    <p className={`text-xs ${other.presence.status === "online" ? "text-emerald-400" : "text-white/40"}`}>
+                      {other.presence.label}
+                    </p>
+                  ) : other.username ? (
                     <p className="text-white/40 text-xs">@{other.username}</p>
-                  )}
+                  ) : null}
                 </div>
               </Link>
             )}
