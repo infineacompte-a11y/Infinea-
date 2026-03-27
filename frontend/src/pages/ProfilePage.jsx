@@ -14,6 +14,7 @@ import ActivityHeatmap from "@/components/ActivityHeatmap";
 import {
   Activity,
   BarChart3,
+  Share2,
   LogOut,
   Crown,
   Mail,
@@ -524,6 +525,18 @@ export default function ProfilePage() {
             {/* Actions */}
             <Card className="mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "350ms", animationFillMode: "forwards" }}>
               <CardContent className="p-4 space-y-1">
+                <Button
+                  variant="ghost"
+                  className="group w-full justify-start gap-3 h-12 rounded-xl"
+                  onClick={() => {
+                    const url = `${window.location.origin}/share/profile/${user?.user_id}`;
+                    navigator.clipboard.writeText(url).then(() => toast.success("Lien copié !")).catch(() => {});
+                  }}
+                >
+                  <Share2 className="w-5 h-5 text-[#459492]" />
+                  <span className="flex-1 text-left">Partager mon profil</span>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:translate-x-1 transition-transform" />
+                </Button>
                 <Link to="/progress">
                   <Button
                     variant="ghost"

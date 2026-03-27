@@ -58,6 +58,7 @@ from routes.b2b import router as b2b_router
 from routes.reflections import router as reflections_router
 from routes.features import router as features_router
 from routes.social import router as social_router, public_router as social_public_router
+from routes.profiles import public_router as profiles_public_router
 from routes.profiles import router as profiles_router
 from routes.feed import router as feed_router
 from routes.objectives import router as objectives_router
@@ -97,6 +98,7 @@ api_router.include_router(hashtags_router)
 
 # Public routes (no /api prefix)
 app.include_router(social_public_router)
+app.include_router(profiles_public_router)
 
 
 # ── Root ──

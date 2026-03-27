@@ -54,6 +54,7 @@ const HashtagFeedPage = lazy(() => import("@/pages/HashtagFeedPage"));
 const NewGroupPage = lazy(() => import("@/pages/NewGroupPage"));
 const ActivityDetailPage = lazy(() => import("@/pages/ActivityDetailPage"));
 const TrendingPage = lazy(() => import("@/pages/TrendingPage"));
+const ShareProfilePage = lazy(() => import("@/pages/ShareProfilePage"));
 import { identifyUser, resetAnalytics, track } from "@/lib/analytics";
 
 // In production on Vercel, REACT_APP_BACKEND_URL can be "" (empty) to use
@@ -625,6 +626,7 @@ function AppRouter() {
         }
       />
       <Route path="/p/:shareId" element={<PublicSharePage />} />
+      <Route path="/share/profile/:userId" element={<ShareProfilePage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
     </Suspense>
