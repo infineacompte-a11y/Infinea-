@@ -17,11 +17,13 @@ import {
   Heart,
   Sparkles,
   Trophy,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch } from "@/App";
 import SessionDebrief from "@/components/SessionDebrief";
 import VoiceNoteButton from "@/components/VoiceNoteButton";
+import LevelUpCelebration from "@/components/LevelUpCelebration";
 
 const categoryIcons = {
   learning: BookOpen,
@@ -48,6 +50,7 @@ export default function ActiveSession() {
   const [isCompleting, setIsCompleting] = useState(false);
   const [showCompletion, setShowCompletion] = useState(false);
   const [completionData, setCompletionData] = useState(null);
+  const [showLevelUp, setShowLevelUp] = useState(false);
 
   // Timer effect
   useEffect(() => {
@@ -101,6 +104,11 @@ export default function ActiveSession() {
           actual_duration: Math.ceil(elapsedTime / 60),
         });
         toast.success("Bravo ! Session terminée avec succès !");
+
+        // Show level-up celebration if player leveled up
+        if (data.xp?.leveled_up) {
+          setTimeout(() => setShowLevelUp(true), 1200);
+        }
       }
     } catch (error) {
       toast.error("Erreur lors de la sauvegarde");
@@ -156,24 +164,61 @@ export default function ActiveSession() {
           </div>
 
           <div className="opacity-0 animate-fade-in" style={{ animationDelay: "500ms", animationFillMode: "forwards" }}>
-            <div className="grid grid-cols-2 gap-4 mb-8">
+            <div className="grid grid-cols-3 gap-3 mb-6">
               <Card className="stat-card hover:shadow-md transition-all duration-200">
-                <CardContent className="p-4 text-center">
-                  <p className="text-2xl font-sans font-semibold tracking-tight font-bold text-primary tabular-nums">
+                <CardContent className="p-3 text-center">
+                  <p className="text-2xl font-semibold text-primary tabular-nums">
                     +{completionData?.time_added || Math.ceil(elapsedTime / 60)}
                   </p>
-                  <p className="text-xs text-muted-foreground">minutes ajoutées</p>
+                  <p className="text-[11px] text-muted-foreground">minutes</p>
                 </CardContent>
               </Card>
               <Card className="stat-card hover:shadow-md transition-all duration-200">
-                <CardContent className="p-4 text-center">
-                  <p className="text-2xl font-sans font-semibold tracking-tight font-bold text-[#E48C75] tabular-nums">
+                <CardContent className="p-3 text-center">
+                  <p className="text-2xl font-semibold text-[#E48C75] tabular-nums">
                     {completionData?.new_streak || 1}
                   </p>
-                  <p className="text-xs text-muted-foreground">jours de streak</p>
+                  <p className="text-[11px] text-muted-foreground">streak</p>
+                </CardContent>
+              </Card>
+              <Card className="stat-card hover:shadow-md transition-all duration-200">
+                <CardContent className="p-3 text-center">
+                  <p className="text-2xl font-semibold text-[#F5A623] tabular-nums">
+                    +{completionData?.xp?.xp_awarded || 0}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">XP</p>
                 </CardContent>
               </Card>
             </div>
+
+            {/* XP Progress bar — animated */}
+            {completionData?.xp && (
+              <div className="mb-8 opacity-0 animate-fade-in" style={{ animationDelay: "700ms", animationFillMode: "forwards" }}>
+                <div className="flex items-center justify-between mb-1.5 px-1">
+                  <div className="flex items-center gap-1.5">
+                    <Star className="w-3.5 h-3.5 text-[#F5A623]" fill="#F5A623" />
+                    <span className="text-xs font-semibold text-[#F5A623]">
+                      {completionData.xp.title}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Niv. {completionData.xp.level}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground tabular-nums">
+                    {completionData.xp.xp_in_level} / {completionData.xp.xp_needed}
+                  </span>
+                </div>
+                <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-1000 ease-out"
+                    style={{
+                      width: `${Math.max(2, (completionData.xp.progress || 0) * 100)}%`,
+                      backgroundColor: "#F5A623",
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="opacity-0 animate-fade-in" style={{ animationDelay: "700ms", animationFillMode: "forwards" }}>
@@ -222,6 +267,15 @@ export default function ActiveSession() {
               onContinue={() => navigate("/dashboard")}
             />
           </div>
+
+          {/* Level-up celebration overlay */}
+          {showLevelUp && completionData?.xp?.leveled_up && (
+            <LevelUpCelebration
+              newLevel={completionData.xp.new_level}
+              title={completionData.xp.title}
+              onDismiss={() => setShowLevelUp(false)}
+            />
+          )}
         </div>
       </div>
     );

@@ -781,6 +781,20 @@ async def create_manual_post(
         except Exception:
             pass
 
+    # Award post XP (5 XP, max 1 per day — anti-spam)
+    try:
+        from services.xp_engine import award_xp, POST_XP
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0).isoformat()
+        already_earned = await db.xp_history.count_documents({
+            "user_id": user["user_id"],
+            "source": "post",
+            "created_at": {"$gte": today_start},
+        })
+        if already_earned == 0:
+            await award_xp(user["user_id"], POST_XP, source="post", details={"activity_id": activity_id})
+    except Exception:
+        pass  # XP must never block post creation
+
     # Return enriched activity for immediate frontend display
     return {
         "activity_id": activity_id,
