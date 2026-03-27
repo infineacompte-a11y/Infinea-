@@ -146,13 +146,14 @@ async def get_discover_feed(
     # Take top `limit` from ranked pool
     activities = pool[:limit]
 
-    # Enrich with user info
+    # Enrich with user info (including level for social proof)
     if activities:
         enriched_user_ids = list({a["user_id"] for a in activities})
         users = await db.users.find(
             {"user_id": {"$in": enriched_user_ids}},
             {"_id": 0, "user_id": 1, "name": 1, "display_name": 1,
-             "username": 1, "avatar_url": 1, "picture": 1},
+             "username": 1, "avatar_url": 1, "picture": 1,
+             "level": 1, "total_xp": 1},
         ).to_list(len(enriched_user_ids))
         user_map = {u["user_id"]: u for u in users}
 
@@ -161,6 +162,7 @@ async def get_discover_feed(
             activity["user_name"] = u.get("display_name") or u.get("name", "Utilisateur")
             activity["user_username"] = u.get("username")
             activity["user_avatar"] = u.get("avatar_url") or u.get("picture")
+            activity["user_level"] = u.get("level", 1)
 
         # Check current user's reactions
         activity_ids = [a["activity_id"] for a in activities]
@@ -808,6 +810,7 @@ async def create_manual_post(
         "user_name": user.get("display_name") or user.get("name", "Utilisateur"),
         "user_username": user.get("username"),
         "user_avatar": user.get("avatar_url") or user.get("picture"),
+        "user_level": user.get("level", 1),
     }
 
 
@@ -864,12 +867,13 @@ async def get_activity_detail(
     author = await db.users.find_one(
         {"user_id": activity["user_id"]},
         {"_id": 0, "user_id": 1, "name": 1, "display_name": 1,
-         "username": 1, "avatar_url": 1, "picture": 1},
+         "username": 1, "avatar_url": 1, "picture": 1, "level": 1},
     )
     if author:
         activity["user_name"] = author.get("display_name") or author.get("name", "Utilisateur")
         activity["user_username"] = author.get("username")
         activity["user_avatar"] = author.get("avatar_url") or author.get("picture")
+        activity["user_level"] = author.get("level", 1)
 
     # ── Viewer's reaction ──
     my_reaction = await db.reactions.find_one(
@@ -1554,7 +1558,7 @@ async def search_activities(
     users_cursor = db.users.find(
         {"user_id": {"$in": enriched_user_ids}},
         {"_id": 0, "user_id": 1, "display_name": 1, "name": 1,
-         "username": 1, "avatar_url": 1, "picture": 1},
+         "username": 1, "avatar_url": 1, "picture": 1, "level": 1},
     )
     users_map = {u["user_id"]: u async for u in users_cursor}
 
@@ -1577,6 +1581,7 @@ async def search_activities(
         a["user_name"] = u.get("display_name") or u.get("name", "Utilisateur")
         a["user_username"] = u.get("username", "")
         a["user_avatar"] = u.get("avatar_url") or u.get("picture", "")
+        a["user_level"] = u.get("level", 1)
         a["user_reaction"] = reaction_map.get(a["activity_id"])
         a["bookmarked"] = a["activity_id"] in bookmark_set
 
@@ -1670,7 +1675,7 @@ async def get_bookmarks(
     users_cursor = db.users.find(
         {"user_id": {"$in": enriched_user_ids}},
         {"_id": 0, "user_id": 1, "display_name": 1, "name": 1,
-         "username": 1, "avatar_url": 1, "picture": 1},
+         "username": 1, "avatar_url": 1, "picture": 1, "level": 1},
     )
     users_map = {u["user_id"]: u async for u in users_cursor}
 
@@ -1690,6 +1695,7 @@ async def get_bookmarks(
         act["user_display_name"] = u.get("display_name") or u.get("name", "")
         act["user_avatar"] = u.get("avatar_url") or u.get("picture", "")
         act["user_username"] = u.get("username", "")
+        act["user_level"] = u.get("level", 1)
         act["user_reaction"] = reaction_map.get(act["activity_id"])
         act["bookmarked"] = True
         act["bookmarked_at"] = bk["created_at"]

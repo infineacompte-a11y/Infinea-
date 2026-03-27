@@ -233,11 +233,25 @@ async def emit_session_activity(user_id: str, session_data: dict):
                 "action_title": session_data.get("action_title", "Micro-action"),
                 "category": session_data.get("category", ""),
                 "duration": session_data.get("actual_duration", 0),
+                "xp_awarded": session_data.get("xp_awarded", 0),
             },
         )
     except Exception:
         logger.exception("Failed to emit session activity")
         return None
+
+
+async def patch_activity_xp(activity_id: str, xp_awarded: int):
+    """Patch XP data onto an existing activity (called after XP calculation)."""
+    if not activity_id or xp_awarded <= 0:
+        return
+    try:
+        await db.activities.update_one(
+            {"activity_id": activity_id},
+            {"$set": {"data.xp_awarded": xp_awarded}},
+        )
+    except Exception:
+        logger.warning(f"Failed to patch XP on activity {activity_id}")
 
 
 async def emit_badge_activity(user_id: str, badge: dict):
