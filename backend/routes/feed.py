@@ -41,6 +41,41 @@ CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "")
 
 # ============== FEED ==============
 
+@router.get("/feed/new-count")
+async def get_new_post_count(
+    since: str,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Count new activities in the user's feed since a given ISO timestamp.
+    Used by frontend polling to show "X nouveaux posts" banner.
+    Lightweight: count only, no document fetch.
+    """
+    user_id = user["user_id"]
+
+    # Same audience as main feed: followed users + self
+    following_docs = await db.follows.find(
+        {"follower_id": user_id, "status": "active"},
+        {"following_id": 1},
+    ).limit(1000).to_list(1000)
+
+    following_ids = [f["following_id"] for f in following_docs]
+    following_ids.append(user_id)
+
+    blocked_ids = await get_blocked_ids(user_id)
+    if blocked_ids:
+        following_ids = [fid for fid in following_ids if fid not in blocked_ids]
+
+    count = await db.activities.count_documents({
+        "user_id": {"$in": following_ids},
+        "visibility": {"$in": ["public", "followers"]},
+        "moderation_status": {"$ne": "hidden"},
+        "created_at": {"$gt": since},
+    })
+
+    return {"new_count": count}
+
+
 @router.get("/feed")
 async def get_activity_feed(
     user: dict = Depends(get_current_user),

@@ -1396,6 +1396,10 @@ export default function CommunityFeedPage() {
   const [refreshing, setRefreshing] = useState(false);
   const sentinelRef = useRef(null);
 
+  // ── Real-time "new posts" polling ──
+  const [newPostCount, setNewPostCount] = useState(0);
+  const feedLoadedAtRef = useRef(null);
+
   const fetchFeed = useCallback(async (cursorVal = null, feedTab = "feed") => {
     const isInitial = !cursorVal;
     if (isInitial) setLoading(true);
@@ -1414,6 +1418,11 @@ export default function CommunityFeedPage() {
         );
         setCursor(data.next_cursor);
         setHasMore(data.has_more);
+        // Mark when the feed was last loaded (for new-posts polling)
+        if (isInitial && feedTab === "feed") {
+          feedLoadedAtRef.current = new Date().toISOString();
+          setNewPostCount(0);
+        }
       }
     } catch {
       toast.error("Erreur lors du chargement");
@@ -1430,6 +1439,40 @@ export default function CommunityFeedPage() {
     setHasMore(false);
     fetchFeed(null, tab);
   }, [tab, fetchFeed]);
+
+  // ── New posts polling (30s interval, feed tab only) ──
+  useEffect(() => {
+    if (tab !== "feed") {
+      setNewPostCount(0);
+      return;
+    }
+    const poll = async () => {
+      if (!feedLoadedAtRef.current) return;
+      try {
+        const res = await authFetch(
+          `${API}/feed/new-count?since=${encodeURIComponent(feedLoadedAtRef.current)}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setNewPostCount(data.new_count || 0);
+        }
+      } catch {
+        // Silent — polling failure is non-critical
+      }
+    };
+    const id = setInterval(poll, 30_000);
+    return () => clearInterval(id);
+  }, [tab]);
+
+  // Show new posts: refresh feed and scroll to top
+  const handleShowNewPosts = useCallback(() => {
+    setNewPostCount(0);
+    setActivities([]);
+    setCursor(null);
+    setHasMore(false);
+    fetchFeed(null, "feed");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [fetchFeed]);
 
   // Infinite scroll
   useEffect(() => {
@@ -1586,6 +1629,23 @@ export default function CommunityFeedPage() {
           <div className="max-w-2xl mx-auto mt-5">
             {/* Post composer — feed tab only */}
             {tab === "feed" && <PostComposer user={user} onPost={handleCreatePost} />}
+
+            {/* "New posts" banner — appears when polling detects new content */}
+            {tab === "feed" && newPostCount > 0 && (
+              <button
+                onClick={handleShowNewPosts}
+                className="w-full flex items-center justify-center gap-2 py-2.5 mb-4 rounded-xl
+                  bg-gradient-to-r from-[#459492] to-[#55B3AE] text-white text-sm font-medium
+                  shadow-md hover:shadow-lg transition-shadow duration-200
+                  animate-in slide-in-from-top-2 fade-in"
+              >
+                <RefreshCw className="w-4 h-4" />
+                {newPostCount === 1
+                  ? "1 nouveau post"
+                  : `${newPostCount} nouveaux posts`}
+                <span className="text-white/70">— Voir</span>
+              </button>
+            )}
 
             {/* Social onboarding card — shown on feed tab when onboarding needed */}
             {tab === "feed" && (
