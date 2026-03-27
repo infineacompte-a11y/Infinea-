@@ -120,6 +120,40 @@ function groupSimilarNotifications(notifications) {
   return grouped;
 }
 
+// ── Deep link: notification → target page (Instagram pattern) ──
+function getNotifUrl(notif) {
+  const d = notif.data || {};
+  switch (notif.type) {
+    case "reaction":
+    case "comment":
+    case "reply":
+    case "mention":
+    case "comment_like":
+      return d.activity_id ? `/activity/${d.activity_id}` : null;
+    case "new_follower":
+      return d.follower_id ? `/users/${d.follower_id}` : "/community";
+    case "badge_earned":
+      return "/profile";
+    case "level_up":
+      return "/profile";
+    case "challenge_completed":
+      return d.challenge_id ? `/challenges/${d.challenge_id}` : "/challenges";
+    case "challenge_invite":
+      return "/challenges";
+    case "group_invite":
+    case "group_member_joined":
+      return "/groups";
+    case "new_message":
+      return d.conversation_id ? `/messages/${d.conversation_id}` : "/messages";
+    case "streak_alert":
+      return "/dashboard";
+    case "moderation":
+      return d.activity_id ? `/activity/${d.activity_id}` : "/community";
+    default:
+      return null;
+  }
+}
+
 function getGroupedMessage(notif) {
   if (!notif._groupCount || notif._groupCount <= 1) return notif.message;
   const others = notif._groupCount - 1;
@@ -319,6 +353,25 @@ export default function NotificationsPage() {
     } catch {
       toast.error("Erreur de suppression");
     }
+  };
+
+  // ── Click notification: mark read + navigate to target ──
+  const handleNotifClick = async (notif) => {
+    const url = getNotifUrl(notif);
+    // Mark as read (non-blocking)
+    if (!notif.read && notif.notification_id) {
+      setNotifications((prev) =>
+        prev.map((n) => n.notification_id === notif.notification_id ? { ...n, read: true } : n)
+      );
+      try {
+        await authFetch(`${API}/notifications/mark-read`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notification_ids: [notif.notification_id] }),
+        });
+      } catch { /* silent */ }
+    }
+    if (url) navigate(url);
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -576,7 +629,9 @@ export default function NotificationsPage() {
                           return (
                             <div
                               key={i}
-                              className={`opacity-0 animate-fade-in group p-4 rounded-xl border transition-all duration-200 hover:bg-muted/30 ${
+                              onClick={() => handleNotifClick(notif)}
+                              role="button"
+                              className={`opacity-0 animate-fade-in group p-4 rounded-xl border transition-all duration-200 cursor-pointer hover:bg-muted/30 hover:shadow-sm ${
                                 notif.read
                                   ? "opacity-60 border-border bg-card"
                                   : "border-l-2"
@@ -643,6 +698,9 @@ export default function NotificationsPage() {
                                   >
                                     <X className="w-3.5 h-3.5" />
                                   </button>
+                                  {getNotifUrl(notif) && (
+                                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/30 group-hover:text-muted-foreground group-hover:translate-x-0.5 transition-all duration-200" />
+                                  )}
                                 </div>
                               </div>
                             </div>
