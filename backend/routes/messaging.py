@@ -293,6 +293,27 @@ async def get_messages(
     messages.reverse()
     next_cursor = messages[0]["created_at"] if messages and has_more else None
 
+    # Enrich reply_to with sender display name (batch query)
+    reply_sender_ids = {
+        m["reply_to"]["sender_id"]
+        for m in messages
+        if m.get("reply_to") and m["reply_to"].get("sender_id")
+    }
+    if reply_sender_ids:
+        reply_users = await db.users.find(
+            {"user_id": {"$in": list(reply_sender_ids)}},
+            {"_id": 0, "user_id": 1, "display_name": 1, "name": 1},
+        ).to_list(len(reply_sender_ids))
+        rname_map = {
+            u["user_id"]: u.get("display_name") or u.get("name", "Utilisateur")
+            for u in reply_users
+        }
+        for m in messages:
+            if m.get("reply_to"):
+                m["reply_to"]["sender_name"] = rname_map.get(
+                    m["reply_to"]["sender_id"], "Utilisateur"
+                )
+
     return {
         "messages": messages,
         "next_cursor": next_cursor,
@@ -350,6 +371,21 @@ async def send_message(
     # Extract @mentions
     mentions = await extract_mentions(content, my_id, blocked_ids) if has_text else []
 
+    # Validate reply_to (WhatsApp/Discord pattern: quote a message)
+    reply_to = None
+    if body.reply_to:
+        replied_msg = await db.messages.find_one(
+            {"message_id": body.reply_to, "conversation_id": conversation_id},
+            {"_id": 0, "message_id": 1, "sender_id": 1, "content": 1, "images": 1},
+        )
+        if replied_msg:
+            reply_to = {
+                "message_id": replied_msg["message_id"],
+                "sender_id": replied_msg["sender_id"],
+                "content": (replied_msg.get("content") or "")[:150],
+                "has_images": bool(replied_msg.get("images")),
+            }
+
     now = datetime.now(timezone.utc).isoformat()
     message = {
         "message_id": f"msg_{uuid.uuid4().hex[:12]}",
@@ -360,6 +396,8 @@ async def send_message(
         "created_at": now,
         "read_at": None,
     }
+    if reply_to:
+        message["reply_to"] = reply_to
     if validated_images:
         message["images"] = validated_images
 

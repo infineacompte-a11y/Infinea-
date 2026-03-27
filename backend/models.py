@@ -272,3 +272,4 @@ class MessageSend(BaseModel):
     """Request body for sending a message (text and/or images)."""
     content: str = Field(default="", max_length=1000)
     images: list = Field(default_factory=list)  # [{image_url, thumbnail_url, width, height}]
+    reply_to: str = Field(default=None, description="message_id of the message being replied to")
