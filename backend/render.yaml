@@ -23,3 +23,18 @@ services:
         value: https://infinea.app
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: ADMIN_SECRET
+        sync: false
+
+  # Weekly summary email — every Monday 08:00 UTC (10:00 Paris)
+  - type: cron
+    name: infinea-weekly-summary
+    runtime: python
+    schedule: "0 8 * * 1"
+    buildCommand: pip install requests
+    startCommand: python cron_weekly_summary.py
+    envVars:
+      - key: BACKEND_URL
+        value: https://infinea-api.onrender.com
+      - key: ADMIN_SECRET
+        sync: false
