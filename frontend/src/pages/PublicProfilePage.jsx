@@ -301,11 +301,9 @@ export default function PublicProfilePage() {
     <div className="min-h-screen app-bg-mesh">
       <Sidebar />
       <main className="lg:ml-64 pt-14 lg:pt-0 pb-8">
-        {/* Cover photo banner (LinkedIn/Twitter pattern) */}
+        {/* Cover photo banner (Twitter/LinkedIn pattern) */}
         <div className="relative">
-          <div
-            className="h-36 sm:h-44 lg:h-52 w-full bg-gradient-to-br from-[#275255] via-[#459492]/60 to-[#275255] relative overflow-hidden"
-          >
+          <div className="h-32 sm:h-40 lg:h-48 w-full bg-gradient-to-br from-[#275255] via-[#459492]/60 to-[#275255] relative overflow-hidden">
             {profile.cover_photo_url && (
               <img
                 src={profile.cover_photo_url}
@@ -313,8 +311,7 @@ export default function PublicProfilePage() {
                 className="absolute inset-0 w-full h-full object-cover"
               />
             )}
-            {/* Gradient overlay for text readability */}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#275255]/80 via-transparent to-[#275255]/20" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-black/10" />
 
             {/* Back button */}
             <div className="absolute top-3 left-3 lg:left-8 z-10">
@@ -353,114 +350,105 @@ export default function PublicProfilePage() {
               </div>
             )}
           </div>
-
-          {/* Avatar overlapping the cover */}
-          <div className="max-w-3xl mx-auto px-4 lg:px-8 relative">
-            <div className="absolute -bottom-12 left-4 lg:left-8">
-              <div className="avatar-gradient-ring relative flex items-center justify-center opacity-0 animate-fade-in">
-                <Avatar className="w-24 h-24 lg:w-28 lg:h-28 ring-4 ring-background shadow-lg">
-                  <AvatarImage
-                    src={profile.avatar_url}
-                    alt={profile.display_name}
-                  />
-                  <AvatarFallback className="bg-primary/10 text-primary text-2xl">
-                    {getInitials(profile.display_name)}
-                  </AvatarFallback>
-                </Avatar>
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* Profile info under cover */}
-        <div className="section-dark-header px-4 lg:px-8 pt-16 pb-6">
-          <div className="max-w-3xl mx-auto">
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-1 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
-                  <h1 className="text-display text-2xl lg:text-3xl font-semibold text-white truncate">
-                    {profile.display_name}
-                  </h1>
-                  {profile.subscription_tier === "premium" && (
-                    <Badge className="bg-gradient-to-r from-[#E48C75] to-[#459492] text-white border-0 shrink-0">
-                      <Crown className="w-3 h-3 mr-1" />
-                      Premium
-                    </Badge>
-                  )}
-                </div>
-                {profile.username && (
-                  <p className="text-white/50 text-sm opacity-0 animate-fade-in" style={{ animationDelay: "75ms" }}>
-                    @{profile.username}
-                  </p>
-                )}
-                {/* Mutual follow badge + active status */}
-                {!isOwnProfile && (
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap opacity-0 animate-fade-in" style={{ animationDelay: "88ms" }}>
-                    {profile.is_following && profile.follows_you && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-300/90 bg-emerald-400/15 px-2 py-0.5 rounded-full">
-                        <UserCheck className="w-3 h-3" />
-                        Suivi mutuel
-                      </span>
-                    )}
-                    {!profile.is_following && profile.follows_you && (
-                      <span className="text-[11px] text-white/40">
-                        Vous suit
-                      </span>
-                    )}
-                    {(() => {
-                      const status = activeStatus(profile.last_active);
-                      if (!status) return null;
-                      return (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-white/50">
-                          {status.color && <Circle className="w-2 h-2 fill-current" style={{ color: status.color }} />}
-                          {status.label}
-                        </span>
-                      );
-                    })()}
-                  </div>
-                )}
-                {profile.bio && (
-                  <p className="text-white/60 text-sm mt-2 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
-                    {profile.bio}
-                  </p>
-                )}
-                {/* Mutual followers (Instagram "Suivi par X, Y et Z de tes abonnements") */}
-                {!isOwnProfile && profile.mutual_followers?.count > 0 && (
-                  <div className="flex items-center gap-2 mt-2 opacity-0 animate-fade-in" style={{ animationDelay: "120ms" }}>
-                    <div className="flex -space-x-2">
-                      {profile.mutual_followers.sample.map((u) => (
-                        <Avatar key={u.user_id} className="w-5 h-5 ring-1 ring-[#275255]">
-                          <AvatarImage src={u.avatar_url} alt={u.display_name} />
-                          <AvatarFallback className="bg-white/10 text-[8px] text-white">
-                            {u.display_name?.[0]}
-                          </AvatarFallback>
-                        </Avatar>
-                      ))}
-                    </div>
-                    <p className="text-[11px] text-white/40">
-                      Suivi par{" "}
-                      {profile.mutual_followers.sample
-                        .map((u) => u.display_name)
-                        .join(", ")}
-                      {profile.mutual_followers.count > 3 &&
-                        ` et ${profile.mutual_followers.count - 3} autre${profile.mutual_followers.count - 3 > 1 ? "s" : ""}`}
-                      {" "}que tu suis
-                    </p>
-                  </div>
-                )}
-                {profile.created_at && (
-                  <p className="text-white/40 text-xs mt-2 flex items-center gap-1 opacity-0 animate-fade-in" style={{ animationDelay: "150ms" }}>
-                    <CalendarDays className="w-3 h-3" />
-                    Membre depuis {formatDate(profile.created_at)}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
+        {/* Profile info — avatar overlapping cover bottom edge (Twitter pattern) */}
         <div className="px-4 lg:px-8">
           <div className="max-w-3xl mx-auto">
+            {/* Avatar row — pulled up to overlap cover */}
+            <div className="-mt-12 mb-3 opacity-0 animate-fade-in" style={{ animationFillMode: "forwards" }}>
+              <Avatar className="w-24 h-24 ring-4 ring-background shadow-lg">
+                <AvatarImage
+                  src={profile.avatar_url}
+                  alt={profile.display_name}
+                />
+                <AvatarFallback className="bg-primary/10 text-primary text-2xl">
+                  {getInitials(profile.display_name)}
+                </AvatarFallback>
+              </Avatar>
+            </div>
+
+            {/* Name + info */}
+            <div className="mb-4">
+              <div className="flex items-center gap-3 mb-0.5 opacity-0 animate-fade-in" style={{ animationDelay: "50ms", animationFillMode: "forwards" }}>
+                <h1 className="text-2xl lg:text-3xl font-semibold text-foreground truncate">
+                  {profile.display_name}
+                </h1>
+                {profile.subscription_tier === "premium" && (
+                  <Badge className="bg-gradient-to-r from-[#E48C75] to-[#459492] text-white border-0 shrink-0">
+                    <Crown className="w-3 h-3 mr-1" />
+                    Premium
+                  </Badge>
+                )}
+              </div>
+              {profile.username && (
+                <p className="text-muted-foreground text-sm opacity-0 animate-fade-in" style={{ animationDelay: "75ms", animationFillMode: "forwards" }}>
+                  @{profile.username}
+                </p>
+              )}
+              {/* Mutual follow badge + active status */}
+              {!isOwnProfile && (
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap opacity-0 animate-fade-in" style={{ animationDelay: "88ms", animationFillMode: "forwards" }}>
+                  {profile.is_following && profile.follows_you && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                      <UserCheck className="w-3 h-3" />
+                      Suivi mutuel
+                    </span>
+                  )}
+                  {!profile.is_following && profile.follows_you && (
+                    <span className="text-[11px] text-muted-foreground">
+                      Vous suit
+                    </span>
+                  )}
+                  {(() => {
+                    const status = activeStatus(profile.last_active);
+                    if (!status) return null;
+                    return (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                        {status.color && <Circle className="w-2 h-2 fill-current" style={{ color: status.color }} />}
+                        {status.label}
+                      </span>
+                    );
+                  })()}
+                </div>
+              )}
+              {profile.bio && (
+                <p className="text-muted-foreground text-sm mt-2 opacity-0 animate-fade-in" style={{ animationDelay: "100ms", animationFillMode: "forwards" }}>
+                  {profile.bio}
+                </p>
+              )}
+              {/* Mutual followers (Instagram "Suivi par X, Y et Z de tes abonnements") */}
+              {!isOwnProfile && profile.mutual_followers?.count > 0 && (
+                <div className="flex items-center gap-2 mt-2 opacity-0 animate-fade-in" style={{ animationDelay: "120ms", animationFillMode: "forwards" }}>
+                  <div className="flex -space-x-2">
+                    {profile.mutual_followers.sample.map((u) => (
+                      <Avatar key={u.user_id} className="w-5 h-5 ring-1 ring-background">
+                        <AvatarImage src={u.avatar_url} alt={u.display_name} />
+                        <AvatarFallback className="bg-muted text-[8px]">
+                          {u.display_name?.[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Suivi par{" "}
+                    {profile.mutual_followers.sample
+                      .map((u) => u.display_name)
+                      .join(", ")}
+                    {profile.mutual_followers.count > 3 &&
+                      ` et ${profile.mutual_followers.count - 3} autre${profile.mutual_followers.count - 3 > 1 ? "s" : ""}`}
+                    {" "}que tu suis
+                  </p>
+                </div>
+              )}
+              {profile.created_at && (
+                <p className="text-muted-foreground/60 text-xs mt-2 flex items-center gap-1 opacity-0 animate-fade-in" style={{ animationDelay: "150ms", animationFillMode: "forwards" }}>
+                  <CalendarDays className="w-3 h-3" />
+                  Membre depuis {formatDate(profile.created_at)}
+                </p>
+              )}
+            </div>
+
             {/* Social stats + Follow */}
             <Card className="mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "200ms", animationFillMode: "forwards" }}>
               <CardContent className="p-5">

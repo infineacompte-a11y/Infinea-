@@ -33,6 +33,22 @@ VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_CLAIMS_EMAIL", "mailto:contact@infine
 # ── Stripe ──
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
+# ── Anthropic (AI) ──
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+# ── Production safety checks ──
+_is_prod = bool(os.environ.get("RENDER") or os.environ.get("PRODUCTION"))
+if _is_prod:
+    if not STRIPE_WEBHOOK_SECRET:
+        raise RuntimeError(
+            "STRIPE_WEBHOOK_SECRET is required in production — "
+            "without it, webhooks are accepted without signature verification."
+        )
+    if not ANTHROPIC_API_KEY:
+        logging.warning(
+            "ANTHROPIC_API_KEY not set — AI features (moderation, coaching) will be disabled."
+        )
+
 # ── Redis (Cache) ──
 REDIS_URL = os.environ.get("REDIS_URL", "")
 

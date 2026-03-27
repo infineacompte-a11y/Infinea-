@@ -196,7 +196,7 @@ async def get_suggested_users(
     following_docs, blocked_ids = await asyncio.gather(
         db.follows.find(
             {"follower_id": my_id, "status": "active"}, {"following_id": 1}
-        ).to_list(5000),
+        ).limit(500).to_list(500),
         get_blocked_ids(my_id),
     )
     exclude_ids = {f["following_id"] for f in following_docs}
@@ -229,7 +229,7 @@ async def get_suggested_users(
                 "status": "active",
             },
             {"follower_id": 1, "following_id": 1},
-        ).to_list(10000)
+        ).limit(1000).to_list(1000)
         # Map: candidate_id → set of mutual connection ids
         mutual_map = defaultdict(set)
         for d in fof_docs:
@@ -278,7 +278,7 @@ async def get_suggested_users(
                 "status": {"$in": ["active", "completed"]},
             },
             {"user_id": 1, "category": 1, "title": 1},
-        ).to_list(2000)
+        ).limit(500).to_list(500)
         for o in obj_docs:
             uid = o["user_id"]
             candidate_ids.add(uid)
