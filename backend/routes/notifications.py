@@ -388,3 +388,56 @@ async def get_smart_notifications(request: Request, user: dict = Depends(get_cur
     smart_notifs.sort(key=lambda n: n.get("priority", 99))
 
     return {"notifications": smart_notifs[:8], "count": len(smart_notifs)}
+
+
+# ============== WEEKLY SUMMARY (Admin trigger) ==============
+
+import os
+
+ADMIN_SECRET = os.getenv("ADMIN_SECRET", "")
+
+
+@router.post("/notifications/weekly-summary")
+async def trigger_weekly_summary(request: Request):
+    """Trigger weekly summary emails for all eligible users.
+
+    Protected by ADMIN_SECRET header (for Render cron or manual trigger).
+    Supports ?dry_run=true for testing without sending.
+
+    Usage:
+        curl -X POST https://api.infinea.app/api/notifications/weekly-summary \
+             -H "X-Admin-Secret: <secret>"
+    """
+    # Auth: require ADMIN_SECRET header
+    secret = request.headers.get("X-Admin-Secret", "")
+    if not ADMIN_SECRET or secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+
+    dry_run = request.query_params.get("dry_run", "").lower() in ("true", "1", "yes")
+
+    from services.weekly_summary_service import send_weekly_summaries
+    result = await send_weekly_summaries(dry_run=dry_run)
+
+    return {
+        "message": "Weekly summaries processed",
+        "dry_run": dry_run,
+        **result,
+    }
+
+
+@router.get("/notifications/weekly-summary/preview")
+async def preview_weekly_summary(user: dict = Depends(get_current_user)):
+    """Preview the weekly summary email for the current user.
+
+    Returns the computed stats + rendered HTML for QA/testing.
+    Does NOT send any email.
+    """
+    from services.weekly_summary_service import (
+        compute_user_weekly_stats, render_weekly_summary_email,
+    )
+    stats = await compute_user_weekly_stats(user["user_id"])
+    if not stats:
+        raise HTTPException(status_code=404, detail="Impossible de calculer les stats")
+
+    subject, html = render_weekly_summary_email(stats)
+    return {"stats": stats, "subject": subject, "html": html}
