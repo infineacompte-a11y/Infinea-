@@ -162,9 +162,9 @@ async def stripe_webhook(request: Request):
                 logger.warning("Stripe webhook invalid payload")
                 raise HTTPException(status_code=400, detail="Invalid payload")
         else:
-            # Fallback for local dev without webhook secret — log warning
-            logger.warning("STRIPE_WEBHOOK_SECRET not set — webhook signature NOT verified")
-            event = json.loads(body)
+            # SECURITY: Reject unsigned webhooks in production — prevents forged events
+            logger.error("STRIPE_WEBHOOK_SECRET not set — rejecting unsigned webhook")
+            raise HTTPException(status_code=403, detail="Webhook secret not configured")
 
         event_type = event.get("type", "") if isinstance(event, dict) else event["type"]
         event_data = (event.get("data", {}).get("object", {}) if isinstance(event, dict)

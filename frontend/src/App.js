@@ -1,52 +1,58 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, lazy, Suspense } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 
-// Pages
+// ── Critical path pages (static import — first paint) ──
 import LandingPage from "@/pages/LandingPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
-import Dashboard from "@/pages/Dashboard";
-import ActionsLibrary from "@/pages/ActionsLibrary";
-import ActiveSession from "@/pages/ActiveSession";
-import ProgressStats from "@/pages/ProgressStats";
-import PricingPage from "@/pages/PricingPage";
-import ProfilePage from "@/pages/ProfilePage";
-import BadgesPage from "@/pages/BadgesPage";
-import NotificationsPage from "@/pages/NotificationsPage";
-import B2BDashboard from "@/pages/B2BDashboard";
-import IntegrationsPage from "@/pages/IntegrationsPage";
-import JournalPage from "@/pages/JournalPage";
-import NotesPage from "@/pages/NotesPage";
-import OnboardingPage from "@/pages/OnboardingPage";
-import ChallengesPage from "@/pages/ChallengesPage";
-import LeaderboardPage from "@/pages/LeaderboardPage";
-import ObjectivesPage from "@/pages/ObjectivesPage";
-import ObjectiveDetailPage from "@/pages/ObjectiveDetailPage";
-import RoutinesPage from "@/pages/RoutinesPage";
-import MyDayPage from "@/pages/MyDayPage";
-import MicroInstantsPage from "@/pages/MicroInstantsPage";
-import PrivacyPage from "@/pages/PrivacyPage";
-import CGUPage from "@/pages/CGUPage";
-import PublicSharePage from "@/pages/PublicSharePage";
-import GroupsPage from "@/pages/GroupsPage";
-import GroupDetailPage from "@/pages/GroupDetailPage";
-import SearchPage from "@/pages/SearchPage";
-import PublicProfilePage from "@/pages/PublicProfilePage";
-import CommunityFeedPage from "@/pages/CommunityFeedPage";
-import BlockedUsersPage from "@/pages/BlockedUsersPage";
-import MessagesPage from "@/pages/MessagesPage";
-import ConversationPage from "@/pages/ConversationPage";
-import AdminModerationPage from "@/pages/AdminModerationPage";
-import SavedPage from "@/pages/SavedPage";
-import HashtagFeedPage from "@/pages/HashtagFeedPage";
-import NewGroupPage from "@/pages/NewGroupPage";
-import ActivityDetailPage from "@/pages/ActivityDetailPage";
 import NotFound from "@/pages/NotFound";
+
+// ── Components used on every protected page ──
 import CoachFAB from "@/components/CoachFAB";
 import MicroInstantBanner from "@/components/MicroInstantBanner";
 import ErrorBoundary from "@/components/ErrorBoundary";
+
+// ── Lazy-loaded pages (code-split — loaded on demand) ──
+// Benchmarked: Instagram, Discord, Strava all lazy-load non-critical routes.
+// Each page becomes its own JS chunk, loaded only when navigated to.
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const ActionsLibrary = lazy(() => import("@/pages/ActionsLibrary"));
+const ActiveSession = lazy(() => import("@/pages/ActiveSession"));
+const ProgressStats = lazy(() => import("@/pages/ProgressStats"));
+const PricingPage = lazy(() => import("@/pages/PricingPage"));
+const ProfilePage = lazy(() => import("@/pages/ProfilePage"));
+const BadgesPage = lazy(() => import("@/pages/BadgesPage"));
+const NotificationsPage = lazy(() => import("@/pages/NotificationsPage"));
+const B2BDashboard = lazy(() => import("@/pages/B2BDashboard"));
+const IntegrationsPage = lazy(() => import("@/pages/IntegrationsPage"));
+const JournalPage = lazy(() => import("@/pages/JournalPage"));
+const NotesPage = lazy(() => import("@/pages/NotesPage"));
+const OnboardingPage = lazy(() => import("@/pages/OnboardingPage"));
+const ChallengesPage = lazy(() => import("@/pages/ChallengesPage"));
+const LeaderboardPage = lazy(() => import("@/pages/LeaderboardPage"));
+const ObjectivesPage = lazy(() => import("@/pages/ObjectivesPage"));
+const ObjectiveDetailPage = lazy(() => import("@/pages/ObjectiveDetailPage"));
+const RoutinesPage = lazy(() => import("@/pages/RoutinesPage"));
+const MyDayPage = lazy(() => import("@/pages/MyDayPage"));
+const MicroInstantsPage = lazy(() => import("@/pages/MicroInstantsPage"));
+const PrivacyPage = lazy(() => import("@/pages/PrivacyPage"));
+const CGUPage = lazy(() => import("@/pages/CGUPage"));
+const PublicSharePage = lazy(() => import("@/pages/PublicSharePage"));
+const GroupsPage = lazy(() => import("@/pages/GroupsPage"));
+const GroupDetailPage = lazy(() => import("@/pages/GroupDetailPage"));
+const SearchPage = lazy(() => import("@/pages/SearchPage"));
+const PublicProfilePage = lazy(() => import("@/pages/PublicProfilePage"));
+const CommunityFeedPage = lazy(() => import("@/pages/CommunityFeedPage"));
+const BlockedUsersPage = lazy(() => import("@/pages/BlockedUsersPage"));
+const MessagesPage = lazy(() => import("@/pages/MessagesPage"));
+const ConversationPage = lazy(() => import("@/pages/ConversationPage"));
+const AdminModerationPage = lazy(() => import("@/pages/AdminModerationPage"));
+const SavedPage = lazy(() => import("@/pages/SavedPage"));
+const HashtagFeedPage = lazy(() => import("@/pages/HashtagFeedPage"));
+const NewGroupPage = lazy(() => import("@/pages/NewGroupPage"));
+const ActivityDetailPage = lazy(() => import("@/pages/ActivityDetailPage"));
 import { identifyUser, resetAnalytics, track } from "@/lib/analytics";
 
 // In production on Vercel, REACT_APP_BACKEND_URL can be "" (empty) to use
@@ -336,7 +342,15 @@ function AppRouter() {
     return <AuthCallback />;
   }
 
+  // Suspense fallback — matches ProtectedRoute spinner for seamless UX
+  const suspenseFallback = (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  );
+
   return (
+    <Suspense fallback={suspenseFallback}>
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
@@ -604,6 +618,7 @@ function AppRouter() {
       <Route path="/p/:shareId" element={<PublicSharePage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </Suspense>
   );
 }
 
