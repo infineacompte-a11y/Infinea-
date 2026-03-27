@@ -937,3 +937,107 @@ async def get_following(user_id: str, user: dict = Depends(get_current_user)):
         })
 
     return {"following": results}
+
+
+# ============== SOCIAL ONBOARDING STATUS ==============
+
+SOCIAL_ONBOARDING_TARGET_FOLLOWS = 5
+
+
+@router.get("/social/onboarding-status")
+async def get_social_onboarding_status(user: dict = Depends(get_current_user)):
+    """Return social onboarding status for the current user.
+
+    Computes profile completion score, social connection progress,
+    and whether the user has shared any activity.
+    Benchmarked: LinkedIn (profile meter), Instagram (follow gate),
+    Strava (connection step).
+    """
+    user_id = user["user_id"]
+
+    # Parallel queries for speed
+    async def get_user_doc():
+        return await db.users.find_one(
+            {"user_id": user_id},
+            {"_id": 0, "display_name": 1, "name": 1, "username": 1,
+             "bio": 1, "avatar_url": 1, "picture": 1, "cover_photo_url": 1,
+             "social_onboarding_dismissed": 1},
+        )
+
+    async def get_following_count():
+        return await db.follows.count_documents(
+            {"follower_id": user_id, "status": "active"}
+        )
+
+    async def get_followers_count():
+        return await db.follows.count_documents(
+            {"following_id": user_id, "status": "active"}
+        )
+
+    async def get_post_count():
+        return await db.activities.count_documents({"user_id": user_id})
+
+    user_doc, following_count, followers_count, post_count = await asyncio.gather(
+        get_user_doc(), get_following_count(), get_followers_count(), get_post_count()
+    )
+
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    # ── Profile completion (LinkedIn meter pattern) ──
+    has_avatar = bool(user_doc.get("avatar_url") or user_doc.get("picture"))
+    has_bio = bool(user_doc.get("bio"))
+    has_username = bool(user_doc.get("username"))
+    has_display_name = bool(user_doc.get("display_name"))
+    has_cover = bool(user_doc.get("cover_photo_url"))
+
+    profile_items = [
+        ("avatar", has_avatar, 30),
+        ("display_name", has_display_name, 20),
+        ("username", has_username, 20),
+        ("bio", has_bio, 20),
+        ("cover_photo", has_cover, 10),
+    ]
+    profile_score = sum(weight for _, done, weight in profile_items if done)
+    missing_fields = [name for name, done, _ in profile_items if not done]
+
+    # ── Social progress ──
+    has_posted = post_count > 0
+    follows_target_reached = following_count >= SOCIAL_ONBOARDING_TARGET_FOLLOWS
+    dismissed = user_doc.get("social_onboarding_dismissed", False)
+
+    # Onboarding is needed if profile < 70% OR follows < target OR never posted
+    needs_onboarding = (
+        not dismissed
+        and (profile_score < 70 or not follows_target_reached or not has_posted)
+    )
+
+    return {
+        "needs_onboarding": needs_onboarding,
+        "profile": {
+            "score": profile_score,
+            "has_avatar": has_avatar,
+            "has_bio": has_bio,
+            "has_username": has_username,
+            "has_display_name": has_display_name,
+            "has_cover": has_cover,
+            "missing_fields": missing_fields,
+        },
+        "social": {
+            "following_count": following_count,
+            "followers_count": followers_count,
+            "has_posted": has_posted,
+            "target_follows": SOCIAL_ONBOARDING_TARGET_FOLLOWS,
+        },
+        "dismissed": dismissed,
+    }
+
+
+@router.post("/social/onboarding-dismiss")
+async def dismiss_social_onboarding(user: dict = Depends(get_current_user)):
+    """Dismiss social onboarding card. Can be re-shown from settings."""
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"social_onboarding_dismissed": True}},
+    )
+    return {"dismissed": True}
