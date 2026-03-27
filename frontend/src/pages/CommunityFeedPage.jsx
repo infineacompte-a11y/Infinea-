@@ -622,13 +622,21 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onB
       <CardContent className="p-4">
         {/* Header: avatar + name + time */}
         <div className="flex items-start gap-3">
-          <Link to={`/users/${activity.user_id}`}>
-            <Avatar className="w-10 h-10 shrink-0 ring-2 ring-primary/10 ring-offset-1 ring-offset-background">
+          <Link to={`/users/${activity.user_id}`} className="relative shrink-0">
+            <Avatar className="w-10 h-10 ring-2 ring-primary/10 ring-offset-1 ring-offset-background">
               <AvatarImage src={activity.user_avatar} alt={activity.user_name} />
               <AvatarFallback className="bg-primary/10 text-primary text-xs">
                 {getInitials(activity.user_name)}
               </AvatarFallback>
             </Avatar>
+            {activity.user_level > 1 && (
+              <span
+                className="absolute -bottom-0.5 -right-0.5 w-4.5 h-4.5 rounded-full flex items-center justify-center text-[8px] font-bold text-white ring-2 ring-background"
+                style={{ backgroundColor: "#459492", minWidth: "18px", height: "18px" }}
+              >
+                {activity.user_level}
+              </span>
+            )}
           </Link>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -691,9 +699,15 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onB
                 >
                   <Icon className="w-3 h-3" style={{ color: config.color }} />
                 </div>
-                <p className="text-sm text-foreground/80">
+                <p className="text-sm text-foreground/80 flex-1">
                   {config.getText(activity.data || {})}
                 </p>
+                {activity.data?.xp_awarded > 0 && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-[#F5A623]/10 text-[#F5A623] text-[10px] font-bold shrink-0 tabular-nums">
+                    <Star className="w-2.5 h-2.5" fill="#F5A623" />
+                    +{activity.data.xp_awarded}
+                  </span>
+                )}
               </div>
             )}
           </div>

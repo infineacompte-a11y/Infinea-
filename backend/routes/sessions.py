@@ -338,9 +338,10 @@ async def complete_session(
         await _auto_sync_session(user["user_id"], session_data)
 
         # Emit activity feed items (non-blocking — never break session flow)
+        session_activity = None
         try:
             from services.activity_service import emit_session_activity, emit_badge_activity, emit_streak_activity
-            await emit_session_activity(user["user_id"], {
+            session_activity = await emit_session_activity(user["user_id"], {
                 "action_title": session.get("action_title"),
                 "category": session.get("category"),
                 "actual_duration": completion.actual_duration,
@@ -407,6 +408,17 @@ async def complete_session(
                 )
         except Exception:
             pass  # XP engine must never block session completion
+
+        # Patch XP onto the feed activity (so it shows in the social feed)
+        if session_activity and xp_result:
+            try:
+                from services.activity_service import patch_activity_xp
+                await patch_activity_xp(
+                    session_activity.get("activity_id"),
+                    xp_result.get("xp_awarded", 0),
+                )
+            except Exception:
+                pass
 
         return {
             "message": "Session completed!",
