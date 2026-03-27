@@ -828,8 +828,32 @@ async def create_manual_post(
     has_text = content and len(content.strip()) >= 3
     has_images = isinstance(images, list) and len(images) > 0
 
-    if not has_text and not has_images:
-        raise HTTPException(status_code=400, detail="Le post doit contenir du texte (min 3 car.) ou des images")
+    # Poll data (Twitter/LinkedIn pattern)
+    poll_data = body.get("poll")
+    has_poll = False
+    validated_poll = None
+    if isinstance(poll_data, dict):
+        poll_question = sanitize_text(str(poll_data.get("question", "")), max_length=280)
+        poll_options = poll_data.get("options", [])
+        poll_duration_hours = min(max(int(poll_data.get("duration_hours", 24)), 1), 168)  # 1h–7 days
+        if poll_question and isinstance(poll_options, list) and 2 <= len(poll_options) <= 6:
+            clean_options = []
+            for opt in poll_options[:6]:
+                opt_text = sanitize_text(str(opt).strip(), max_length=100)
+                if opt_text:
+                    clean_options.append({"text": opt_text, "votes": 0})
+            if len(clean_options) >= 2:
+                from datetime import timedelta
+                has_poll = True
+                validated_poll = {
+                    "question": poll_question,
+                    "options": clean_options,
+                    "total_votes": 0,
+                    "ends_at": (datetime.now(timezone.utc) + timedelta(hours=poll_duration_hours)).isoformat(),
+                }
+
+    if not has_text and not has_images and not has_poll:
+        raise HTTPException(status_code=400, detail="Le post doit contenir du texte (min 3 car.), des images ou un sondage")
 
     if has_images and len(images) > MAX_IMAGES_PER_POST:
         raise HTTPException(status_code=400, detail=f"Maximum {MAX_IMAGES_PER_POST} images par post")
@@ -883,6 +907,8 @@ async def create_manual_post(
     }
     if validated_images:
         activity_data["images"] = validated_images
+    if validated_poll:
+        activity_data["poll"] = validated_poll
 
     activity_doc = {
         "activity_id": activity_id,
@@ -1896,6 +1922,80 @@ async def toggle_bookmark(
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     return {"bookmarked": True}
+
+
+@router.post("/activities/{activity_id}/poll/vote")
+@limiter.limit("30/minute")
+async def vote_on_poll(
+    activity_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """Vote on a poll (Twitter/LinkedIn pattern).
+
+    One vote per user per poll. Cannot change vote after casting.
+    Results visible after voting or after poll closes.
+
+    Body: {option_index: int}
+    """
+    body = await request.json()
+    option_index = body.get("option_index")
+    if option_index is None or not isinstance(option_index, int):
+        raise HTTPException(status_code=400, detail="option_index requis")
+
+    my_id = user["user_id"]
+
+    activity = await db.activities.find_one(
+        {"activity_id": activity_id, "type": "post", "data.poll": {"$exists": True}},
+        {"_id": 0, "data.poll": 1, "user_id": 1},
+    )
+    if not activity or not activity.get("data", {}).get("poll"):
+        raise HTTPException(status_code=404, detail="Sondage introuvable")
+
+    poll = activity["data"]["poll"]
+
+    # Check poll hasn't ended
+    if poll.get("ends_at") and poll["ends_at"] < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(status_code=400, detail="Ce sondage est terminé")
+
+    # Validate option index
+    if option_index < 0 or option_index >= len(poll["options"]):
+        raise HTTPException(status_code=400, detail="Option invalide")
+
+    # Check if user already voted (dedup)
+    existing_vote = await db.poll_votes.find_one(
+        {"activity_id": activity_id, "user_id": my_id}, {"_id": 1}
+    )
+    if existing_vote:
+        raise HTTPException(status_code=400, detail="Tu as déjà voté")
+
+    # Record vote
+    await db.poll_votes.insert_one({
+        "activity_id": activity_id,
+        "user_id": my_id,
+        "option_index": option_index,
+        "voted_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    # Atomically increment vote count on the activity
+    await db.activities.update_one(
+        {"activity_id": activity_id},
+        {
+            "$inc": {
+                f"data.poll.options.{option_index}.votes": 1,
+                "data.poll.total_votes": 1,
+            },
+        },
+    )
+
+    # Return updated poll data
+    updated = await db.activities.find_one(
+        {"activity_id": activity_id}, {"_id": 0, "data.poll": 1}
+    )
+    poll_result = updated["data"]["poll"]
+    poll_result["my_vote"] = option_index
+
+    return {"poll": poll_result}
 
 
 @router.get("/bookmarks")

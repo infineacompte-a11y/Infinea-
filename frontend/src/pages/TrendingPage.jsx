@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
 import MentionText from "@/components/MentionText";
 import LinkPreviewCard from "@/components/LinkPreviewCard";
+import PollDisplay from "@/components/PollDisplay";
 import { API, authFetch, useAuth } from "@/App";
 
 // ── Activity type config ──
@@ -291,6 +292,13 @@ export default function TrendingPage() {
                                 )}
                                 {activity.data?.images?.length > 0 && <PostImageGrid images={activity.data.images} />}
                                 {activity.data?.link_preview && <LinkPreviewCard preview={activity.data.link_preview} />}
+                                {activity.data?.poll && (
+                                  <PollDisplay
+                                    poll={activity.data.poll}
+                                    activityId={activity.activity_id}
+                                    onVote={(updatedPoll) => setActivities((prev) => prev.map((a) => a.activity_id === activity.activity_id ? { ...a, data: { ...a.data, poll: updatedPoll } } : a))}
+                                  />
+                                )}
                               </div>
                             ) : (
                               <div className="flex items-center gap-1.5">

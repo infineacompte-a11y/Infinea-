@@ -295,6 +295,10 @@ async def startup_event():
     # Link previews — URL cache for OG card extraction
     await db.link_previews.create_index("url", unique=True)
 
+    # Poll votes — one vote per user per poll, query by activity
+    await db.poll_votes.create_index([("activity_id", 1), ("user_id", 1)], unique=True)
+    await db.poll_votes.create_index([("user_id", 1), ("voted_at", -1)])
+
     # Moderation actions — was ZERO indexes
     await db.moderation_actions.create_index("content_id")
     await db.moderation_actions.create_index([("author_id", 1), ("created_at", -1)])

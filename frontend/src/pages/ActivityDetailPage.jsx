@@ -25,6 +25,7 @@ import FollowButton from "@/components/FollowButton";
 import MentionInput from "@/components/MentionInput";
 import MentionText from "@/components/MentionText";
 import LinkPreviewCard from "@/components/LinkPreviewCard";
+import PollDisplay from "@/components/PollDisplay";
 import ReactionsDetailDialog from "@/components/ReactionsDetailDialog";
 import ReportDialog from "@/components/ReportDialog";
 import { API, authFetch, useAuth } from "@/App";
@@ -464,6 +465,13 @@ export default function ActivityDetailPage() {
                     )}
                     {activity.data?.link_preview && (
                       <LinkPreviewCard preview={activity.data.link_preview} />
+                    )}
+                    {activity.data?.poll && (
+                      <PollDisplay
+                        poll={activity.data.poll}
+                        activityId={activity.activity_id}
+                        onVote={(updatedPoll) => setActivity((a) => ({ ...a, data: { ...a.data, poll: updatedPoll } }))}
+                      />
                     )}
                   </div>
                 ) : (
