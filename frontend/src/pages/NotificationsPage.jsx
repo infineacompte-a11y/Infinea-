@@ -37,6 +37,7 @@ import {
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 import Sidebar from "@/components/Sidebar";
+import WeeklyDigestCard from "@/components/WeeklyDigestCard";
 
 const SMART_ICON_MAP = {
   flame: Flame,
@@ -202,6 +203,8 @@ export default function NotificationsPage() {
   const [isPushSupported, setIsPushSupported] = useState(false);
   const [isPushEnabled, setIsPushEnabled] = useState(false);
   const [filterType, setFilterType] = useState(null);
+  const [weeklyDigest, setWeeklyDigest] = useState(null);
+  const [digestDismissed, setDigestDismissed] = useState(false);
 
   useEffect(() => {
     if ("serviceWorker" in navigator && "PushManager" in window) {
@@ -210,6 +213,7 @@ export default function NotificationsPage() {
     }
     fetchData();
     fetchSmartNotifs();
+    fetchWeeklyDigest();
   }, []);
 
   const checkPushStatus = async () => {
@@ -250,6 +254,16 @@ export default function NotificationsPage() {
     } finally {
       setIsSmartLoading(false);
     }
+  };
+
+  const fetchWeeklyDigest = async () => {
+    try {
+      const res = await authFetch(`${API}/notifications/weekly-summary/preview`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.stats) setWeeklyDigest(data.stats);
+      }
+    } catch { /* silent — digest is optional */ }
   };
 
   const handleTogglePush = async () => {
@@ -482,6 +496,16 @@ export default function NotificationsPage() {
                   Actualiser
                 </Button>
               </div>
+
+              {/* Weekly Digest Card (Strava/Duolingo weekly recap) */}
+              {weeklyDigest && !digestDismissed && (
+                <div className="mb-4">
+                  <WeeklyDigestCard
+                    stats={weeklyDigest}
+                    onDismiss={() => setDigestDismissed(true)}
+                  />
+                </div>
+              )}
 
               {isSmartLoading ? (
                 <div className="space-y-3">
