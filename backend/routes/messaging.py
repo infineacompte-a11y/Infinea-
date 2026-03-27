@@ -321,6 +321,53 @@ async def get_messages(
     }
 
 
+@router.get("/conversations/{conversation_id}/messages/search")
+async def search_messages(
+    conversation_id: str,
+    q: str = "",
+    user: dict = Depends(get_current_user),
+    limit: int = 30,
+):
+    """Search messages within a conversation (WhatsApp/Telegram pattern).
+
+    Case-insensitive regex search on message content.
+    Returns matching messages sorted by relevance (newest first).
+    """
+    my_id = user["user_id"]
+    await _get_conversation_for_user(conversation_id, my_id)
+
+    search_q = (q or "").strip()
+    if len(search_q) < 2:
+        return {"results": [], "query": search_q}
+
+    limit = min(max(limit, 1), 50)
+
+    import re as _re
+    escaped = _re.escape(search_q)
+    query = {
+        "conversation_id": conversation_id,
+        "content": {"$regex": escaped, "$options": "i"},
+        "moderation_status": {"$ne": "hidden"},
+    }
+
+    results = await db.messages.find(
+        query, {"_id": 0}
+    ).sort("created_at", -1).limit(limit).to_list(limit)
+
+    # Enrich with sender names
+    sender_ids = list({m["sender_id"] for m in results})
+    if sender_ids:
+        users = await db.users.find(
+            {"user_id": {"$in": sender_ids}},
+            {"_id": 0, "user_id": 1, "display_name": 1, "name": 1},
+        ).to_list(len(sender_ids))
+        name_map = {u["user_id"]: u.get("display_name") or u.get("name", "Utilisateur") for u in users}
+        for m in results:
+            m["sender_name"] = name_map.get(m["sender_id"], "Utilisateur")
+
+    return {"results": results, "query": search_q}
+
+
 @router.post("/conversations/{conversation_id}/messages")
 @limiter.limit("30/minute")
 async def send_message(
