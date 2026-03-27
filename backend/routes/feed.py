@@ -2076,6 +2076,7 @@ async def search_activities(
 @router.post("/activities/{activity_id}/bookmark")
 @limiter.limit("30/minute")
 async def toggle_bookmark(
+    request: Request,
     activity_id: str,
     user: dict = Depends(get_current_user),
 ):
