@@ -1120,6 +1120,99 @@ async def dismiss_social_onboarding(user: dict = Depends(get_current_user)):
     return {"dismissed": True}
 
 
+# ============== ACTIVITY HEATMAP (GitHub contributions pattern) ==============
+
+@router.get("/users/{user_id}/activity-heatmap")
+async def get_activity_heatmap(
+    user_id: str,
+    user: dict = Depends(get_current_user),
+    days: int = Query(365, ge=30, le=400),
+):
+    """
+    GitHub-style activity heatmap — date-level session aggregation.
+
+    Returns a dict of dates → {count, minutes} for the past N days.
+    Respects privacy: only returns data if stats are visible.
+    """
+    target = await db.users.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "privacy": 1, "user_id": 1},
+    )
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    is_self = user["user_id"] == user_id
+
+    # Privacy: respect show_stats setting
+    if not is_self:
+        privacy = target.get("privacy", {})
+        if not privacy.get("profile_visible", True):
+            raise HTTPException(status_code=403, detail="Profil privé")
+        if not privacy.get("show_stats", True):
+            return {"dates": {}, "summary": {"total_sessions": 0, "total_minutes": 0, "active_days": 0, "longest_streak": 0}}
+
+        # Block check
+        blocked_ids = await get_blocked_ids(user["user_id"])
+        if user_id in blocked_ids:
+            raise HTTPException(status_code=403, detail="Profil indisponible")
+
+    from_date = (datetime.now(timezone.utc) - __import__("datetime").timedelta(days=days)).isoformat()
+
+    pipeline = [
+        {"$match": {
+            "user_id": user_id,
+            "completed": True,
+            "completed_at": {"$gte": from_date},
+        }},
+        {"$addFields": {
+            "date_key": {"$substr": ["$completed_at", 0, 10]},
+        }},
+        {"$group": {
+            "_id": "$date_key",
+            "count": {"$sum": 1},
+            "minutes": {"$sum": {"$ifNull": ["$actual_duration", 0]}},
+        }},
+        {"$sort": {"_id": 1}},
+    ]
+
+    results = await db.user_sessions_history.aggregate(pipeline).to_list(400)
+
+    dates = {}
+    total_sessions = 0
+    total_minutes = 0
+    for r in results:
+        dates[r["_id"]] = {"count": r["count"], "minutes": r["minutes"]}
+        total_sessions += r["count"]
+        total_minutes += r["minutes"]
+
+    # Compute longest streak from the date data
+    active_dates = sorted(dates.keys())
+    longest_streak = 0
+    current_streak = 0
+    prev_date = None
+    for d in active_dates:
+        if prev_date:
+            diff = (datetime.fromisoformat(d) - datetime.fromisoformat(prev_date)).days
+            if diff == 1:
+                current_streak += 1
+            else:
+                current_streak = 1
+        else:
+            current_streak = 1
+        longest_streak = max(longest_streak, current_streak)
+        prev_date = d
+
+    return {
+        "dates": dates,
+        "summary": {
+            "total_sessions": total_sessions,
+            "total_minutes": total_minutes,
+            "active_days": len(active_dates),
+            "longest_streak": longest_streak,
+        },
+    }
+
+
 # ============== PRESENCE / ONLINE STATUS ==============
 
 @router.post("/presence/batch")
