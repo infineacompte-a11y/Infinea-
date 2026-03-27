@@ -55,6 +55,19 @@ async def get_my_profile(user: dict = Depends(get_current_user)):
     }
 
 
+@router.get("/profile/xp")
+async def get_my_xp(user: dict = Depends(get_current_user)):
+    """Get current user's XP progression (level, XP, progress bar data)."""
+    from services.xp_engine import xp_progress_in_level
+
+    doc = await db.users.find_one(
+        {"user_id": user["user_id"]},
+        {"_id": 0, "total_xp": 1, "level": 1},
+    )
+    total_xp = (doc or {}).get("total_xp", 0)
+    return xp_progress_in_level(total_xp)
+
+
 @router.put("/profile/me")
 async def update_my_profile(
     request: Request,
@@ -684,6 +697,10 @@ async def get_user_profile(user_id: str, user: dict = Depends(get_current_user))
         non_pinned = [b for b in all_badges if isinstance(b, dict) and not b.get("featured")]
         featured_badges = (pinned + non_pinned)[:5]
 
+    # ── XP & Level ──
+    from services.xp_engine import xp_progress_in_level
+    xp_data = xp_progress_in_level(target.get("total_xp", 0)) if show_stats else None
+
     return {
         "user_id": target["user_id"],
         "display_name": target.get("display_name", target.get("name", "Utilisateur")),
@@ -701,6 +718,7 @@ async def get_user_profile(user_id: str, user: dict = Depends(get_current_user))
         "last_active": target.get("last_active") if not is_self else None,
         "streak_days": target.get("streak_days", 0) if show_stats else None,
         "total_time_invested": target.get("total_time_invested", 0) if show_stats else None,
+        "xp": xp_data,
         "badges": all_badges if show_badges else [],
         "featured_badges": featured_badges,
         "objectives_in_progress": objectives_in_progress,

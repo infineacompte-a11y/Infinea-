@@ -27,6 +27,7 @@ ACTIVITY_TYPES = {
     "badge_earned",
     "streak_milestone",
     "challenge_completed",
+    "level_up",  # XP level progression
     "post",  # Manual user post (text, reflections, questions)
 }
 

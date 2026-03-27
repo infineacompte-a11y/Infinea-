@@ -32,6 +32,7 @@ import {
   Filter,
   X,
   ShieldAlert,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
@@ -354,6 +355,7 @@ export default function NotificationsPage() {
     reminder:              { icon: Clock,          color: null },
     comment_like:          { icon: Heart,          color: "#E48C75" },
     moderation:            { icon: ShieldAlert,    color: "#E48C75" },
+    level_up:              { icon: Star,           color: "#F5A623" },
   };
 
   const getNotifMeta = (type) => NOTIF_TYPE_MAP[type] || { icon: Bell, color: null };

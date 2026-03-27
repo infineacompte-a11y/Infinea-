@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
+import XPProgressBar from "@/components/XPProgressBar";
 import SafetyMenu from "@/components/SafetyMenu";
 
 // ── Active status helper (Instagram/Discord benchmark) ──
@@ -374,6 +375,9 @@ export default function PublicProfilePage() {
                 <h1 className="text-2xl lg:text-3xl font-semibold text-foreground truncate">
                   {profile.display_name}
                 </h1>
+                {profile.xp && (
+                  <XPProgressBar xpData={profile.xp} variant="compact" />
+                )}
                 {profile.subscription_tier === "premium" && (
                   <Badge className="bg-gradient-to-r from-[#E48C75] to-[#459492] text-white border-0 shrink-0">
                     <Crown className="w-3 h-3 mr-1" />
@@ -511,6 +515,13 @@ export default function PublicProfilePage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* XP & Level — Duolingo-inspired progression */}
+            {profile.xp && (
+              <div className="mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "250ms", animationFillMode: "forwards" }}>
+                <XPProgressBar xpData={profile.xp} variant="full" />
+              </div>
+            )}
 
             {/* Stats */}
             {(profile.streak_days != null || profile.total_time_invested != null) && (
