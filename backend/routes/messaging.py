@@ -24,6 +24,7 @@ from models import ConversationCreate, GroupConversationCreate, GroupUpdate, Mes
 from services.moderation import get_blocked_ids, check_content, sanitize_text, extract_mentions
 from helpers import send_push_to_user
 from services.email_service import send_email_to_user, email_mention
+from services.presence_service import compute_presence
 
 router = APIRouter(tags=["messaging"])
 
@@ -69,7 +70,8 @@ async def _enrich_conversations(conversations: list, user_id: str) -> list:
     users = await db.users.find(
         {"user_id": {"$in": list(all_user_ids)}},
         {"_id": 0, "user_id": 1, "name": 1, "display_name": 1, "username": 1,
-         "picture": 1, "avatar_url": 1, "streak_days": 1},
+         "picture": 1, "avatar_url": 1, "streak_days": 1,
+         "last_active": 1, "privacy": 1},
     ).to_list(len(all_user_ids))
     user_map = {u["user_id"]: u for u in users}
 
@@ -81,15 +83,25 @@ async def _enrich_conversations(conversations: list, user_id: str) -> list:
         if _is_group(conv):
             # ── Group enrichment ──
             members = []
+            any_online = False
             for pid in conv["participants"]:
                 if pid == user_id:
                     continue
                 u = user_map.get(pid, {})
+                # Presence: respect privacy preference
+                privacy = u.get("privacy", {})
+                if privacy.get("show_activity_status") is False:
+                    presence = {"status": "offline", "label": None}
+                else:
+                    presence = compute_presence(u.get("last_active"))
+                if presence["status"] == "online":
+                    any_online = True
                 members.append({
                     "user_id": pid,
                     "display_name": u.get("display_name") or u.get("name", "Utilisateur"),
                     "username": u.get("username"),
                     "avatar_url": u.get("avatar_url") or u.get("picture"),
+                    "presence": presence,
                 })
             conv["group_info"] = {
                 "name": conv.get("name", "Groupe"),
@@ -98,17 +110,25 @@ async def _enrich_conversations(conversations: list, user_id: str) -> list:
                 "admins": conv.get("admins", []),
                 "is_admin": user_id in conv.get("admins", []),
                 "created_by": conv.get("created_by"),
+                "any_online": any_online,
             }
         else:
-            # ── Direct enrichment (existing) ──
+            # ── Direct enrichment ──
             other_id = _other_participant(conv, user_id)
             other = user_map.get(other_id, {})
+            # Presence: respect privacy preference
+            privacy = other.get("privacy", {})
+            if privacy.get("show_activity_status") is False:
+                presence = {"status": "offline", "label": None}
+            else:
+                presence = compute_presence(other.get("last_active"))
             conv["other_user"] = {
                 "user_id": other_id,
                 "display_name": other.get("display_name") or other.get("name", "Utilisateur"),
                 "username": other.get("username"),
                 "avatar_url": other.get("avatar_url") or other.get("picture"),
                 "streak_days": other.get("streak_days", 0),
+                "presence": presence,
             }
 
     return conversations

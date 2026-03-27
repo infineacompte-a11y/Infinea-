@@ -178,16 +178,27 @@ async def get_feed(
         users = await db.users.find(
             {"user_id": {"$in": enriched_user_ids}},
             {"_id": 0, "user_id": 1, "name": 1, "display_name": 1,
-             "username": 1, "avatar_url": 1, "picture": 1},
+             "username": 1, "avatar_url": 1, "picture": 1,
+             "last_active": 1, "privacy": 1},
         ).to_list(len(enriched_user_ids))
 
         user_map = {u["user_id"]: u for u in users}
+
+        # Compute presence for feed authors
+        from services.presence_service import compute_presence
 
         for activity in activities:
             u = user_map.get(activity["user_id"], {})
             activity["user_name"] = u.get("display_name") or u.get("name", "Utilisateur")
             activity["user_username"] = u.get("username")
             activity["user_avatar"] = u.get("avatar_url") or u.get("picture")
+            # Presence: respect privacy
+            privacy = u.get("privacy", {})
+            if privacy.get("show_activity_status") is False:
+                activity["user_presence"] = "offline"
+            else:
+                p = compute_presence(u.get("last_active"))
+                activity["user_presence"] = p["status"]
 
         # Check current user's reactions on these activities
         activity_ids = [a["activity_id"] for a in activities]

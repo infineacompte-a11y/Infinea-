@@ -6,6 +6,7 @@ import Sidebar from "@/components/Sidebar";
 import { MessageCircle, ArrowLeft, Loader2, Sparkles, BellOff, Users, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch } from "@/App";
+import { OnlineDot, OnlineLabel } from "@/components/OnlineIndicator";
 
 function timeAgo(iso) {
   if (!iso) return "";
@@ -201,12 +202,15 @@ export default function MessagesPage() {
                                 </div>
                               )
                             ) : (
-                              <Avatar className="w-12 h-12 ring-2 ring-[#459492]/10 ring-offset-1 ring-offset-background">
-                                <AvatarImage src={other.avatar_url} alt={other.display_name} />
-                                <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
-                                  {getInitials(other.display_name)}
-                                </AvatarFallback>
-                              </Avatar>
+                              <>
+                                <Avatar className="w-12 h-12 ring-2 ring-[#459492]/10 ring-offset-1 ring-offset-background">
+                                  <AvatarImage src={other.avatar_url} alt={other.display_name} />
+                                  <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
+                                    {getInitials(other.display_name)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <OnlineDot presence={other.presence} size="md" />
+                              </>
                             )}
                             {unread > 0 && (
                               <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-[#E48C75] text-white text-[9px] font-bold leading-none shadow-sm">
@@ -224,9 +228,25 @@ export default function MessagesPage() {
                                     <span className="text-[10px] text-muted-foreground/60 font-normal ml-0.5">
                                       · {groupInfo?.member_count || 0}
                                     </span>
+                                    {groupInfo?.any_online && (
+                                      <span
+                                        className="inline-block w-2 h-2 rounded-full ml-1 shrink-0"
+                                        style={{ backgroundColor: "#22c55e" }}
+                                        title="Membres en ligne"
+                                      />
+                                    )}
                                   </>
                                 ) : (
-                                  other.display_name
+                                  <>
+                                    {other.display_name}
+                                    {other.presence?.status === "online" && (
+                                      <span
+                                        className="inline-block w-2 h-2 rounded-full ml-1 shrink-0"
+                                        style={{ backgroundColor: "#22c55e" }}
+                                        title="En ligne"
+                                      />
+                                    )}
+                                  </>
                                 )}
                                 {conv.muted && <BellOff className="w-3 h-3 text-muted-foreground/40 shrink-0" />}
                               </span>
