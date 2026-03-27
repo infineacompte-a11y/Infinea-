@@ -122,6 +122,12 @@ function SuggestionReason({ reason, detail }) {
       );
     case "follows_you":
       return <span className="text-[9px] text-emerald-600/80 truncate">Vous suit</span>;
+    case "interacted":
+      return (
+        <span className="text-[9px] text-[#E48C75]/80 truncate">
+          A interagi avec vous
+        </span>
+      );
     case "objectives":
       return (
         <span className="text-[9px] text-primary/70 truncate">
@@ -130,6 +136,12 @@ function SuggestionReason({ reason, detail }) {
       );
     case "same_goal":
       return <span className="text-[9px] text-primary/70 truncate">{detail}</span>;
+    case "shared_interests":
+      return (
+        <span className="text-[9px] text-primary/70 truncate">
+          Intérêts similaires
+        </span>
+      );
     case "group":
       return (
         <span className="text-[9px] text-primary/70 truncate">

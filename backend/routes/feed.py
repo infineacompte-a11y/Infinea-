@@ -193,37 +193,46 @@ async def get_suggested_users(
     user: dict = Depends(get_current_user),
     limit: int = 15,
 ):
-    """Multi-signal user recommendation engine.
+    """Multi-signal user recommendation engine (v2 — 8 signals).
 
-    Architecture — 5-signal scoring (benchmarked: LinkedIn People You May Know,
-    Instagram Suggestions, Twitter Who to Follow, Strava Suggested Athletes):
+    Architecture — 8-signal scoring (benchmarked: LinkedIn PYMK,
+    Instagram Suggestions, Twitter Who to Follow, Strava Suggested Athletes,
+    Duolingo league grouping):
 
-    Signal 1 — MUTUAL CONNECTIONS (weight: 500/mutual)
-        Friends-of-friends. Strongest social signal. LinkedIn's PYMK is built
-        primarily on this. Each mutual connection = high probability of relevance.
+    Signal 1 — MUTUAL CONNECTIONS (weight: 500/mutual, cap 2500)
+        Friends-of-friends. Strongest social signal. LinkedIn PYMK core signal.
 
-    Signal 2 — SHARED OBJECTIVES (weight: 300/match)
-        Users working on same objective categories (learning, productivity, well_being).
-        Unique to InFinea — no other platform can match on learning goals.
-        Bonus: exact same objective title = 200 extra.
+    Signal 2 — SHARED OBJECTIVES (weight: 300/category + 200/exact title)
+        Users working on same goals. Unique to InFinea.
 
-    Signal 3 — GROUP AFFINITY (weight: 250/shared group)
-        Users in the same groups. Strong interest signal — they already chose
-        to join the same community.
+    Signal 3 — GROUP AFFINITY (weight: 250/shared group, cap 750)
+        Users in the same groups. Strong interest signal.
 
     Signal 4 — ENGAGEMENT QUALITY (weight: 0-400)
-        Composite of: activity count (recency-weighted), streak days, total time.
-        Filters out ghost accounts. Rewards committed users.
+        Composite: activity count (log scale), streak days, total time.
 
     Signal 5 — FOLLOWS YOU (weight: 350)
-        If someone already follows the current user, they're a high-intent
-        candidate. Instagram surfaces these prominently.
+        High-intent candidate. Instagram surfaces these prominently.
+
+    Signal 6 — INTERACTION AFFINITY (weight: 400/interaction, cap 1200) [NEW]
+        Users who reacted to or commented on your activities (or vice versa).
+        "Warm connections" — engaged but not yet following.
+        Benchmarked: Instagram "Accounts You Interact With".
+
+    Signal 7 — HASHTAG OVERLAP (weight: 200/shared tag, cap 600) [NEW]
+        Content affinity — users posting about similar topics.
+        Benchmarked: Twitter interest-based suggestions.
+
+    Signal 8 — LEVEL PROXIMITY (weight: 0-200) [NEW]
+        Users at similar XP levels get a boost (±3 levels = max).
+        Prevents intimidation (newbie vs veteran).
+        Benchmarked: Duolingo league grouping.
 
     Post-scoring:
     - Privacy filter: exclude users with profile_visible=False
-    - Diversity: cap same-category users to prevent filter bubbles
-    - Recency bonus: users active in last 7 days get +100
-    - Each result includes `reason` for frontend context display
+    - Graduated recency: 24h → +150, 3 days → +100, 7 days → +50
+    - Diversity: cap same-reason users to 60% to prevent filter bubbles
+    - Each result includes `reason` + `level` for frontend display
     """
     my_id = user["user_id"]
     if limit > 30:
@@ -289,11 +298,83 @@ async def get_suggested_users(
         ).to_list(50)
         return docs
 
-    followers_set, mutual_map, my_objectives, my_groups = await asyncio.gather(
+    # 2f. Interaction affinity — users I've interacted with (reactions/comments)
+    # Instagram's "Accounts You Interact With" — warm connections without follow
+    async def fetch_interaction_affinity():
+        """Bidirectional: who reacted/commented on my stuff + who I reacted/commented on."""
+        interaction_map = defaultdict(int)  # user_id → interaction count
+
+        # People who reacted to my activities
+        my_activity_ids_docs = await db.activities.find(
+            {"user_id": my_id}, {"activity_id": 1}
+        ).limit(200).to_list(200)
+        my_act_ids = [a["activity_id"] for a in my_activity_ids_docs]
+
+        if my_act_ids:
+            reactors = await db.reactions.find(
+                {"activity_id": {"$in": my_act_ids}, "user_id": {"$nin": exclude_list}},
+                {"user_id": 1},
+            ).limit(500).to_list(500)
+            for r in reactors:
+                interaction_map[r["user_id"]] += 1
+
+            commenters = await db.comments.find(
+                {"activity_id": {"$in": my_act_ids}, "user_id": {"$nin": exclude_list}},
+                {"user_id": 1},
+            ).limit(500).to_list(500)
+            for c in commenters:
+                interaction_map[c["user_id"]] += 1
+
+        # Activities I reacted to or commented on (reverse direction)
+        my_reactions = await db.reactions.find(
+            {"user_id": my_id}, {"activity_id": 1}
+        ).limit(200).to_list(200)
+        my_comments = await db.comments.find(
+            {"user_id": my_id}, {"activity_id": 1}
+        ).limit(200).to_list(200)
+
+        interacted_act_ids = list({
+            r["activity_id"] for r in my_reactions
+        } | {
+            c["activity_id"] for c in my_comments
+        })
+
+        if interacted_act_ids:
+            owners = await db.activities.find(
+                {"activity_id": {"$in": interacted_act_ids}, "user_id": {"$nin": exclude_list}},
+                {"user_id": 1},
+            ).to_list(len(interacted_act_ids))
+            for o in owners:
+                interaction_map[o["user_id"]] += 1
+
+        return interaction_map
+
+    # 2g. My hashtags — for content affinity matching
+    async def fetch_my_hashtags():
+        """Collect hashtags from my recent activities for interest matching."""
+        docs = await db.activities.find(
+            {"user_id": my_id, "hashtags": {"$exists": True, "$ne": []}},
+            {"hashtags": 1},
+        ).sort("created_at", -1).limit(50).to_list(50)
+        tags = set()
+        for d in docs:
+            tags.update(d.get("hashtags", []))
+        return tags
+
+    # 2h. My level (for level proximity scoring)
+    async def fetch_my_level():
+        doc = await db.users.find_one({"user_id": my_id}, {"level": 1})
+        return (doc or {}).get("level", 1)
+
+    (followers_set, mutual_map, my_objectives, my_groups,
+     interaction_map, my_hashtags, my_level) = await asyncio.gather(
         fetch_followers_not_followed(),
         fetch_friends_of_friends(),
         fetch_my_objectives(),
         fetch_my_groups(),
+        fetch_interaction_affinity(),
+        fetch_my_hashtags(),
+        fetch_my_level(),
     )
 
     # ── Phase 3: Build candidate pool ──
@@ -333,15 +414,36 @@ async def get_suggested_users(
                 candidate_ids.add(mid)
                 my_group_members[mid] += 1
 
-    # Fallback: if fewer than limit*2 candidates, add recently active users
+    # Add users from interaction affinity (reacted/commented on my stuff or vice versa)
+    candidate_ids |= set(interaction_map.keys())
+
+    # Add users with shared hashtags (content affinity)
+    hashtag_overlap_map = defaultdict(set)  # user_id → set of shared tags
+    if my_hashtags:
+        tag_docs = await db.activities.find(
+            {
+                "user_id": {"$nin": exclude_list},
+                "hashtags": {"$in": list(my_hashtags)},
+            },
+            {"user_id": 1, "hashtags": 1},
+        ).sort("created_at", -1).limit(500).to_list(500)
+        for td in tag_docs:
+            uid = td["user_id"]
+            shared = set(td.get("hashtags", [])) & my_hashtags
+            if shared:
+                candidate_ids.add(uid)
+                hashtag_overlap_map[uid] |= shared
+
+    # Fallback: intelligent cold-start (level proximity + recent activity)
+    # Better than brute "most active" — surfaces users at similar level
     if len(candidate_ids) < limit * 2:
         pipeline = [
             {"$match": {"user_id": {"$nin": exclude_list}, "visibility": "public"}},
             {"$group": {"_id": "$user_id", "count": {"$sum": 1}, "last": {"$max": "$created_at"}}},
-            {"$sort": {"count": -1, "last": -1}},
-            {"$limit": limit * 3},
+            {"$sort": {"last": -1, "count": -1}},
+            {"$limit": limit * 4},
         ]
-        fallback = await db.activities.aggregate(pipeline).to_list(limit * 3)
+        fallback = await db.activities.aggregate(pipeline).to_list(limit * 4)
         for f in fallback:
             candidate_ids.add(f["_id"])
 
@@ -360,7 +462,7 @@ async def get_suggested_users(
                 "username": 1, "avatar_url": 1, "picture": 1,
                 "subscription_tier": 1, "streak_days": 1,
                 "total_time_invested": 1, "last_active": 1,
-                "privacy": 1, "created_at": 1,
+                "privacy": 1, "created_at": 1, "level": 1,
             },
         ).to_list(len(candidate_list))
 
@@ -390,8 +492,26 @@ async def get_suggested_users(
     activity_by_id = {a["_id"]: a for a in activity_stats}
     followers_by_id = {f["_id"]: f["count"] for f in follower_counts}
 
-    # ── Phase 5: Score each candidate ──
+    # ── Phase 5: Score each candidate — 8-signal algorithm ──
+    #
+    # Weights calibrated against LinkedIn PYMK, Instagram Suggestions,
+    # Strava Suggested Athletes, Duolingo league grouping.
+    #
+    # | Signal                | Max weight | Source              |
+    # |-----------------------|-----------|---------------------|
+    # | 1. Mutual connections | 2500      | LinkedIn PYMK       |
+    # | 2. Shared objectives  | ~700      | InFinea-unique      |
+    # | 3. Group affinity     | 750       | Discord/Slack       |
+    # | 4. Engagement quality | 400       | All platforms       |
+    # | 5. Follows you        | 350       | Instagram           |
+    # | 6. Interaction aff.   | 1200      | Instagram "interact"|
+    # | 7. Hashtag overlap    | 600       | Twitter interests   |
+    # | 8. Level proximity    | 200       | Duolingo leagues    |
+    # | Recency (graduated)   | 150       | All platforms       |
+    #
     now = datetime.now(timezone.utc)
+    one_day_ago = (now - timedelta(days=1)).isoformat()
+    three_days_ago = (now - timedelta(days=3)).isoformat()
     seven_days_ago = (now - timedelta(days=7)).isoformat()
 
     scored = []
@@ -439,11 +559,8 @@ async def get_suggested_users(
         streak = u.get("streak_days", 0)
         total_time = u.get("total_time_invested", 0)
 
-        # Activity count score: log scale, max 150
         engagement = min(math.log2(max(activity_count, 1) + 1) * 30, 150)
-        # Streak bonus: max 150
         engagement += min(streak * 5, 150)
-        # Total time bonus: max 100
         engagement += min(total_time * 0.1, 100)
         score += engagement
 
@@ -453,10 +570,42 @@ async def get_suggested_users(
             if not reasons or reasons[0][0] != "mutual":
                 reasons.insert(0, ("follows_you", True))
 
-        # Recency bonus: active in last 7 days → +100
+        # Signal 6: Interaction affinity (400 per interaction, capped at 1200)
+        # Warm connections — they engaged with my content or I engaged with theirs
+        interactions = interaction_map.get(uid, 0)
+        if interactions > 0:
+            score += min(interactions * 400, 1200)
+            if not any(r[0] in ("mutual", "follows_you") for r in reasons):
+                reasons.insert(0, ("interacted", interactions))
+
+        # Signal 7: Hashtag overlap (200 per shared tag, capped at 600)
+        # Content affinity — similar interests based on activity tags
+        shared_tags = hashtag_overlap_map.get(uid, set())
+        shared_tag_count = len(shared_tags)
+        if shared_tag_count > 0:
+            score += min(shared_tag_count * 200, 600)
+            if not reasons:
+                reasons.append(("shared_interests", shared_tag_count))
+
+        # Signal 8: Level proximity (0-200, Duolingo-style)
+        # Users within ±3 levels get max bonus, scales down linearly
+        candidate_level = u.get("level", 1)
+        level_diff = abs(my_level - candidate_level)
+        if level_diff <= 3:
+            score += 200 - (level_diff * 30)  # 200, 170, 140, 110
+        elif level_diff <= 7:
+            score += max(100 - (level_diff - 3) * 25, 0)  # 75, 50, 25, 0
+
+        # Recency bonus — graduated (not binary)
+        # Active 24h ago: +150, 3 days: +100, 7 days: +50
         last_activity = stats.get("last_activity", "")
-        if last_activity and last_activity > seven_days_ago:
-            score += 100
+        if last_activity:
+            if last_activity > one_day_ago:
+                score += 150
+            elif last_activity > three_days_ago:
+                score += 100
+            elif last_activity > seven_days_ago:
+                score += 50
 
         # Determine primary reason for frontend display
         if reasons:
@@ -475,6 +624,7 @@ async def get_suggested_users(
             "followers_count": followers_by_id.get(uid, 0),
             "streak_days": streak,
             "mutual_count": mutual_count,
+            "level": candidate_level,
             "reason": primary[0],
             "reason_detail": primary[1],
             "_score": score,
