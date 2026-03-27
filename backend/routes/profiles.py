@@ -213,6 +213,99 @@ async def upload_avatar(
     return {"avatar_url": avatar_url}
 
 
+# ============== COVER PHOTO UPLOAD ==============
+
+COVER_MAX_SIZE = 10 * 1024 * 1024  # 10 MB (larger than avatar — banner image)
+COVER_ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+
+@router.post("/profile/cover-photo")
+async def upload_cover_photo(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
+    """Upload or replace profile cover photo via Cloudinary.
+
+    Accepts JPEG, PNG, or WebP up to 10 MB. Cloudinary auto-resizes to
+    1500x500 (3:1 ratio, LinkedIn/Twitter benchmark) with quality optimization.
+    """
+    if not CLOUDINARY_URL:
+        raise HTTPException(
+            status_code=503,
+            detail="Service d'upload non configuré (CLOUDINARY_URL manquant)",
+        )
+
+    if file.content_type not in COVER_ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Format non supporté. Utilisez JPEG, PNG ou WebP.",
+        )
+
+    contents = await file.read()
+    if len(contents) > COVER_MAX_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail="L'image ne doit pas dépasser 10 Mo",
+        )
+
+    if len(contents) < 1024:
+        raise HTTPException(
+            status_code=400,
+            detail="Fichier trop petit ou corrompu",
+        )
+
+    try:
+        import cloudinary
+        import cloudinary.uploader
+
+        result = await asyncio.to_thread(
+            cloudinary.uploader.upload,
+            contents,
+            folder="infinea/covers",
+            public_id=f"cover_{user['user_id']}",
+            overwrite=True,
+            transformation=[
+                {
+                    "width": 1500,
+                    "height": 500,
+                    "crop": "fill",
+                    "gravity": "auto",
+                    "quality": "auto",
+                    "fetch_format": "auto",
+                },
+            ],
+            resource_type="image",
+        )
+        cover_url = result["secure_url"]
+    except Exception as e:
+        logger.exception(f"Cloudinary cover upload failed for {user['user_id']}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Erreur lors de l'upload de l'image",
+        )
+
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {
+            "cover_photo_url": cover_url,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+
+    logger.info(f"Cover photo updated for {user['user_id']}: {cover_url[:60]}...")
+    return {"cover_photo_url": cover_url}
+
+
+@router.delete("/profile/cover-photo")
+async def delete_cover_photo(user: dict = Depends(get_current_user)):
+    """Remove profile cover photo."""
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$unset": {"cover_photo_url": ""}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"message": "Photo de couverture supprimée"}
+
+
 # ============== PRIVACY SETTINGS ==============
 
 PRIVACY_DEFAULTS = {
@@ -515,11 +608,88 @@ async def get_user_profile(user_id: str, user: dict = Depends(get_current_user))
     show_stats = is_self or privacy.get("show_stats", True)
     show_badges = is_self or privacy.get("show_badges", True)
 
+    # ── Mutual followers (Instagram "X abonnés en commun") ──
+    mutual_followers = {"count": 0, "sample": []}
+    if not is_self:
+        try:
+            # Who does current user follow?
+            my_following_docs = await db.follows.find(
+                {"follower_id": user["user_id"], "status": "active"},
+                {"_id": 0, "following_id": 1},
+            ).to_list(500)
+            my_following_ids = {d["following_id"] for d in my_following_docs}
+
+            # Who follows the target?
+            target_follower_docs = await db.follows.find(
+                {"following_id": user_id, "status": "active"},
+                {"_id": 0, "follower_id": 1},
+            ).to_list(500)
+            target_follower_ids = {d["follower_id"] for d in target_follower_docs}
+
+            # Intersection = people I follow who also follow this user
+            mutual_ids = list((my_following_ids & target_follower_ids) - {user["user_id"]})
+            mutual_followers["count"] = len(mutual_ids)
+
+            # Sample up to 3 names for display
+            if mutual_ids:
+                sample_ids = mutual_ids[:3]
+                sample_users = await db.users.find(
+                    {"user_id": {"$in": sample_ids}},
+                    {"_id": 0, "user_id": 1, "display_name": 1, "name": 1, "avatar_url": 1, "picture": 1},
+                ).to_list(3)
+                mutual_followers["sample"] = [
+                    {
+                        "user_id": u["user_id"],
+                        "display_name": u.get("display_name") or u.get("name", "Utilisateur"),
+                        "avatar_url": u.get("avatar_url") or u.get("picture"),
+                    }
+                    for u in sample_users
+                ]
+        except Exception:
+            pass
+
+    # ── Objectives in progress (visible on profile for context) ──
+    objectives_in_progress = []
+    show_objectives = is_self or privacy.get("show_stats", True)
+    if show_objectives:
+        try:
+            active_objs = await db.objectives.find(
+                {"user_id": user_id, "status": "active"},
+                {"_id": 0, "objective_id": 1, "title": 1, "category": 1,
+                 "current_day": 1, "target_duration_days": 1, "daily_minutes": 1,
+                 "total_sessions": 1, "total_minutes": 1, "streak_days": 1},
+            ).sort("created_at", -1).limit(3).to_list(3)
+            for obj in active_objs:
+                target_days = obj.get("target_duration_days", 30)
+                current_day = obj.get("current_day", 0)
+                progress_pct = min(round((current_day / target_days) * 100), 100) if target_days > 0 else 0
+                objectives_in_progress.append({
+                    "objective_id": obj["objective_id"],
+                    "title": obj["title"],
+                    "category": obj.get("category", "learning"),
+                    "progress_percent": progress_pct,
+                    "current_day": current_day,
+                    "target_days": target_days,
+                    "streak_days": obj.get("streak_days", 0),
+                })
+        except Exception:
+            pass
+
+    # ── Featured badges (top 5 for vitrine display) ──
+    all_badges = target.get("badges", []) if show_badges else []
+    featured_badges = []
+    if all_badges:
+        # Pinned badges first, then most recent
+        pinned = [b for b in all_badges if isinstance(b, dict) and b.get("featured")]
+        non_pinned = [b for b in all_badges if isinstance(b, dict) and not b.get("featured")]
+        featured_badges = (pinned + non_pinned)[:5]
+
     return {
         "user_id": target["user_id"],
         "display_name": target.get("display_name", target.get("name", "Utilisateur")),
         "username": target.get("username"),
         "avatar_url": target.get("avatar_url") or target.get("picture"),
+        "cover_photo_url": target.get("cover_photo_url"),
         "bio": target.get("bio"),
         "subscription_tier": target.get("subscription_tier", "free"),
         "created_at": target.get("created_at"),
@@ -527,10 +697,13 @@ async def get_user_profile(user_id: str, user: dict = Depends(get_current_user))
         "following_count": following_count,
         "is_following": is_following,
         "follows_you": follows_you,
+        "mutual_followers": mutual_followers,
         "last_active": target.get("last_active") if not is_self else None,
         "streak_days": target.get("streak_days", 0) if show_stats else None,
         "total_time_invested": target.get("total_time_invested", 0) if show_stats else None,
-        "badges": target.get("badges", []) if show_badges else [],
+        "badges": all_badges if show_badges else [],
+        "featured_badges": featured_badges,
+        "objectives_in_progress": objectives_in_progress,
     }
 
 
