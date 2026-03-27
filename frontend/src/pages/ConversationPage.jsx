@@ -9,7 +9,7 @@ import MentionText from "@/components/MentionText";
 import {
   ArrowLeft, Send, Loader2, MessageCircle, Sparkles, Trash2, Pencil,
   Check, X, SmilePlus, ImagePlus, BellOff, Bell, CheckCheck,
-  Users, Settings, UserPlus, LogOut, Shield, ShieldOff, Crown, Reply,
+  Users, Settings, UserPlus, LogOut, Shield, ShieldOff, Crown, Reply, Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
@@ -469,6 +469,13 @@ export default function ConversationPage() {
   const [savingEdit, setSavingEdit] = useState(false);
   // Reply-to state (WhatsApp/Telegram pattern)
   const [replyTo, setReplyTo] = useState(null); // {message_id, sender_id, sender_name, content}
+  // Message search state (WhatsApp/Telegram pattern)
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const searchInputRef = useRef(null);
+  const searchTimerRef = useRef(null);
   // Image upload state
   const [pendingImages, setPendingImages] = useState([]);
   const imageInputRef = useRef(null);
@@ -806,6 +813,39 @@ export default function ConversationPage() {
     }
   };
 
+  // Search messages handler (debounced)
+  const handleSearchMessages = useCallback((q) => {
+    setSearchQuery(q);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (q.trim().length < 2) { setSearchResults([]); return; }
+    searchTimerRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await authFetch(
+          `${API}/conversations/${conversationId}/messages/search?q=${encodeURIComponent(q.trim())}&limit=30`,
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults(data.results || []);
+        }
+      } catch { /* silent */ }
+      setSearching(false);
+    }, 300);
+  }, [conversationId]);
+
+  const handleSearchResultClick = (msgId) => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    setSearchResults([]);
+    // Scroll to the message in the conversation
+    const el = document.getElementById(`msg-${msgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("ring-2", "ring-primary/40");
+      setTimeout(() => el.classList.remove("ring-2", "ring-primary/40"), 2000);
+    }
+  };
+
   // AI suggestions based on other user's profile (direct only)
   const aiSuggestions = (() => {
     if (isGroup || !other.user_id) return [];
@@ -899,6 +939,15 @@ export default function ConversationPage() {
 
             {/* Right actions */}
             <div className="flex items-center gap-1">
+              <button
+                onClick={() => { setSearchOpen(!searchOpen); if (!searchOpen) setTimeout(() => searchInputRef.current?.focus(), 100); }}
+                className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${
+                  searchOpen ? "text-white/90 bg-white/15" : "text-white/40 hover:text-white/70 hover:bg-white/10"
+                }`}
+                title="Rechercher"
+              >
+                <Search className="w-4 h-4" />
+              </button>
               {isGroup && (
                 <button
                   onClick={() => setShowMemberPanel(true)}
@@ -934,6 +983,61 @@ export default function ConversationPage() {
             </div>
           </div>
         </div>
+
+        {/* Search bar (WhatsApp/Telegram slide-down) */}
+        {searchOpen && (
+          <div className="shrink-0 border-b border-border/30 bg-background/80 backdrop-blur-sm px-4 lg:px-8 py-2">
+            <div className="max-w-3xl mx-auto">
+              <div className="flex items-center gap-2">
+                <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => handleSearchMessages(e.target.value)}
+                  placeholder="Rechercher dans la conversation..."
+                  className="flex-1 h-8 bg-transparent text-sm border-none outline-none placeholder:text-muted-foreground/50"
+                  onKeyDown={(e) => { if (e.key === "Escape") { setSearchOpen(false); setSearchQuery(""); setSearchResults([]); } }}
+                />
+                {searching && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />}
+                {searchQuery && (
+                  <span className="text-[11px] text-muted-foreground shrink-0">
+                    {searchResults.length} résultat{searchResults.length !== 1 ? "s" : ""}
+                  </span>
+                )}
+                <button
+                  onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults([]); }}
+                  className="p-1 rounded-full hover:bg-muted/50 text-muted-foreground/50"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {searchResults.length > 0 && (
+                <div className="mt-2 max-h-48 overflow-y-auto space-y-1 border-t border-border/20 pt-2">
+                  {searchResults.map((msg) => (
+                    <button
+                      key={msg.message_id}
+                      onClick={() => handleSearchResultClick(msg.message_id)}
+                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-primary truncate">
+                          {msg.sender_name || "Utilisateur"}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/50">
+                          {timeAgo(msg.created_at)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-foreground/70 truncate">
+                        {msg.content}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Messages area */}
         <div
