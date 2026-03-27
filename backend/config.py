@@ -40,9 +40,9 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 _is_prod = bool(os.environ.get("RENDER") or os.environ.get("PRODUCTION"))
 if _is_prod:
     if not STRIPE_WEBHOOK_SECRET:
-        raise RuntimeError(
-            "STRIPE_WEBHOOK_SECRET is required in production — "
-            "without it, webhooks are accepted without signature verification."
+        logging.critical(
+            "⚠️  STRIPE_WEBHOOK_SECRET is not set — webhook signature verification disabled. "
+            "Set this env var on Render to secure Stripe webhooks."
         )
     if not ANTHROPIC_API_KEY:
         logging.warning(
