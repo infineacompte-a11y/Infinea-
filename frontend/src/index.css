@@ -135,6 +135,14 @@ code {
     }
 }
 
+/* Mobile bottom nav safe spacing — prevents content from being hidden
+   behind the fixed bottom navigation bar (h-16 = 64px + safe area) */
+@media (max-width: 1023px) {
+    main {
+        padding-bottom: calc(5rem + env(safe-area-inset-bottom)) !important;
+    }
+}
+
 /* Override browser autofill — light mode */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
