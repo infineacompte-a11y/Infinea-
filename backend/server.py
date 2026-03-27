@@ -267,6 +267,35 @@ async def startup_event():
     await db.comments.create_index("mentions.user_id")
     await db.messages.create_index("mentions.user_id")
 
+    # ── P0 Missing indexes (social MVP audit) ──
+
+    # Bookmarks — was ZERO indexes, used on every feed page load
+    await db.bookmarks.create_index([("user_id", 1), ("activity_id", 1)], unique=True)
+    await db.bookmarks.create_index([("user_id", 1), ("created_at", -1)])
+
+    # Hashtag stats — was ZERO indexes, used on every post create + autocomplete
+    await db.hashtag_stats.create_index("tag", unique=True)
+    await db.hashtag_stats.create_index([("use_count", -1)])
+
+    # Reactions — missing (user_id, created_at) for affinity computation
+    await db.reactions.create_index([("user_id", 1), ("created_at", -1)])
+
+    # Comments — missing (user_id, created_at) for affinity computation
+    await db.comments.create_index([("user_id", 1), ("created_at", -1)])
+
+    # Activities — missing hashtag + created_at for hashtag feed queries
+    await db.activities.create_index([("hashtags", 1), ("created_at", -1)])
+    # Activities — missing (user_id, pinned) for pinned activities query
+    await db.activities.create_index([("user_id", 1), ("pinned", 1)])
+
+    # Moderation actions — was ZERO indexes
+    await db.moderation_actions.create_index("content_id")
+    await db.moderation_actions.create_index([("author_id", 1), ("created_at", -1)])
+
+    # Follows — missing (follower_id, status, followed_at) for paginated following list
+    await db.follows.create_index([("follower_id", 1), ("status", 1), ("followed_at", -1)])
+    await db.follows.create_index([("following_id", 1), ("status", 1), ("followed_at", -1)])
+
     # Text search indexes (full-text search — much faster than $regex)
     try:
         await db.activities.create_index(

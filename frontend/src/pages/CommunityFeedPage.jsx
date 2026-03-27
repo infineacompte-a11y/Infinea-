@@ -358,10 +358,7 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onP
   const [editText, setEditText] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
-  const totalReactions =
-    (activity.reaction_counts?.bravo || 0) +
-    (activity.reaction_counts?.inspire || 0) +
-    (activity.reaction_counts?.fire || 0);
+  const totalReactions = Object.values(activity.reaction_counts || {}).reduce((sum, v) => sum + (v || 0), 0);
 
   const loadComments = useCallback(async () => {
     if (commentsLoaded) return;

@@ -105,28 +105,37 @@ export default function SavedPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen app-bg-mesh">
       <Sidebar active="community" />
-      <main className="md:ml-56 p-4 md:p-6 max-w-2xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <Link
-            to="/community"
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-muted/60 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <div className="flex items-center gap-2">
-            <Bookmark className="w-5 h-5 text-primary" fill="currentColor" />
-            <h1 className="text-xl font-semibold tracking-tight">Sauvegardés</h1>
+      <main className="lg:ml-64 pt-14 lg:pt-0 pb-8 px-4 lg:px-8">
+        {/* Dark header — cohérent avec les autres pages */}
+        <div className="section-dark-header -mx-4 lg:-mx-8 px-4 lg:px-8 pt-8 lg:pt-10 pb-8 mb-4">
+          <div className="max-w-2xl mx-auto">
+            <div className="flex items-center gap-3">
+              <Link
+                to="/community"
+                className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4 text-white" />
+              </Link>
+              <div className="w-10 h-10 rounded-xl bg-[#459492]/20 flex items-center justify-center">
+                <Bookmark className="w-5 h-5 text-[#55B3AE]" fill="currentColor" />
+              </div>
+              <div>
+                <h1 className="text-display text-2xl lg:text-3xl font-semibold text-white opacity-0 animate-fade-in">
+                  Sauvegardés
+                </h1>
+                {bookmarks.length > 0 && (
+                  <p className="text-white/60 text-sm mt-0.5 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
+                    {bookmarks.length} post{bookmarks.length > 1 ? "s" : ""}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
-          {bookmarks.length > 0 && (
-            <span className="text-sm text-muted-foreground ml-auto">
-              {bookmarks.length} post{bookmarks.length > 1 ? "s" : ""}
-            </span>
-          )}
         </div>
 
+        <div className="max-w-2xl mx-auto">
         {/* Loading state */}
         {loading && (
           <div className="flex justify-center py-16">
@@ -246,6 +255,7 @@ export default function SavedPage() {
             <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
           </div>
         )}
+        </div>
       </main>
     </div>
   );

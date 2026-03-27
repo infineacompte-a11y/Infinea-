@@ -26,8 +26,9 @@ from auth import get_current_user
 from services.activity_service import get_feed, REACTION_TYPES
 from services.moderation import get_blocked_ids, get_muted_ids, check_content, sanitize_text, extract_mentions
 from services.hashtag_service import extract_hashtags, update_hashtag_stats
-from helpers import send_push_to_user
+from helpers import send_push_to_user, create_notification_deduped
 from services.email_service import send_email_to_user, email_mention
+from config import limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -77,7 +78,9 @@ async def get_new_post_count(
 
 
 @router.get("/feed")
+@limiter.limit("60/minute")
 async def get_activity_feed(
+    request: Request,
     user: dict = Depends(get_current_user),
     cursor: str = None,
     limit: int = 20,
@@ -92,7 +95,9 @@ async def get_activity_feed(
 
 
 @router.get("/feed/discover")
+@limiter.limit("60/minute")
 async def get_discover_feed(
+    request: Request,
     user: dict = Depends(get_current_user),
     cursor: str = None,
     limit: int = 20,
@@ -193,7 +198,9 @@ async def get_discover_feed(
 
 
 @router.get("/feed/suggested-users")
+@limiter.limit("20/minute")
 async def get_suggested_users(
+    request: Request,
     user: dict = Depends(get_current_user),
     limit: int = 15,
 ):
@@ -796,6 +803,7 @@ async def upload_post_image(
 # ============== CREATE MANUAL POST ==============
 
 @router.post("/activities")
+@limiter.limit("10/minute")
 async def create_manual_post(
     request: Request,
     user: dict = Depends(get_current_user),
@@ -1167,6 +1175,7 @@ async def get_activity_detail(
 # ============== REACTIONS ==============
 
 @router.post("/activities/{activity_id}/react")
+@limiter.limit("30/minute")
 async def react_to_activity(
     activity_id: str,
     request: Request,
@@ -1229,31 +1238,30 @@ async def react_to_activity(
             {"$inc": {f"reaction_counts.{reaction_type}": 1}},
         )
 
-        # Notify activity owner (non-blocking, silent fail)
+        # Notify activity owner (non-blocking, silent fail, dedup 1h)
         if activity["user_id"] != user["user_id"]:
             try:
                 display = user.get("display_name") or user.get("name", "Quelqu'un")
-                await db.notifications.insert_one({
-                    "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
-                    "user_id": activity["user_id"],
-                    "type": "reaction",
-                    "message": f"{display} a réagi à votre activité",
-                    "data": {
+                created = await create_notification_deduped(
+                    user_id=activity["user_id"],
+                    notif_type="reaction",
+                    message=f"{display} a réagi à votre activité",
+                    data={
                         "activity_id": activity_id,
                         "reaction_type": reaction_type,
                         "reactor_id": user["user_id"],
                         "reactor_name": display,
                     },
-                    "read": False,
-                    "created_at": now,
-                })
-                await send_push_to_user(
-                    activity["user_id"],
-                    "Nouvelle réaction",
-                    f"{display} a réagi à ton activité",
-                    url=f"/activity/{activity_id}",
-                    tag="reaction",
+                    dedup_hours=1,
                 )
+                if created:
+                    await send_push_to_user(
+                        activity["user_id"],
+                        "Nouvelle réaction",
+                        f"{display} a réagi à ton activité",
+                        url=f"/activity/{activity_id}",
+                        tag="reaction",
+                    )
             except Exception:
                 pass  # Non-blocking
 
@@ -1304,6 +1312,7 @@ async def get_activity_reactions(
 # ============== COMMENTS ==============
 
 @router.post("/activities/{activity_id}/comments")
+@limiter.limit("20/minute")
 async def add_comment(
     activity_id: str,
     request: Request,
@@ -1751,7 +1760,9 @@ async def toggle_comment_like(
 
 
 @router.get("/feed/search")
+@limiter.limit("30/minute")
 async def search_activities(
+    request: Request,
     q: str = "",
     cursor: str = "",
     limit: int = 20,
@@ -1835,6 +1846,7 @@ async def search_activities(
 
 
 @router.post("/activities/{activity_id}/bookmark")
+@limiter.limit("30/minute")
 async def toggle_bookmark(
     activity_id: str,
     user: dict = Depends(get_current_user),

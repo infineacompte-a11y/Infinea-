@@ -164,6 +164,33 @@ async def get_feed(
     if has_more:
         pool = pool[:pool_size]
 
+    # ── Cold-start injection (TikTok/Instagram bootstrap pattern) ──
+    # If user follows very few people and pool is sparse, inject discover content
+    # so the feed never feels empty on first visit.
+    real_follow_count = len(following_ids) - 1  # Exclude self
+    if len(pool) < limit and real_follow_count < 5 and not cursor:
+        # Inject public activities from outside the user's network
+        fill_needed = limit - len(pool)
+        existing_ids = {a["activity_id"] for a in pool}
+        discover_query = {
+            "visibility": "public",
+            "moderation_status": {"$ne": "hidden"},
+            "user_id": {"$nin": list(exclude_ids | {user_id})},
+            "activity_id": {"$nin": list(existing_ids)},
+        }
+        discover_pool = (
+            await db.activities.find(discover_query, {"_id": 0})
+            .sort("created_at", -1)
+            .limit(fill_needed * 2)
+            .to_list(fill_needed * 2)
+        )
+        # Mark injected content so frontend can optionally show "Suggestions pour toi"
+        for act in discover_pool:
+            act["_injected"] = True
+        pool.extend(discover_pool)
+        if discover_pool:
+            has_more = True  # There's always more discover content
+
     # Rank the pool — the engine scores each activity on 6 signals
     # and returns them sorted by composite score.
     if len(pool) > 1:

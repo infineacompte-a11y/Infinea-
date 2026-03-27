@@ -100,6 +100,68 @@ async def track_ai_usage(
         pass
 
 
+async def create_notification_deduped(
+    user_id: str,
+    notif_type: str,
+    message: str,
+    data: dict,
+    dedup_key: str = None,
+    dedup_hours: int = 24,
+) -> bool:
+    """Create a notification with deduplication.
+
+    Prevents spam from repeated actions (follow/unfollow, react/unreact).
+    If a similar notification exists within dedup_hours, skip creation.
+
+    Args:
+        dedup_key: Unique key for dedup (e.g. "follower_id:reaction_type").
+            If None, uses f"{notif_type}:{data}" as key.
+        dedup_hours: Lookback window in hours (default 24h).
+
+    Returns:
+        True if notification was created, False if deduplicated.
+    """
+    import uuid as _uuid
+    cutoff = datetime.now(timezone.utc) - __import__("datetime").timedelta(hours=dedup_hours)
+
+    # Build dedup query — same type + same source user + same target within window
+    dedup_query = {
+        "user_id": user_id,
+        "type": notif_type,
+        "created_at": {"$gte": cutoff.isoformat()},
+    }
+    # Add specific dedup field based on notification data
+    if dedup_key:
+        dedup_query["data.dedup_key"] = dedup_key
+    else:
+        # Fallback: dedup by source user (reactor, commenter, follower)
+        source_id = data.get("follower_id") or data.get("reactor_id") or data.get("commenter_id")
+        if source_id:
+            source_field = next(
+                (k for k in ("follower_id", "reactor_id", "commenter_id") if k in data), None
+            )
+            if source_field:
+                dedup_query[f"data.{source_field}"] = source_id
+
+    try:
+        existing = await db.notifications.find_one(dedup_query, {"_id": 1})
+        if existing:
+            return False  # Deduplicated — skip
+
+        await db.notifications.insert_one({
+            "notification_id": f"notif_{_uuid.uuid4().hex[:12]}",
+            "user_id": user_id,
+            "type": notif_type,
+            "message": message,
+            "data": data,
+            "read": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return True
+    except Exception:
+        return False
+
+
 def parse_ai_json(response: Optional[str]) -> Optional[dict]:
     """Extract JSON from AI response."""
     if not response:
