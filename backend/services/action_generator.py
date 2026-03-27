@@ -14,6 +14,8 @@ from typing import Optional
 
 import httpx
 
+from helpers import track_ai_usage
+
 logger = logging.getLogger("action_generator")
 
 # All 11 categories with their metadata
@@ -115,6 +117,14 @@ async def _call_generation_ai(system_message: str, prompt: str) -> Optional[str]
             )
             resp.raise_for_status()
             data = resp.json()
+            # Track token usage
+            usage = data.get("usage", {})
+            await track_ai_usage(
+                model="claude-haiku-4-5-20251001",
+                caller="action_generator",
+                input_tokens=usage.get("input_tokens", 0),
+                output_tokens=usage.get("output_tokens", 0),
+            )
             return data["content"][0]["text"]
     except Exception as e:
         logger.error(f"AI generation call failed: {e}")

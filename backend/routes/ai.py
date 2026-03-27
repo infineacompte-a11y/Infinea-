@@ -12,7 +12,7 @@ from database import db
 from auth import get_current_user
 from helpers import (
     AI_SYSTEM_MESSAGE, get_ai_model, call_ai, parse_ai_json,
-    build_user_context, check_usage_limit, send_push_to_user,
+    build_user_context, check_usage_limit, send_push_to_user, track_ai_usage,
 )
 from config import limiter, logger
 from models import AIRequest, CustomActionRequest, DebriefRequest, CoachChatRequest
@@ -854,6 +854,15 @@ Temps total investi: {user.get('total_time_invested', 0)} minutes."""
                 resp.raise_for_status()
                 data = resp.json()
                 assistant_content = data["content"][0]["text"]
+                # Track token usage
+                usage = data.get("usage", {})
+                await track_ai_usage(
+                    model=ai_model,
+                    caller="coach_chat",
+                    input_tokens=usage.get("input_tokens", 0),
+                    output_tokens=usage.get("output_tokens", 0),
+                    user_id=user["user_id"],
+                )
         except Exception as e:
             logger.error(f"Coach chat AI error: {e}")
 

@@ -54,6 +54,7 @@ from typing import Optional
 import httpx
 
 from database import db
+from helpers import track_ai_usage
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +270,15 @@ async def _call_moderation_ai(
             )
             resp.raise_for_status()
             data = resp.json()
+
+            # Track token usage
+            usage = data.get("usage", {})
+            await track_ai_usage(
+                model=MODERATION_MODEL,
+                caller="ai_moderation",
+                input_tokens=usage.get("input_tokens", 0),
+                output_tokens=usage.get("output_tokens", 0),
+            )
 
             raw_text = data["content"][0]["text"]
             return _parse_moderation_response(raw_text)
