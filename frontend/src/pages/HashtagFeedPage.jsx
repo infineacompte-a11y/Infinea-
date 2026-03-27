@@ -63,6 +63,8 @@ const REACTIONS = [
   { type: "bravo", emoji: "👏" },
   { type: "inspire", emoji: "💡" },
   { type: "fire", emoji: "🔥" },
+  { type: "solidaire", emoji: "🤝" },
+  { type: "curieux", emoji: "🧠" },
 ];
 
 function getInitials(name) {

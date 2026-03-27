@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from database import db
-from services.moderation import get_blocked_ids
+from services.moderation import get_blocked_ids, get_muted_ids
 from services.hashtag_service import generate_auto_tags, update_hashtag_stats
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ ACTIVITY_TYPES = {
 STREAK_MILESTONES = {3, 7, 14, 30, 60, 100, 365}
 
 # InFinea-themed reaction types
-REACTION_TYPES = {"bravo", "inspire", "fire"}
+REACTION_TYPES = {"bravo", "inspire", "fire", "solidaire", "curieux"}
 
 
 async def create_activity(
@@ -81,7 +81,7 @@ async def create_activity(
         "type": activity_type,
         "data": data,
         "visibility": visibility,
-        "reaction_counts": {"bravo": 0, "inspire": 0, "fire": 0},
+        "reaction_counts": {"bravo": 0, "inspire": 0, "fire": 0, "solidaire": 0, "curieux": 0},
         "comment_count": 0,
         "created_at": now,
     }
@@ -131,10 +131,14 @@ async def get_feed(
     # Include the user's own activities
     following_ids.append(user_id)
 
-    # Filter out blocked users
-    blocked_ids = await get_blocked_ids(user_id)
-    if blocked_ids:
-        following_ids = [fid for fid in following_ids if fid not in blocked_ids]
+    # Filter out blocked + muted users
+    blocked_ids, muted_ids = await asyncio.gather(
+        get_blocked_ids(user_id),
+        get_muted_ids(user_id),
+    )
+    exclude_ids = blocked_ids | muted_ids
+    if exclude_ids:
+        following_ids = [fid for fid in following_ids if fid not in exclude_ids]
 
     query = {
         "user_id": {"$in": following_ids},

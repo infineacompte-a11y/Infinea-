@@ -106,6 +106,89 @@ async def get_blocked_users(user: dict = Depends(get_current_user)):
     return {"blocked_users": results}
 
 
+# ============== MUTE / UNMUTE (Instagram "Restrict" pattern) ==============
+
+@router.post("/users/{user_id}/mute")
+async def mute_user(user_id: str, user: dict = Depends(get_current_user)):
+    """Mute a user. Hides their content from your feed without unfollowing.
+    The muted user is NOT notified — they can still see your content."""
+    if user["user_id"] == user_id:
+        raise HTTPException(status_code=400, detail="Impossible de se masquer soi-même")
+
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+
+    existing = await db.mutes.find_one(
+        {"muter_id": user["user_id"], "muted_id": user_id}
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Utilisateur déjà masqué")
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.mutes.insert_one({
+        "muter_id": user["user_id"],
+        "muted_id": user_id,
+        "created_at": now,
+    })
+
+    return {"message": "Utilisateur masqué", "muted": True}
+
+
+@router.delete("/users/{user_id}/mute")
+async def unmute_user(user_id: str, user: dict = Depends(get_current_user)):
+    """Unmute a user. Their content will appear in your feed again."""
+    result = await db.mutes.delete_one(
+        {"muter_id": user["user_id"], "muted_id": user_id}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=400, detail="Utilisateur non masqué")
+
+    return {"message": "Utilisateur démasqué", "muted": False}
+
+
+@router.get("/users/{user_id}/mute-status")
+async def get_mute_status(user_id: str, user: dict = Depends(get_current_user)):
+    """Check if a user is muted by the current user."""
+    mute = await db.mutes.find_one(
+        {"muter_id": user["user_id"], "muted_id": user_id}
+    )
+    return {"muted": mute is not None}
+
+
+@router.get("/users/muted")
+async def get_muted_users(user: dict = Depends(get_current_user)):
+    """List users muted by the current user."""
+    mutes = await db.mutes.find(
+        {"muter_id": user["user_id"]},
+        {"_id": 0, "muted_id": 1, "created_at": 1},
+    ).to_list(200)
+
+    if not mutes:
+        return {"muted_users": []}
+
+    muted_ids = [m["muted_id"] for m in mutes]
+    users = await db.users.find(
+        {"user_id": {"$in": muted_ids}},
+        {"_id": 0, "user_id": 1, "name": 1, "display_name": 1, "username": 1,
+         "avatar_url": 1, "picture": 1},
+    ).to_list(len(muted_ids))
+
+    user_map = {u["user_id"]: u for u in users}
+    results = []
+    for m in mutes:
+        u = user_map.get(m["muted_id"], {})
+        results.append({
+            "user_id": m["muted_id"],
+            "display_name": u.get("display_name") or u.get("name", "Utilisateur"),
+            "username": u.get("username"),
+            "avatar_url": u.get("avatar_url") or u.get("picture"),
+            "muted_at": m["created_at"],
+        })
+
+    return {"muted_users": results}
+
+
 # ============== REPORT ==============
 
 REPORT_TYPES = {"user", "comment", "activity", "group", "message"}
@@ -602,6 +685,9 @@ async def delete_account(
     )
     await db.blocks.delete_many(
         {"$or": [{"blocker_id": uid}, {"blocked_id": uid}]}
+    )
+    await db.mutes.delete_many(
+        {"$or": [{"muter_id": uid}, {"muted_id": uid}]}
     )
     await db.reactions.delete_many({"user_id": uid})
     await db.comments.delete_many({"user_id": uid})

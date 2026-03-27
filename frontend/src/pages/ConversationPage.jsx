@@ -44,6 +44,8 @@ const REACTIONS = [
   { type: "bravo", emoji: "👏", label: "Bravo" },
   { type: "inspire", emoji: "✨", label: "Inspire" },
   { type: "fire", emoji: "🔥", label: "Fire" },
+  { type: "solidaire", emoji: "🤝", label: "Solidaire" },
+  { type: "curieux", emoji: "🧠", label: "Curieux" },
 ];
 
 // Compact reaction picker — appears on hover, iMessage tapback style
@@ -79,7 +81,7 @@ function MessageReactionDisplay({ reactions, myId }) {
     if (userId === myId) grouped[type].isMine = true;
   }
 
-  const reactionEmoji = { bravo: "👏", inspire: "✨", fire: "🔥" };
+  const reactionEmoji = { bravo: "👏", inspire: "✨", fire: "🔥", solidaire: "🤝", curieux: "🧠" };
 
   return (
     <div className="flex items-center gap-1 mt-0.5">
@@ -473,6 +475,10 @@ export default function ConversationPage() {
   const [togglingMute, setTogglingMute] = useState(false);
   // Group panel
   const [showMemberPanel, setShowMemberPanel] = useState(false);
+  // Typing indicator
+  const [typingUsers, setTypingUsers] = useState([]);
+  const typingTimeoutRef = useRef(null);
+  const lastTypingSignalRef = useRef(0);
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -566,9 +572,10 @@ export default function ConversationPage() {
     }
   }, [messages.length, loadingMore]);
 
-  // Poll for new messages every 10s
+  // Poll for new messages every 10s + typing every 3s
   useEffect(() => {
-    pollRef.current = setInterval(async () => {
+    let msgInterval, typingInterval;
+    msgInterval = setInterval(async () => {
       try {
         const res = await authFetch(
           `${API}/conversations/${conversationId}/messages?limit=30`
@@ -580,7 +587,31 @@ export default function ConversationPage() {
         }
       } catch { /* silent */ }
     }, 10000);
-    return () => clearInterval(pollRef.current);
+    pollRef.current = msgInterval;
+
+    // Typing status poll (lightweight — returns only active typers)
+    typingInterval = setInterval(async () => {
+      try {
+        const res = await authFetch(`${API}/conversations/${conversationId}/typing`);
+        if (res.ok) {
+          const data = await res.json();
+          setTypingUsers(data.typing || []);
+        }
+      } catch { /* silent */ }
+    }, 3000);
+
+    return () => {
+      clearInterval(msgInterval);
+      clearInterval(typingInterval);
+    };
+  }, [conversationId]);
+
+  // Send typing signal (debounced — max once every 3s)
+  const signalTyping = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTypingSignalRef.current < 3000) return;
+    lastTypingSignalRef.current = now;
+    authFetch(`${API}/conversations/${conversationId}/typing`, { method: "POST" }).catch(() => {});
   }, [conversationId]);
 
   // Image selection + async upload
@@ -1116,6 +1147,24 @@ export default function ConversationPage() {
           </div>
         </div>
 
+        {/* Typing indicator (iMessage-style) */}
+        {typingUsers.length > 0 && (
+          <div className="shrink-0 px-4 lg:px-8 py-1.5 bg-background/60">
+            <div className="max-w-3xl mx-auto flex items-center gap-2 text-[11px] text-muted-foreground">
+              <span className="flex gap-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "0ms" }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "150ms" }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: "300ms" }} />
+              </span>
+              <span>
+                {typingUsers.length === 1
+                  ? `${typingUsers[0].display_name?.split(" ")[0] || "Quelqu'un"} est en train d'écrire...`
+                  : `${typingUsers.length} personnes écrivent...`}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Input bar */}
         <div className="shrink-0 border-t border-border/30 bg-background/80 backdrop-blur-sm px-4 lg:px-8 py-3">
           <div className="max-w-3xl mx-auto">
@@ -1179,7 +1228,7 @@ export default function ConversationPage() {
               </button>
               <MentionInput
                 value={messageText}
-                onChange={setMessageText}
+                onChange={(v) => { setMessageText(v); if (v.trim()) signalTyping(); }}
                 mentions={messageMentions}
                 onMentionsChange={setMessageMentions}
                 context="message"

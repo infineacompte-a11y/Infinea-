@@ -125,6 +125,25 @@ async def get_blocked_ids(user_id: str) -> Set[str]:
     return blocked_ids
 
 
+async def get_muted_ids(user_id: str) -> Set[str]:
+    """
+    Get all user IDs muted by user_id (unidirectional — unlike blocks).
+
+    Mute hides the muted user's content from the muter's feed,
+    but the muted user can still see the muter's content and interact.
+    The muted user is NOT notified.
+
+    Benchmarked: Instagram "Restrict", Twitter/X "Mute".
+    Used by: feed, discover.
+    """
+    mutes = await db.mutes.find(
+        {"muter_id": user_id},
+        {"_id": 0, "muted_id": 1},
+    ).to_list(1000)
+
+    return {m["muted_id"] for m in mutes}
+
+
 # ── Mention extraction ──
 
 MENTION_REGEX = re.compile(r'(?<!\w)@(\w{3,20})(?!\w)')

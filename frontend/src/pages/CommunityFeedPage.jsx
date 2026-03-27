@@ -35,6 +35,7 @@ import {
   TrendingUp,
   Star,
   Share2,
+  Pin,
 } from "lucide-react";
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
@@ -53,6 +54,8 @@ const REACTIONS = [
   { type: "bravo", emoji: "👏", label: "Bravo" },
   { type: "inspire", emoji: "💡", label: "Inspirant" },
   { type: "fire", emoji: "🔥", label: "En feu" },
+  { type: "solidaire", emoji: "🤝", label: "Solidaire" },
+  { type: "curieux", emoji: "🧠", label: "Curieux" },
 ];
 
 // ── Activity type config ──
@@ -330,7 +333,7 @@ function PostImageGrid({ images }) {
 }
 
 // ── Single Activity Card (Instagram-style) ──
-function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onBookmarkChange }) {
+function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onPin, onBookmarkChange }) {
   const config = ACTIVITY_CONFIG[activity.type] || ACTIVITY_CONFIG.session_completed;
   const Icon = config.icon;
   const [showComments, setShowComments] = useState(false);
@@ -671,15 +674,24 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onB
                 {timeAgo(activity.created_at)}
               </span>
               {activity.user_id === currentUserId ? (
-                <button
-                  onClick={() => {
-                    if (window.confirm("Supprimer cette activité ?")) onDelete?.(activity.activity_id);
-                  }}
-                  className="text-muted-foreground/40 hover:text-destructive transition-colors p-1"
-                  title="Supprimer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => onPin?.(activity.activity_id, !activity.pinned)}
+                    className={`transition-colors p-1 ${activity.pinned ? "text-primary" : "text-muted-foreground/40 hover:text-primary"}`}
+                    title={activity.pinned ? "Désépingler" : "Épingler sur le profil"}
+                  >
+                    <Pin className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm("Supprimer cette activité ?")) onDelete?.(activity.activity_id);
+                    }}
+                    className="text-muted-foreground/40 hover:text-destructive transition-colors p-1"
+                    title="Supprimer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               ) : (
                 <SafetyMenu
                   userId={activity.user_id}
@@ -1572,6 +1584,28 @@ export default function CommunityFeedPage() {
     }
   };
 
+  // Pin/unpin own activity
+  const handlePinActivity = async (activityId, pin) => {
+    try {
+      const res = await authFetch(`${API}/activities/${activityId}/pin`, {
+        method: pin ? "POST" : "DELETE",
+      });
+      if (res.ok) {
+        setActivities((prev) =>
+          prev.map((a) =>
+            a.activity_id === activityId ? { ...a, pinned: pin } : a
+          )
+        );
+        toast.success(pin ? "Activité épinglée sur ton profil" : "Activité désépinglée");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.detail || "Erreur");
+      }
+    } catch {
+      toast.error("Erreur de connexion");
+    }
+  };
+
   // Create manual post
   const handleCreatePost = async (content, images = []) => {
     try {
@@ -1836,6 +1870,7 @@ export default function CommunityFeedPage() {
                       onReactionChange={handleReactionChange}
                       onBookmarkChange={handleBookmarkChange}
                       onDelete={handleDeleteActivity}
+                      onPin={handlePinActivity}
                     />
                   </div>
                 ))}

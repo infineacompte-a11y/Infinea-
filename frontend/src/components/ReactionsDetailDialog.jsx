@@ -23,15 +23,19 @@ import { API, authFetch } from "@/App";
 
 const REACTION_TABS = [
   { key: "all", label: "Tous", emoji: null },
-  { key: "bravo", label: "Bravo", emoji: "\ud83d\udc4f" },
-  { key: "inspire", label: "Inspirant", emoji: "\ud83d\udca1" },
-  { key: "fire", label: "En feu", emoji: "\ud83d\udd25" },
+  { key: "bravo", label: "Bravo", emoji: "👏" },
+  { key: "inspire", label: "Inspirant", emoji: "💡" },
+  { key: "fire", label: "En feu", emoji: "🔥" },
+  { key: "solidaire", label: "Solidaire", emoji: "🤝" },
+  { key: "curieux", label: "Curieux", emoji: "🧠" },
 ];
 
 const REACTION_EMOJI = {
-  bravo: "\ud83d\udc4f",
-  inspire: "\ud83d\udca1",
-  fire: "\ud83d\udd25",
+  bravo: "👏",
+  inspire: "💡",
+  fire: "🔥",
+  solidaire: "🤝",
+  curieux: "🧠",
 };
 
 function getInitials(name) {
