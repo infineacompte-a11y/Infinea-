@@ -27,6 +27,14 @@ import {
   Activity,
   UserCheck,
   Circle,
+  Target,
+  Camera,
+  X,
+  BookOpen,
+  Brain,
+  Heart,
+  Star,
+  ImageIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch, useAuth } from "@/App";
@@ -66,6 +74,9 @@ export default function PublicProfilePage() {
   // Activity timeline
   const [activities, setActivities] = useState([]);
   const [activitiesLoaded, setActivitiesLoaded] = useState(false);
+
+  // Cover photo upload (own profile only)
+  const [coverUploading, setCoverUploading] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -120,6 +131,47 @@ export default function PublicProfilePage() {
     );
   };
 
+  const handleCoverUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Format non supporté. Utilisez JPEG, PNG ou WebP.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("L'image ne doit pas dépasser 10 Mo");
+      return;
+    }
+    setCoverUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await authFetch(`${API}/profile/cover-photo`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const data = await res.json();
+      setProfile((prev) => prev ? { ...prev, cover_photo_url: data.cover_photo_url } : prev);
+      toast.success("Photo de couverture mise à jour");
+    } catch {
+      toast.error("Erreur lors de l'upload");
+    } finally {
+      setCoverUploading(false);
+    }
+  };
+
+  const handleCoverDelete = async () => {
+    try {
+      const res = await authFetch(`${API}/profile/cover-photo`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      setProfile((prev) => prev ? { ...prev, cover_photo_url: null } : prev);
+      toast.success("Photo de couverture supprimée");
+    } catch {
+      toast.error("Erreur lors de la suppression");
+    }
+  };
+
   const openList = async (type) => {
     setListDialog(type);
     setListLoading(true);
@@ -172,6 +224,12 @@ export default function PublicProfilePage() {
     badge_earned: { icon: Award, color: "#E48C75", getText: (d) => `a obtenu le badge "${d.badge_name || "nouveau badge"}"` },
     streak_milestone: { icon: Flame, color: "#E48C75", getText: (d) => `a atteint ${d.streak_days} jours de streak !` },
     challenge_completed: { icon: Trophy, color: "#459492", getText: (d) => `a complété le défi "${d.challenge_title || "un défi"}" !` },
+  };
+
+  const OBJECTIVE_CATEGORY = {
+    learning: { icon: BookOpen, color: "#459492", label: "Apprentissage" },
+    productivity: { icon: Target, color: "#E48C75", label: "Productivité" },
+    well_being: { icon: Heart, color: "#5DB786", label: "Bien-être" },
   };
 
   // Loading state
@@ -243,29 +301,81 @@ export default function PublicProfilePage() {
     <div className="min-h-screen app-bg-mesh">
       <Sidebar />
       <main className="lg:ml-64 pt-14 lg:pt-0 pb-8">
-        {/* Dark header */}
-        <div className="section-dark-header px-4 lg:px-8 pt-8 lg:pt-10 pb-8">
-          <div className="max-w-3xl mx-auto">
-            <Link
-              to="/search"
-              className="inline-flex items-center gap-1.5 text-white/50 hover:text-white/80 text-sm mb-4 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Rechercher
-            </Link>
-            <div className="flex items-center gap-5">
+        {/* Cover photo banner (LinkedIn/Twitter pattern) */}
+        <div className="relative">
+          <div
+            className="h-36 sm:h-44 lg:h-52 w-full bg-gradient-to-br from-[#275255] via-[#459492]/60 to-[#275255] relative overflow-hidden"
+          >
+            {profile.cover_photo_url && (
+              <img
+                src={profile.cover_photo_url}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
+            {/* Gradient overlay for text readability */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#275255]/80 via-transparent to-[#275255]/20" />
+
+            {/* Back button */}
+            <div className="absolute top-3 left-3 lg:left-8 z-10">
+              <Link
+                to="/search"
+                className="inline-flex items-center gap-1.5 text-white/70 hover:text-white text-sm bg-black/20 backdrop-blur-sm px-3 py-1.5 rounded-full transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Rechercher
+              </Link>
+            </div>
+
+            {/* Cover photo actions (own profile only) */}
+            {isOwnProfile && (
+              <div className="absolute top-3 right-3 lg:right-8 z-10 flex items-center gap-2">
+                <label className="cursor-pointer inline-flex items-center gap-1.5 text-white/70 hover:text-white text-xs bg-black/20 backdrop-blur-sm px-3 py-1.5 rounded-full transition-colors">
+                  <Camera className="w-3.5 h-3.5" />
+                  {coverUploading ? "Upload..." : profile.cover_photo_url ? "Changer" : "Ajouter une couverture"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleCoverUpload}
+                    disabled={coverUploading}
+                  />
+                </label>
+                {profile.cover_photo_url && (
+                  <button
+                    onClick={handleCoverDelete}
+                    className="text-white/50 hover:text-white bg-black/20 backdrop-blur-sm p-1.5 rounded-full transition-colors"
+                    title="Supprimer la couverture"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Avatar overlapping the cover */}
+          <div className="max-w-3xl mx-auto px-4 lg:px-8 relative">
+            <div className="absolute -bottom-12 left-4 lg:left-8">
               <div className="avatar-gradient-ring relative flex items-center justify-center opacity-0 animate-fade-in">
-                <Avatar className="w-20 h-20 lg:w-24 lg:h-24 ring-offset-2 ring-offset-[#275255]">
+                <Avatar className="w-24 h-24 lg:w-28 lg:h-28 ring-4 ring-background shadow-lg">
                   <AvatarImage
                     src={profile.avatar_url}
                     alt={profile.display_name}
                   />
-                  <AvatarFallback className="bg-white/10 text-white text-2xl">
+                  <AvatarFallback className="bg-primary/10 text-primary text-2xl">
                     {getInitials(profile.display_name)}
                   </AvatarFallback>
                 </Avatar>
               </div>
+            </div>
+          </div>
+        </div>
 
+        {/* Profile info under cover */}
+        <div className="section-dark-header px-4 lg:px-8 pt-16 pb-6">
+          <div className="max-w-3xl mx-auto">
+            <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-1 opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
                   <h1 className="text-display text-2xl lg:text-3xl font-semibold text-white truncate">
@@ -285,7 +395,7 @@ export default function PublicProfilePage() {
                 )}
                 {/* Mutual follow badge + active status */}
                 {!isOwnProfile && (
-                  <div className="flex items-center gap-2 mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "88ms" }}>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap opacity-0 animate-fade-in" style={{ animationDelay: "88ms" }}>
                     {profile.is_following && profile.follows_you && (
                       <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-300/90 bg-emerald-400/15 px-2 py-0.5 rounded-full">
                         <UserCheck className="w-3 h-3" />
@@ -310,9 +420,33 @@ export default function PublicProfilePage() {
                   </div>
                 )}
                 {profile.bio && (
-                  <p className="text-white/60 text-sm mt-1 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
+                  <p className="text-white/60 text-sm mt-2 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
                     {profile.bio}
                   </p>
+                )}
+                {/* Mutual followers (Instagram "Suivi par X, Y et Z de tes abonnements") */}
+                {!isOwnProfile && profile.mutual_followers?.count > 0 && (
+                  <div className="flex items-center gap-2 mt-2 opacity-0 animate-fade-in" style={{ animationDelay: "120ms" }}>
+                    <div className="flex -space-x-2">
+                      {profile.mutual_followers.sample.map((u) => (
+                        <Avatar key={u.user_id} className="w-5 h-5 ring-1 ring-[#275255]">
+                          <AvatarImage src={u.avatar_url} alt={u.display_name} />
+                          <AvatarFallback className="bg-white/10 text-[8px] text-white">
+                            {u.display_name?.[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-white/40">
+                      Suivi par{" "}
+                      {profile.mutual_followers.sample
+                        .map((u) => u.display_name)
+                        .join(", ")}
+                      {profile.mutual_followers.count > 3 &&
+                        ` et ${profile.mutual_followers.count - 3} autre${profile.mutual_followers.count - 3 > 1 ? "s" : ""}`}
+                      {" "}que tu suis
+                    </p>
+                  </div>
                 )}
                 {profile.created_at && (
                   <p className="text-white/40 text-xs mt-2 flex items-center gap-1 opacity-0 animate-fade-in" style={{ animationDelay: "150ms" }}>
@@ -429,13 +563,43 @@ export default function PublicProfilePage() {
               </Card>
             )}
 
-            {/* Badges */}
-            {profile.badges && profile.badges.length > 0 && (
+            {/* Featured Badges Vitrine (Duolingo/Xbox pattern) */}
+            {profile.featured_badges && profile.featured_badges.length > 0 && (
+              <Card className="mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "350ms", animationFillMode: "forwards" }}>
+                <CardHeader className="pb-3">
+                  <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
+                    <Star className="w-5 h-5 text-[#F5A623]" />
+                    Badges en vitrine
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-5 gap-3">
+                    {profile.featured_badges.map((badge, i) => (
+                      <div
+                        key={i}
+                        className="flex flex-col items-center text-center gap-1.5"
+                        title={badge.description || badge.name}
+                      >
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#F5A623]/15 to-[#E48C75]/10 border border-[#F5A623]/20 flex items-center justify-center text-xl shadow-sm">
+                          {badge.emoji || "🏅"}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground leading-tight line-clamp-2">
+                          {badge.name || badge}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* All Badges (if more than featured) */}
+            {profile.badges && profile.badges.length > 0 && profile.badges.length > (profile.featured_badges?.length || 0) && (
               <Card className="mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "400ms", animationFillMode: "forwards" }}>
                 <CardHeader>
                   <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
                     <Award className="w-5 h-5 text-[#E48C75]" />
-                    Badges
+                    Tous les badges ({profile.badges.length})
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -449,6 +613,69 @@ export default function PublicProfilePage() {
                         {badge.emoji || "🏅"} {badge.name || badge}
                       </Badge>
                     ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Objectives in Progress (Strava/Duolingo active goals pattern) */}
+            {profile.objectives_in_progress && profile.objectives_in_progress.length > 0 && (
+              <Card className="mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "420ms", animationFillMode: "forwards" }}>
+                <CardHeader>
+                  <CardTitle className="font-sans font-semibold tracking-tight text-lg flex items-center gap-2">
+                    <Target className="w-5 h-5 text-[#459492]" />
+                    Objectifs en cours
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {profile.objectives_in_progress.map((obj) => {
+                      const cat = OBJECTIVE_CATEGORY[obj.category] || OBJECTIVE_CATEGORY.learning;
+                      const CatIcon = cat.icon;
+                      return (
+                        <div
+                          key={obj.objective_id}
+                          className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-muted/50 to-transparent border border-border/30"
+                        >
+                          <div
+                            className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: `${cat.color}15` }}
+                          >
+                            <CatIcon className="w-5 h-5" style={{ color: cat.color }} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {obj.title}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{
+                                    width: `${obj.progress_percent}%`,
+                                    backgroundColor: cat.color,
+                                  }}
+                                />
+                              </div>
+                              <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
+                                {obj.progress_percent}%
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span className="text-[10px] text-muted-foreground">
+                                Jour {obj.current_day}/{obj.target_days}
+                              </span>
+                              {obj.streak_days > 0 && (
+                                <span className="text-[10px] text-[#E48C75] flex items-center gap-0.5">
+                                  <Flame className="w-3 h-3" />
+                                  {obj.streak_days}j
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>
