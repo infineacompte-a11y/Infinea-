@@ -21,6 +21,8 @@ import logging
 import httpx
 from typing import Optional
 
+from helpers import track_ai_usage
+
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 7  # Generate 7 days at a time (one week)
@@ -127,6 +129,16 @@ Intègre 1-2 sessions de révision par semaine (review: true) à partir de la se
                 resp.raise_for_status()
                 data = resp.json()
                 text = data["content"][0]["text"]
+
+                # Track token usage
+                usage = data.get("usage", {})
+                await track_ai_usage(
+                    model=ai_model,
+                    caller="curriculum_engine",
+                    input_tokens=usage.get("input_tokens", 0),
+                    output_tokens=usage.get("output_tokens", 0),
+                    user_id=user.get("user_id"),
+                )
 
                 # Parse JSON from response
                 steps = _parse_curriculum_json(text)

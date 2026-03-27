@@ -258,6 +258,11 @@ async def startup_event():
         [("conversation_id", 1), ("user_id", 1)], unique=True
     )
 
+    # AI usage monitoring (cost tracking)
+    await db.ai_usage.create_index("created_at")
+    await db.ai_usage.create_index("caller")
+    await db.ai_usage.create_index("user_id")
+
     # Mentions (for "who mentioned me" queries)
     await db.comments.create_index("mentions.user_id")
     await db.messages.create_index("mentions.user_id")
