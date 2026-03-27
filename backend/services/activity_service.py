@@ -164,6 +164,39 @@ async def get_feed(
     if has_more:
         pool = pool[:pool_size]
 
+    # ── Followed-hashtag injection (Instagram/LinkedIn pattern) ──
+    # Content from hashtags the user follows appears in main feed,
+    # even if the author isn't followed. Capped to avoid overwhelming.
+    try:
+        followed_tags_docs = await db.followed_hashtags.find(
+            {"user_id": user_id}, {"_id": 0, "tag": 1}
+        ).to_list(30)
+        if followed_tags_docs:
+            followed_tags = [d["tag"] for d in followed_tags_docs]
+            existing_ids = {a["activity_id"] for a in pool}
+            ht_query = {
+                "hashtags": {"$in": followed_tags},
+                "visibility": "public",
+                "moderation_status": {"$ne": "hidden"},
+                "user_id": {"$nin": list(exclude_ids)},
+                "activity_id": {"$nin": list(existing_ids)},
+            }
+            if cursor:
+                ht_query["created_at"] = {"$lt": cursor}
+            ht_pool = (
+                await db.activities.find(ht_query, {"_id": 0})
+                .sort("created_at", -1)
+                .limit(limit)
+                .to_list(limit)
+            )
+            for act in ht_pool:
+                act["_from_hashtag"] = True
+            pool.extend(ht_pool)
+            if ht_pool:
+                has_more = True
+    except Exception:
+        logger.warning("Followed-hashtag feed injection failed")
+
     # ── Cold-start injection (TikTok/Instagram bootstrap pattern) ──
     # If user follows very few people and pool is sparse, inject discover content
     # so the feed never feels empty on first visit.

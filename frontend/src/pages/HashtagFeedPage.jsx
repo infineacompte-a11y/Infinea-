@@ -254,6 +254,8 @@ export default function HashtagFeedPage() {
   const [nextCursor, setNextCursor] = useState(null);
   const [hasMore, setHasMore] = useState(false);
   const [totalUses, setTotalUses] = useState(0);
+  const [following, setFollowing] = useState(false);
+  const [togglingFollow, setTogglingFollow] = useState(false);
   const observerRef = useRef(null);
   const sentinelRef = useRef(null);
 
@@ -281,6 +283,7 @@ export default function HashtagFeedPage() {
           setNextCursor(data.next_cursor);
           setHasMore(data.has_more);
           setTotalUses(data.total_uses || 0);
+          if (!cursor && data.following !== undefined) setFollowing(data.following);
         }
       } catch {
         toast.error("Erreur de chargement");
@@ -314,6 +317,30 @@ export default function HashtagFeedPage() {
     return () => observer.disconnect();
   }, [hasMore, loadingMore, nextCursor, fetchFeed]);
 
+  const handleToggleFollow = async () => {
+    if (togglingFollow) return;
+    setTogglingFollow(true);
+    try {
+      const res = await authFetch(
+        `${API}/hashtags/${encodeURIComponent(decodedTag)}/follow`,
+        { method: "POST" },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.error) {
+          toast.error(data.error);
+        } else {
+          setFollowing(data.followed);
+          toast.success(data.followed ? `Tu suis #${decodedTag}` : `Tu ne suis plus #${decodedTag}`);
+        }
+      }
+    } catch {
+      toast.error("Erreur");
+    } finally {
+      setTogglingFollow(false);
+    }
+  };
+
   return (
     <div className="min-h-screen app-bg-mesh">
       <Sidebar />
@@ -331,7 +358,7 @@ export default function HashtagFeedPage() {
               <div className="w-10 h-10 rounded-xl bg-[#459492]/20 flex items-center justify-center">
                 <Hash className="w-5 h-5 text-[#55B3AE]" />
               </div>
-              <div>
+              <div className="flex-1">
                 <h1 className="text-display text-2xl lg:text-3xl font-semibold text-white opacity-0 animate-fade-in">
                   #{decodedTag}
                 </h1>
@@ -343,6 +370,24 @@ export default function HashtagFeedPage() {
                   {totalUses} publication{totalUses > 1 ? "s" : ""}
                 </p>
               </div>
+              <button
+                onClick={handleToggleFollow}
+                disabled={togglingFollow || loading}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 opacity-0 animate-fade-in ${
+                  following
+                    ? "bg-white/15 text-white hover:bg-white/25 border border-white/20"
+                    : "bg-[#55B3AE] text-white hover:bg-[#459492] shadow-md"
+                }`}
+                style={{ animationDelay: "100ms" }}
+              >
+                {togglingFollow ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : following ? (
+                  "Suivi"
+                ) : (
+                  "Suivre"
+                )}
+              </button>
             </div>
           </div>
         </div>
