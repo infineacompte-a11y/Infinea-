@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Star } from "lucide-react";
+import { Star, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -161,16 +161,36 @@ export default function LevelUpCelebration({ newLevel, title, onDismiss }) {
           {title}
         </p>
 
-        <Button
-          onClick={handleDismiss}
-          className="rounded-xl px-8 h-12 text-base font-semibold shadow-lg"
-          style={{
-            background: `linear-gradient(135deg, ${color}, ${color}cc)`,
-            color: "white",
-          }}
-        >
-          Continuer
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={async (e) => {
+              e.stopPropagation();
+              const text = `Niveau ${newLevel} atteint sur InFinea ! Je suis maintenant "${title}"`;
+              const url = window.location.origin;
+              if (navigator.share) {
+                try { await navigator.share({ title: "InFinea", text, url }); } catch {}
+              } else {
+                try {
+                  await navigator.clipboard.writeText(`${text} — ${url}`);
+                } catch {}
+              }
+            }}
+            className="rounded-xl px-5 h-12 text-base font-semibold shadow-lg border-2 border-white/20 bg-white/10 hover:bg-white/20 text-white backdrop-blur-sm"
+          >
+            <Share2 className="w-4 h-4 mr-2" />
+            Partager
+          </Button>
+          <Button
+            onClick={handleDismiss}
+            className="rounded-xl px-8 h-12 text-base font-semibold shadow-lg"
+            style={{
+              background: `linear-gradient(135deg, ${color}, ${color}cc)`,
+              color: "white",
+            }}
+          >
+            Continuer
+          </Button>
+        </div>
       </div>
 
       {/* Keyframe for scale animation */}

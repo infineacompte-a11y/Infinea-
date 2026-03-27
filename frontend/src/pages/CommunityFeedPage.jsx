@@ -34,6 +34,7 @@ import {
   Hash,
   TrendingUp,
   Star,
+  Share2,
 } from "lucide-react";
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
@@ -410,6 +411,26 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onB
     }
   };
 
+  const handleShare = async () => {
+    const url = `${window.location.origin}/community`;
+    const text = activity.type === "post"
+      ? activity.content?.slice(0, 100) || "Découvre InFinea"
+      : `${activity.user_name || "Quelqu'un"} ${ACTIVITY_CONFIG[activity.type]?.getText(activity.data || {}) || "progresse sur InFinea"}`;
+    // Native share on mobile, clipboard on desktop
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "InFinea", text, url });
+      } catch { /* cancelled */ }
+    } else {
+      try {
+        await navigator.clipboard.writeText(`${text} — ${url}`);
+        toast.success("Lien copié !");
+      } catch {
+        toast.error("Impossible de copier");
+      }
+    }
+  };
+
   const handleBookmark = async () => {
     setBookmarking(true);
     try {
@@ -712,6 +733,15 @@ function ActivityCard({ activity, currentUserId, onReactionChange, onDelete, onB
               {totalReactions} réaction{totalReactions > 1 ? "s" : ""}
             </button>
           )}
+
+          {/* Share — viral loop */}
+          <button
+            onClick={handleShare}
+            className="flex items-center gap-1 px-2 py-1.5 rounded-full text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all duration-200"
+            title="Partager"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+          </button>
 
           {/* Bookmark — Instagram Saved */}
           <button

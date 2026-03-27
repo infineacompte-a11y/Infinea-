@@ -18,6 +18,7 @@ import {
   Sparkles,
   Trophy,
   Star,
+  Share2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { API, authFetch } from "@/App";
@@ -232,8 +233,27 @@ export default function ActiveSession() {
               </Button>
               <Button
                 variant="outline"
+                onClick={async () => {
+                  const text = `Je viens de terminer "${session?.action?.title || "une micro-action"}" sur InFinea ! +${completionData?.xp?.xp_awarded || 0} XP`;
+                  const url = window.location.origin;
+                  if (navigator.share) {
+                    try { await navigator.share({ title: "InFinea", text, url }); } catch {}
+                  } else {
+                    try {
+                      await navigator.clipboard.writeText(`${text} — ${url}`);
+                      toast.success("Lien copié !");
+                    } catch {}
+                  }
+                }}
+                className="w-full rounded-xl h-12 transition-all duration-200 btn-press gap-2"
+              >
+                <Share2 className="w-4 h-4" />
+                Partager ma réussite
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={() => navigate("/actions")}
-                className="w-full rounded-xl h-12 transition-all duration-200 btn-press"
+                className="w-full rounded-xl h-10 transition-all duration-200 btn-press text-muted-foreground"
               >
                 Nouvelle action
               </Button>
