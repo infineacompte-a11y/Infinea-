@@ -101,6 +101,8 @@ async def get_weekly_leaderboard(
             "username": 1,
             "avatar_url": 1,
             "streak_days": 1,
+            "level": 1,
+            "total_xp": 1,
         },
     )
     users_map = {u["user_id"]: u async for u in users_cursor}
@@ -126,6 +128,8 @@ async def get_weekly_leaderboard(
                 "sessions_count": sessions,
                 "streak_days": streak,
                 "score": score,
+                "level": u.get("level", 1),
+                "total_xp": u.get("total_xp", 0),
             }
         )
 
@@ -266,6 +270,8 @@ async def get_friends_leaderboard(
             "username": 1,
             "avatar_url": 1,
             "streak_days": 1,
+            "level": 1,
+            "total_xp": 1,
         },
     )
     users_map = {u["user_id"]: u async for u in users_cursor}
@@ -293,6 +299,8 @@ async def get_friends_leaderboard(
             "streak_days": streak,
             "score": score,
             "is_self": uid == my_id,
+            "level": u.get("level", 1),
+            "total_xp": u.get("total_xp", 0),
         })
 
     # ── 5. Rank by score desc, sessions desc (tiebreak) ──
@@ -444,7 +452,8 @@ async def get_category_leaderboard(
     user_ids = [s["_id"] for s in week_stats]
     users_cursor = db.users.find(
         {"user_id": {"$in": user_ids}},
-        {"_id": 0, "user_id": 1, "display_name": 1, "username": 1, "avatar_url": 1},
+        {"_id": 0, "user_id": 1, "display_name": 1, "username": 1, "avatar_url": 1,
+         "level": 1, "total_xp": 1},
     )
     users_map = {u["user_id"]: u async for u in users_cursor}
 
@@ -465,6 +474,8 @@ async def get_category_leaderboard(
             "total_minutes": minutes,
             "sessions_count": sessions,
             "score": score,
+            "level": u.get("level", 1),
+            "total_xp": u.get("total_xp", 0),
         })
 
     # Rank

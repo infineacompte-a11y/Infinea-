@@ -411,6 +411,13 @@ async def _check_completion(challenge_id: str):
                 },
                 visibility="followers",
             )
+            # Award challenge XP
+            from services.xp_engine import award_xp, CHALLENGE_XP
+            await award_xp(
+                uid, CHALLENGE_XP,
+                source="challenge",
+                details={"challenge_id": challenge_id, "challenge_title": ch["title"]},
+            )
         except Exception:
             logger.exception(f"Failed to celebrate challenge for {uid}")
 

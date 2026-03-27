@@ -26,6 +26,7 @@ import {
 import { toast } from "sonner";
 import { API, useAuth, authFetch } from "@/App";
 import Sidebar from "@/components/Sidebar";
+import XPProgressBar from "@/components/XPProgressBar";
 
 /* ── Tier config (Duolingo-inspired) ── */
 const TIER_STYLES = {
@@ -107,9 +108,14 @@ function PodiumCard({ entry, position, currentUserId }) {
         {entry.display_name}
         {isMe && <span className="text-[9px] text-[#459492] ml-0.5">(toi)</span>}
       </p>
-      <p className="text-[10px] text-muted-foreground font-semibold tabular-nums">
-        {entry.score} pts
-      </p>
+      <div className="flex items-center gap-1 mt-0.5">
+        {entry.level > 1 && (
+          <XPProgressBar xpData={{ level: entry.level, total_xp: entry.total_xp || 0, xp_in_level: 0, xp_needed: 1, progress: 0, title: "" }} variant="compact" />
+        )}
+        <span className="text-[10px] text-muted-foreground font-semibold tabular-nums">
+          {entry.score} pts
+        </span>
+      </div>
       {/* Podium bar */}
       <div
         className={`${heights[position]} w-16 mt-1 rounded-t-lg flex items-center justify-center ${
@@ -168,6 +174,9 @@ function RankedEntry({ entry, idx, currentUserId, animationOffset = 250 }) {
               </span>
             )}
           </p>
+          {entry.level > 1 && (
+            <XPProgressBar xpData={{ level: entry.level, total_xp: entry.total_xp || 0, xp_in_level: 0, xp_needed: 1, progress: 0, title: "" }} variant="compact" />
+          )}
         </div>
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-0.5">
