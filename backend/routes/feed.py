@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 from database import db
 from auth import get_current_user
 from services.activity_service import get_feed, REACTION_TYPES
-from services.moderation import get_blocked_ids, check_content, sanitize_text, extract_mentions
+from services.moderation import get_blocked_ids, get_muted_ids, check_content, sanitize_text, extract_mentions
 from services.hashtag_service import extract_hashtags, update_hashtag_stats
 from helpers import send_push_to_user
 from services.email_service import send_email_to_user, email_mention
@@ -113,12 +113,16 @@ async def get_discover_feed(
     if limit > 50:
         limit = 50
 
-    # Filter out blocked users from discover
-    blocked_ids = await get_blocked_ids(user["user_id"])
+    # Filter out blocked + muted users from discover
+    blocked_ids, muted_ids = await asyncio.gather(
+        get_blocked_ids(user["user_id"]),
+        get_muted_ids(user["user_id"]),
+    )
+    exclude_ids = blocked_ids | muted_ids
 
     query = {"visibility": "public", "moderation_status": {"$ne": "hidden"}}
-    if blocked_ids:
-        query["user_id"] = {"$nin": list(blocked_ids)}
+    if exclude_ids:
+        query["user_id"] = {"$nin": list(exclude_ids)}
     if cursor:
         query["created_at"] = {"$lt": cursor}
 
@@ -878,7 +882,7 @@ async def create_manual_post(
         "type": "post",
         "data": activity_data,
         "visibility": visibility,
-        "reaction_counts": {"bravo": 0, "inspire": 0, "fire": 0},
+        "reaction_counts": {"bravo": 0, "inspire": 0, "fire": 0, "solidaire": 0, "curieux": 0},
         "comment_count": 0,
         "created_at": now,
     }
@@ -954,7 +958,7 @@ async def create_manual_post(
         "type": "post",
         "data": activity_doc["data"],
         "visibility": visibility,
-        "reaction_counts": {"bravo": 0, "inspire": 0, "fire": 0},
+        "reaction_counts": {"bravo": 0, "inspire": 0, "fire": 0, "solidaire": 0, "curieux": 0},
         "comment_count": 0,
         "created_at": now,
         "user_name": user.get("display_name") or user.get("name", "Utilisateur"),
@@ -976,9 +980,10 @@ async def delete_activity(activity_id: str, user: dict = Depends(get_current_use
     if activity["user_id"] != user["user_id"]:
         raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres activités")
 
-    # Cascade delete: reactions + comments + bookmark refs
+    # Cascade delete: reactions + comments + bookmarks
     await db.reactions.delete_many({"activity_id": activity_id})
     await db.comments.delete_many({"activity_id": activity_id})
+    await db.bookmarks.delete_many({"activity_id": activity_id})
     await db.activities.delete_one({"activity_id": activity_id})
 
     # Decrement hashtag stats (fire-and-forget)
@@ -987,6 +992,91 @@ async def delete_activity(activity_id: str, user: dict = Depends(get_current_use
         asyncio.create_task(update_hashtag_stats(deleted_tags, increment=-1))
 
     return {"message": "Activité supprimée"}
+
+
+# ============== PIN ACTIVITY (LinkedIn Featured / Twitter Pinned) ==============
+
+MAX_PINS = 3  # LinkedIn allows 5, Twitter 1, we allow 3
+
+
+@router.post("/activities/{activity_id}/pin")
+async def pin_activity(activity_id: str, user: dict = Depends(get_current_user)):
+    """Pin an activity to your profile (max 3, LinkedIn Featured pattern).
+    Pinned activities appear in a highlighted section on your profile."""
+    my_id = user["user_id"]
+    activity = await db.activities.find_one({"activity_id": activity_id})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activité introuvable")
+    if activity["user_id"] != my_id:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez épingler que vos propres activités")
+    if activity.get("pinned"):
+        raise HTTPException(status_code=400, detail="Activité déjà épinglée")
+
+    # Check max pins
+    pin_count = await db.activities.count_documents({"user_id": my_id, "pinned": True})
+    if pin_count >= MAX_PINS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum {MAX_PINS} activités épinglées. Désépinglez-en une d'abord.",
+        )
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.activities.update_one(
+        {"activity_id": activity_id},
+        {"$set": {"pinned": True, "pinned_at": now}},
+    )
+    return {"message": "Activité épinglée", "pinned": True}
+
+
+@router.delete("/activities/{activity_id}/pin")
+async def unpin_activity(activity_id: str, user: dict = Depends(get_current_user)):
+    """Unpin an activity from your profile."""
+    activity = await db.activities.find_one({"activity_id": activity_id})
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activité introuvable")
+    if activity["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres activités")
+
+    await db.activities.update_one(
+        {"activity_id": activity_id},
+        {"$set": {"pinned": False}, "$unset": {"pinned_at": ""}},
+    )
+    return {"message": "Activité désépinglée", "pinned": False}
+
+
+@router.get("/users/{user_id}/pinned")
+async def get_pinned_activities(
+    user_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Get a user's pinned activities (for profile display)."""
+    blocked_ids = await get_blocked_ids(user["user_id"])
+    if user_id in blocked_ids:
+        return {"activities": []}
+
+    activities = await db.activities.find(
+        {
+            "user_id": user_id,
+            "pinned": True,
+            "moderation_status": {"$ne": "hidden"},
+        },
+        {"_id": 0},
+    ).sort("pinned_at", -1).limit(MAX_PINS).to_list(MAX_PINS)
+
+    # Enrich with user info
+    if activities:
+        u = await db.users.find_one(
+            {"user_id": user_id},
+            {"_id": 0, "user_id": 1, "display_name": 1, "name": 1,
+             "username": 1, "avatar_url": 1, "picture": 1, "level": 1},
+        )
+        for a in activities:
+            a["user_name"] = u.get("display_name") or u.get("name", "Utilisateur") if u else "Utilisateur"
+            a["user_username"] = u.get("username", "") if u else ""
+            a["user_avatar"] = (u.get("avatar_url") or u.get("picture", "")) if u else ""
+            a["user_level"] = u.get("level", 1) if u else 1
+
+    return {"activities": activities}
 
 
 # ============== ACTIVITY DETAIL ==============
@@ -1680,22 +1770,24 @@ async def search_activities(
     user_id = user["user_id"]
     blocked_ids = await get_blocked_ids(user_id)
 
-    # Build search query — case-insensitive regex on content
-    import re
-    escaped_q = re.escape(q)
+    # Use MongoDB text index for search (French language, much faster than $regex)
+    # Text search returns results scored by relevance — combine with recency
+    muted_ids = await get_muted_ids(user_id)
+    exclude_ids = list(blocked_ids | muted_ids)
 
     query = {
-        "content": {"$regex": escaped_q, "$options": "i"},
+        "$text": {"$search": q},
         "visibility": "public",
         "moderation_status": {"$ne": "hidden"},
-        "user_id": {"$nin": blocked_ids},
     }
+    if exclude_ids:
+        query["user_id"] = {"$nin": exclude_ids}
     if cursor:
         query["created_at"] = {"$lt": cursor}
 
     activities = await db.activities.find(
-        query, {"_id": 0}
-    ).sort("created_at", -1).limit(limit + 1).to_list(limit + 1)
+        query, {"_id": 0, "score": {"$meta": "textScore"}}
+    ).sort([("score", {"$meta": "textScore"}), ("created_at", -1)]).limit(limit + 1).to_list(limit + 1)
 
     has_more = len(activities) > limit
     activities = activities[:limit]

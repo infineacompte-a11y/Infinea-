@@ -352,7 +352,7 @@ export default function Sidebar() {
   const { logout, user } = useAuth();
   const isAdmin = !!user?.is_admin;
   const navigate = useNavigate();
-  const unreadCount = useUnreadCount();
+  const unreadCount = useUnreadCount(30000);
   const unreadMessages = useUnreadMessages();
   const navRef = useRef(null);
 

@@ -246,9 +246,40 @@ async def startup_event():
     await db.messages.create_index("message_id", unique=True)
     await db.messages.create_index([("conversation_id", 1), ("created_at", 1)])
 
+    # Mutes (unidirectional — Instagram Restrict pattern)
+    await db.mutes.create_index([("muter_id", 1), ("muted_id", 1)], unique=True)
+    await db.mutes.create_index("muter_id")
+
+    # Typing indicators (TTL auto-expire after 6 seconds)
+    await db.typing_indicators.create_index(
+        "expires_at", expireAfterSeconds=6
+    )
+    await db.typing_indicators.create_index(
+        [("conversation_id", 1), ("user_id", 1)], unique=True
+    )
+
     # Mentions (for "who mentioned me" queries)
     await db.comments.create_index("mentions.user_id")
     await db.messages.create_index("mentions.user_id")
+
+    # Text search indexes (full-text search — much faster than $regex)
+    try:
+        await db.activities.create_index(
+            [("content", "text"), ("data.action_title", "text")],
+            default_language="french",
+            name="activities_text_search",
+        )
+    except Exception:
+        pass  # Index may already exist with different config — safe to skip
+
+    try:
+        await db.users.create_index(
+            [("display_name", "text"), ("name", "text"), ("username", "text"), ("bio", "text")],
+            default_language="french",
+            name="users_text_search",
+        )
+    except Exception:
+        pass
 
     logger.info("All indexes ensured")
 

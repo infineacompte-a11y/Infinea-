@@ -33,6 +33,8 @@ const REACTIONS = [
   { type: "bravo", emoji: "👏", label: "Bravo" },
   { type: "inspire", emoji: "💡", label: "Inspirant" },
   { type: "fire", emoji: "🔥", label: "En feu" },
+  { type: "solidaire", emoji: "🤝", label: "Solidaire" },
+  { type: "curieux", emoji: "🧠", label: "Curieux" },
 ];
 
 const ACTIVITY_CONFIG = {

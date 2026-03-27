@@ -604,7 +604,7 @@ async def delete_message(message_id: str, user: dict = Depends(get_current_user)
 # One reaction per user per message, toggle behavior, denormalized on message doc.
 # Same curated set as feed reactions: bravo, inspire, fire — InFinea identity.
 
-MESSAGE_REACTION_TYPES = {"bravo", "inspire", "fire"}
+MESSAGE_REACTION_TYPES = {"bravo", "inspire", "fire", "solidaire", "curieux"}
 
 
 @router.post("/messages/{message_id}/reactions")
@@ -666,7 +666,7 @@ async def toggle_message_reaction(
         if msg["sender_id"] != my_id:
             try:
                 display = user.get("display_name") or user.get("name", "Quelqu'un")
-                reaction_labels = {"bravo": "bravo 👏", "inspire": "inspire ✨", "fire": "fire 🔥"}
+                reaction_labels = {"bravo": "bravo 👏", "inspire": "inspire ✨", "fire": "fire 🔥", "solidaire": "solidaire 🤝", "curieux": "curieux 🧠"}
                 label = reaction_labels.get(reaction_type, reaction_type)
                 await send_push_to_user(
                     msg["sender_id"],
@@ -918,3 +918,64 @@ async def get_unread_messages_count(user: dict = Depends(get_current_user)):
     result = await db.conversations.aggregate(pipeline).to_list(1)
     total = result[0]["total"] if result else 0
     return {"unread_count": total}
+
+
+# ── Typing indicator (iMessage / Instagram DM pattern) ──
+# Uses a lightweight MongoDB collection with 6-second TTL auto-expire.
+# Frontend polls every 3s alongside messages. No WebSocket needed.
+
+TYPING_TTL_SECONDS = 6
+
+
+@router.post("/conversations/{conversation_id}/typing")
+@limiter.limit("20/minute")
+async def signal_typing(
+    request: Request,
+    conversation_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Signal that the current user is typing in a conversation."""
+    my_id = user["user_id"]
+    # Verify participation (lightweight check)
+    conv = await db.conversations.find_one(
+        {"conversation_id": conversation_id, "participants": my_id},
+        {"_id": 1},
+    )
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation introuvable")
+
+    now = datetime.now(timezone.utc)
+    await db.typing_indicators.update_one(
+        {"conversation_id": conversation_id, "user_id": my_id},
+        {"$set": {
+            "conversation_id": conversation_id,
+            "user_id": my_id,
+            "display_name": user.get("display_name") or user.get("name", ""),
+            "expires_at": now,  # TTL index will auto-delete after TYPING_TTL_SECONDS
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@router.get("/conversations/{conversation_id}/typing")
+async def get_typing_users(
+    conversation_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Get users currently typing in a conversation (excludes self)."""
+    my_id = user["user_id"]
+    # Verify participation
+    conv = await db.conversations.find_one(
+        {"conversation_id": conversation_id, "participants": my_id},
+        {"_id": 1},
+    )
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation introuvable")
+
+    typers = await db.typing_indicators.find(
+        {"conversation_id": conversation_id, "user_id": {"$ne": my_id}},
+        {"_id": 0, "user_id": 1, "display_name": 1},
+    ).to_list(20)
+
+    return {"typing": typers}
