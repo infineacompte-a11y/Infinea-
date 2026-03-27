@@ -33,6 +33,7 @@ import {
   Bookmark,
   Hash,
   TrendingUp,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
@@ -77,6 +78,11 @@ const ACTIVITY_CONFIG = {
     icon: Trophy,
     color: "#459492",
     getText: (data) => `a complété le défi "${data.challenge_title || "un défi"}" !`,
+  },
+  level_up: {
+    icon: Star,
+    color: "#F5A623",
+    getText: (data) => `est passé au niveau ${data.new_level} — ${data.title || ""}`,
   },
   post: {
     icon: MessageCircle,

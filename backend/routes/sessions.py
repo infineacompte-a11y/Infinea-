@@ -362,12 +362,59 @@ async def complete_session(
         except Exception:
             pass
 
+        # ── XP attribution (non-blocking — never break session flow) ──
+        xp_result = None
+        try:
+            from services.xp_engine import (
+                calculate_session_xp, award_xp, BADGE_XP,
+                STREAK_MILESTONE_XP,
+            )
+
+            # Detect first session of the day
+            last_session = user_doc.get("last_session_date")
+            is_first_today = True
+            if last_session:
+                ld = (datetime.fromisoformat(last_session).date()
+                      if isinstance(last_session, str) else
+                      last_session.date() if hasattr(last_session, "date") else last_session)
+                is_first_today = ld != today
+
+            session_xp = calculate_session_xp(
+                duration_minutes=completion.actual_duration,
+                streak_days=new_streak,
+                is_first_session_today=is_first_today,
+            )
+            xp_result = await award_xp(
+                user["user_id"], session_xp["total_xp"],
+                source="session",
+                details={"session_id": completion.session_id, "breakdown": session_xp["breakdown"]},
+            )
+
+            # Bonus XP for new badges
+            for badge in new_badges:
+                await award_xp(
+                    user["user_id"], BADGE_XP,
+                    source="badge",
+                    details={"badge_id": badge.get("badge_id")},
+                )
+
+            # Bonus XP for streak milestone
+            if new_streak in STREAK_MILESTONE_XP:
+                await award_xp(
+                    user["user_id"], STREAK_MILESTONE_XP[new_streak],
+                    source="streak_milestone",
+                    details={"streak_days": new_streak},
+                )
+        except Exception:
+            pass  # XP engine must never block session completion
+
         return {
             "message": "Session completed!",
             "time_added": completion.actual_duration,
             "new_streak": new_streak,
             "total_time": user_doc.get("total_time_invested", 0) + completion.actual_duration,
-            "new_badges": new_badges
+            "new_badges": new_badges,
+            "xp": xp_result,
         }
 
     return {"message": "Session recorded"}

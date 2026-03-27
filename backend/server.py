@@ -279,6 +279,23 @@ async def startup_event():
     if migrated.modified_count > 0:
         logger.info(f"Migrated {migrated.modified_count} activities to public visibility")
 
+    # One-time migration: retroactive XP for users who don't have it yet
+    users_without_xp = await db.users.find(
+        {"$or": [{"total_xp": {"$exists": False}}, {"level": {"$exists": False}}]},
+        {"_id": 0, "user_id": 1, "total_time_invested": 1, "badges": 1, "streak_days": 1},
+    ).to_list(None)
+    if users_without_xp:
+        from services.xp_engine import migrate_user_xp
+        logger.info(f"XP migration: {len(users_without_xp)} users need retroactive XP")
+        for u in users_without_xp:
+            total = await migrate_user_xp(u)
+            logger.info(f"  {u['user_id'][:8]}... → {total} XP")
+        logger.info("XP migration complete")
+
+    # XP history index (for analytics)
+    await db.xp_history.create_index([("user_id", 1), ("created_at", -1)])
+    await db.xp_history.create_index("source")
+
     # Start background tasks
     from services.action_generator import daily_generation_loop
     from services.feature_calculator import feature_computation_loop
