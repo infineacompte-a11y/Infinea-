@@ -903,6 +903,24 @@ async def create_manual_post(
     if hashtags:
         asyncio.create_task(update_hashtag_stats(hashtags))
 
+    # Fire-and-forget: extract link preview (OG card — Slack/Discord/iMessage pattern)
+    if has_text:
+        try:
+            from services.link_preview_service import extract_first_url, fetch_link_preview
+
+            first_url = extract_first_url(content)
+            if first_url:
+                async def _fetch_and_store_preview(act_id, url):
+                    preview = await fetch_link_preview(url)
+                    if preview:
+                        await db.activities.update_one(
+                            {"activity_id": act_id},
+                            {"$set": {"data.link_preview": preview}},
+                        )
+                asyncio.create_task(_fetch_and_store_preview(activity_id, first_url))
+        except Exception:
+            pass
+
     # Layer 2: async AI moderation (fire-and-forget, never blocks)
     try:
         from services.ai_moderation import moderate_content_async

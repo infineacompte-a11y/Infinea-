@@ -28,6 +28,7 @@ import {
 import { toast } from "sonner";
 import Sidebar from "@/components/Sidebar";
 import MentionText from "@/components/MentionText";
+import LinkPreviewCard from "@/components/LinkPreviewCard";
 import { API, authFetch, useAuth } from "@/App";
 
 // ── Activity type config (subset of CommunityFeedPage) ──
@@ -190,6 +191,9 @@ function HashtagActivityCard({ activity, currentUserId, onBookmarkChange }) {
             )}
             {activity.data?.images?.length > 0 && (
               <PostImageGrid images={activity.data.images} />
+            )}
+            {activity.data?.link_preview && (
+              <LinkPreviewCard preview={activity.data.link_preview} />
             )}
           </div>
         ) : (

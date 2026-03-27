@@ -24,6 +24,7 @@ import SafetyMenu from "@/components/SafetyMenu";
 import FollowButton from "@/components/FollowButton";
 import MentionInput from "@/components/MentionInput";
 import MentionText from "@/components/MentionText";
+import LinkPreviewCard from "@/components/LinkPreviewCard";
 import ReactionsDetailDialog from "@/components/ReactionsDetailDialog";
 import ReportDialog from "@/components/ReportDialog";
 import { API, authFetch, useAuth } from "@/App";
@@ -460,6 +461,9 @@ export default function ActivityDetailPage() {
                     )}
                     {activity.data?.images?.length > 0 && (
                       <PostImageGrid images={activity.data.images} />
+                    )}
+                    {activity.data?.link_preview && (
+                      <LinkPreviewCard preview={activity.data.link_preview} />
                     )}
                   </div>
                 ) : (

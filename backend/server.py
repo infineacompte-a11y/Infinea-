@@ -292,6 +292,9 @@ async def startup_event():
     # Activities — missing (user_id, pinned) for pinned activities query
     await db.activities.create_index([("user_id", 1), ("pinned", 1)])
 
+    # Link previews — URL cache for OG card extraction
+    await db.link_previews.create_index("url", unique=True)
+
     # Moderation actions — was ZERO indexes
     await db.moderation_actions.create_index("content_id")
     await db.moderation_actions.create_index([("author_id", 1), ("created_at", -1)])
