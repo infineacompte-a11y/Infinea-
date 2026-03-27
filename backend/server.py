@@ -277,6 +277,10 @@ async def startup_event():
     await db.hashtag_stats.create_index("tag", unique=True)
     await db.hashtag_stats.create_index([("use_count", -1)])
 
+    # Followed hashtags — user + tag unique, list by user
+    await db.followed_hashtags.create_index([("user_id", 1), ("tag", 1)], unique=True)
+    await db.followed_hashtags.create_index([("user_id", 1), ("followed_at", -1)])
+
     # Reactions — missing (user_id, created_at) for affinity computation
     await db.reactions.create_index([("user_id", 1), ("created_at", -1)])
 
