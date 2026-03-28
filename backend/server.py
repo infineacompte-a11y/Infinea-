@@ -212,9 +212,33 @@ app.include_router(api_router)
 # ── Prometheus /metrics endpoint (outside /api prefix) ──
 from fastapi.responses import Response
 
+METRICS_TOKEN = os.environ.get("METRICS_BEARER_TOKEN", "")
+
 @app.get("/metrics", include_in_schema=False)
-async def prometheus_metrics():
-    """Prometheus scrape endpoint. Not behind auth — standard practice."""
+async def prometheus_metrics(request: StarletteRequest):
+    """Prometheus scrape endpoint with optional Bearer token auth.
+
+    When METRICS_BEARER_TOKEN is set, requires valid Authorization header.
+    This is needed for Grafana Cloud Hosted Collector which validates auth.
+    Without the env var, endpoint is public (backward compatible).
+    """
+    # Auth check for Grafana Hosted Collector
+    if METRICS_TOKEN:
+        auth_header = request.headers.get("authorization", "")
+        if not auth_header:
+            return Response(
+                content="Missing Authorization header",
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        token = auth_header.replace("Bearer ", "").strip()
+        if token != METRICS_TOKEN:
+            return Response(
+                content="Invalid token",
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
     try:
         from services.metrics import get_metrics_response
         body, content_type = get_metrics_response()

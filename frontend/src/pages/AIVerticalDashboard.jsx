@@ -231,13 +231,14 @@ export default function AIVerticalDashboard() {
     { id: "drift", label: "Drift & Alertes", icon: AlertTriangle },
     { id: "trends", label: "Tendances", icon: TrendingUp },
     { id: "users", label: "Utilisateurs", icon: Eye },
+    { id: "monitoring", label: "Monitoring", icon: Gauge },
   ];
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const endpoints = ["overview", "coaching", "memory", "costs", "collective", "drift", "feature-trends", "users"];
+      const endpoints = ["overview", "coaching", "memory", "costs", "collective", "drift", "feature-trends", "users", "live-metrics"];
       const results = await Promise.allSettled(
         endpoints.map(e => authFetch(`${API}/api/admin/ai/${e}`).then(r => r.ok ? r.json() : null))
       );
@@ -742,6 +743,9 @@ export default function AIVerticalDashboard() {
 
           {/* ═══ USERS DRILL-DOWN ═══ */}
           {activeTab === "users" && <UsersTab data={data.users} />}
+
+          {/* ═══ MONITORING (Live Prometheus Metrics) ═══ */}
+          {activeTab === "monitoring" && <MonitoringTab data={data.live_metrics} />}
         </div>
       )}
     </div>
@@ -973,6 +977,225 @@ function UserDetailPanel({ user, stageLabels }) {
           Features calculees le {new Date(user.computed_at).toLocaleDateString("fr-FR")}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Monitoring Tab Component (Live Prometheus Metrics) ──
+function MonitoringTab({ data }) {
+  const metrics = data || {};
+  const http = metrics.http || {};
+  const llm = metrics.llm || {};
+  const cb = metrics.circuit_breaker || {};
+  const cbDetail = metrics.circuit_breaker_detail || {};
+  const biz = metrics.business || {};
+  const jobs = metrics.jobs || {};
+  const tokens = llm.tokens || {};
+
+  const cbStateColors = {
+    closed: "bg-green-100 text-green-700",
+    open: "bg-red-100 text-red-700",
+    half_open: "bg-yellow-100 text-yellow-700",
+  };
+  const cbStateLabels = {
+    closed: "OK",
+    open: "OUVERT",
+    half_open: "DEMI-OUVERT",
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        icon={Gauge}
+        title="Monitoring temps reel"
+        subtitle="Metriques Prometheus live depuis le backend"
+      />
+
+      {metrics.error && (
+        <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
+          Erreur: {metrics.error}
+        </div>
+      )}
+
+      {/* KPI Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KPICard
+          label="Requetes totales"
+          value={http.total_requests || 0}
+          icon={Activity}
+          color="teal"
+          tooltip="Total des requetes HTTP depuis le demarrage"
+        />
+        <KPICard
+          label="Appels LLM"
+          value={Object.values(llm.by_model || {}).reduce((a, m) => a + (m.calls || 0), 0)}
+          icon={Brain}
+          color="purple"
+          tooltip="Total des appels API Claude/OpenAI"
+        />
+        <KPICard
+          label="Cout LLM"
+          value={`$${(llm.total_cost_usd || 0).toFixed(3)}`}
+          icon={DollarSign}
+          color="orange"
+          tooltip="Cout total estime des appels LLM"
+        />
+        <KPICard
+          label="Retries LLM"
+          value={llm.total_retries || 0}
+          icon={RefreshCw}
+          color={llm.total_retries > 10 ? "red" : "green"}
+          tooltip="Nombre de retries (erreurs transitoires rattrapees)"
+        />
+      </div>
+
+      {/* Circuit Breaker Status */}
+      <div className="rounded-2xl border border-gray-200 bg-white/80 p-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <Shield size={16} className="text-teal-500" />
+          Circuit Breakers
+        </h3>
+        {Object.keys(cb).length === 0 ? (
+          <div className="text-sm text-gray-400">Aucun circuit breaker active (pas encore d'appels LLM)</div>
+        ) : (
+          <div className="flex gap-4">
+            {Object.entries(cb).map(([provider, state]) => (
+              <div key={provider} className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-700 capitalize">{provider}</span>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${cbStateColors[state] || "bg-gray-100"}`}>
+                  {cbStateLabels[state] || state}
+                </span>
+                {cbDetail[provider] && cbDetail[provider].consecutive_failures > 0 && (
+                  <span className="text-xs text-red-500">
+                    ({cbDetail[provider].consecutive_failures} echecs)
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Tokens Breakdown */}
+      <div className="rounded-2xl border border-gray-200 bg-white/80 p-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <Zap size={16} className="text-teal-500" />
+          Tokens LLM consommes
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: "Input", value: tokens.input || 0, color: "text-blue-600" },
+            { label: "Output", value: tokens.output || 0, color: "text-purple-600" },
+            { label: "Cache read", value: tokens.cache_read || 0, color: "text-green-600" },
+            { label: "Cache write", value: tokens.cache_write || 0, color: "text-orange-600" },
+          ].map(t => (
+            <div key={t.label} className="text-center">
+              <div className={`text-xl font-bold ${t.color}`}>
+                {t.value > 1000000 ? `${(t.value / 1000000).toFixed(1)}M` :
+                 t.value > 1000 ? `${(t.value / 1000).toFixed(1)}k` : t.value}
+              </div>
+              <div className="text-xs text-gray-400">{t.label}</div>
+            </div>
+          ))}
+        </div>
+        {tokens.cache_read > 0 && (
+          <div className="mt-3 text-xs text-green-600">
+            Cache hit rate: {Math.round((tokens.cache_read / Math.max(tokens.input + tokens.cache_read, 1)) * 100)}% d'economie
+          </div>
+        )}
+      </div>
+
+      {/* LLM by Model */}
+      {Object.keys(llm.by_model || {}).length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white/80 p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <Brain size={16} className="text-teal-500" />
+            Appels par modele
+          </h3>
+          <div className="space-y-2">
+            {Object.entries(llm.by_model).map(([model, stats]) => (
+              <div key={model} className="flex items-center justify-between text-sm">
+                <span className="font-mono text-gray-600">{model.replace("claude-", "").replace("-20250514", "").replace("-20251001", "")}</span>
+                <div className="flex gap-4">
+                  <span className="text-gray-700">{stats.calls} appels</span>
+                  {stats.failures > 0 && (
+                    <span className="text-red-500">{stats.failures} echecs</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* HTTP by Endpoint */}
+      {Object.keys(http.by_endpoint || {}).length > 0 && (
+        <div className="rounded-2xl border border-gray-200 bg-white/80 p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <Activity size={16} className="text-teal-500" />
+            Requetes par endpoint (top 10)
+          </h3>
+          <div className="space-y-1">
+            {Object.entries(http.by_endpoint)
+              .sort((a, b) => b[1].total - a[1].total)
+              .slice(0, 10)
+              .map(([endpoint, stats]) => (
+                <div key={endpoint} className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
+                  <span className="font-mono text-xs text-gray-600 truncate max-w-[200px]">{endpoint}</span>
+                  <div className="flex gap-3">
+                    <span className="text-gray-700">{stats.total}</span>
+                    {stats.errors > 0 && (
+                      <span className="text-red-500">{stats.errors} err</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Background Jobs */}
+      <div className="rounded-2xl border border-gray-200 bg-white/80 p-5">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+          <Timer size={16} className="text-teal-500" />
+          Jobs background
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <div className="text-xs text-gray-400">Feature computation</div>
+            <div className="text-lg font-bold text-gray-800">
+              {jobs.feature_computation?.users_processed || 0} users
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-400">Derniere execution</div>
+            {Object.entries(jobs.last_success || {}).map(([name, ts]) => (
+              <div key={name} className="text-sm text-gray-700">
+                {name}: {new Date(ts).toLocaleString("fr-FR")}
+              </div>
+            ))}
+            {Object.keys(jobs.last_success || {}).length === 0 && (
+              <div className="text-sm text-gray-400">Pas encore execute</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Grafana Link */}
+      <div className="rounded-2xl border border-teal-200 bg-teal-50/50 p-5 flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700">Grafana Cloud</h3>
+          <p className="text-xs text-gray-500">Dashboard avance avec historique et graphiques</p>
+        </div>
+        <a
+          href="https://infinea.grafana.net"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-4 py-2 rounded-lg bg-teal-500 text-white text-sm font-medium hover:bg-teal-600 transition-colors"
+        >
+          Ouvrir Grafana
+        </a>
+      </div>
     </div>
   );
 }
