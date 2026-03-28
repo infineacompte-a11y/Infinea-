@@ -61,6 +61,35 @@ function exportToJSON(data, filename) {
   a.click(); URL.revokeObjectURL(url);
 }
 
+// ── Export PDF ──
+function exportToPDF() {
+  // Inject print styles that preserve colors
+  const styleId = "ai-dashboard-print-styles";
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+      @media print {
+        body * { visibility: hidden !important; }
+        #ai-dashboard-print-area, #ai-dashboard-print-area * { visibility: visible !important; }
+        #ai-dashboard-print-area {
+          position: absolute !important; left: 0 !important; top: 0 !important;
+          width: 100% !important; padding: 24px !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          color-adjust: exact !important;
+        }
+        nav, button, .no-print, [class*="sidebar"], [class*="Sidebar"],
+        header, footer { display: none !important; }
+        .rounded-2xl { break-inside: avoid !important; }
+        @page { margin: 16mm; size: A4; }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  setTimeout(() => window.print(), 100);
+}
+
 // ── KPI Card ──
 function KPICard({ label, value, icon: Icon, trend, trendLabel, color = "teal", subtitle, tooltip }) {
   const colors = {
@@ -259,7 +288,7 @@ export default function AIVerticalDashboard() {
   const health = getHealthLabel(healthScore);
 
   return (
-    <div className="min-h-screen pb-20">
+    <div id="ai-dashboard-print-area" className="min-h-screen pb-20">
       {/* Header */}
       <div className="px-6 pt-6 pb-4">
         <div className="flex items-center justify-between mb-4">
@@ -302,12 +331,21 @@ export default function AIVerticalDashboard() {
               ))}
             </div>
             {/* Export */}
-            <Tooltip text="Exporter les donnees en JSON">
+            <Tooltip text="Exporter en JSON">
               <button
                 onClick={() => exportToJSON(data, "infinea-ai-dashboard")}
                 className="p-2 rounded-xl bg-white/80 border border-gray-200 text-gray-400 hover:text-gray-700 transition-all"
               >
                 <Download size={16} />
+              </button>
+            </Tooltip>
+            <Tooltip text="Telecharger le rapport PDF">
+              <button
+                onClick={exportToPDF}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-teal-50 border border-teal-200 text-teal-700 hover:bg-teal-100 transition-all text-sm font-medium"
+              >
+                <Download size={14} />
+                PDF
               </button>
             </Tooltip>
             {/* Refresh */}
