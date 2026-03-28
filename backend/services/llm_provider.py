@@ -103,6 +103,13 @@ class CircuitBreaker:
         if self.state == CircuitState.HALF_OPEN:
             self.state = CircuitState.CLOSED
             logger.info(f"Circuit breaker [{self.name}]: HALF_OPEN → CLOSED (recovered)")
+            # Fire-and-forget Slack alert on recovery
+            try:
+                import asyncio
+                from services.alerts import alert_circuit_breaker_recovered
+                asyncio.create_task(alert_circuit_breaker_recovered(self.name))
+            except Exception:
+                pass
         self.consecutive_failures = 0
 
     def record_failure(self):
@@ -120,6 +127,13 @@ class CircuitBreaker:
                 f"Circuit breaker [{self.name}]: CLOSED → OPEN "
                 f"({self.consecutive_failures} consecutive failures)"
             )
+            # Fire-and-forget Slack alert
+            try:
+                import asyncio
+                from services.alerts import alert_circuit_breaker_opened
+                asyncio.create_task(alert_circuit_breaker_opened(self.name, self.consecutive_failures))
+            except Exception:
+                pass
 
         if self.state == CircuitState.HALF_OPEN:
             self.half_open_probes += 1
@@ -246,19 +260,36 @@ async def call_llm(
     provider = _get_provider()
     resolved_model = model or get_model_for_tier(model_tier, provider)
 
+    # Instrument with Prometheus timing
+    start = time.monotonic()
+    result = None
+
     if provider == LLMProvider.ANTHROPIC:
-        return await _call_anthropic(
+        result = await _call_anthropic(
             system_prompt, user_prompt, resolved_model, max_tokens,
             caller, user_id, cache_system, messages,
         )
     elif provider == LLMProvider.OPENAI:
-        return await _call_openai(
+        result = await _call_openai(
             system_prompt, user_prompt, resolved_model, max_tokens,
             caller, user_id, messages,
         )
     else:
         logger.error(f"Unsupported LLM provider: {provider}")
         return None
+
+    # Record Prometheus metrics (non-blocking, never fails)
+    try:
+        from services.metrics import record_llm_call
+        duration = time.monotonic() - start
+        record_llm_call(
+            model=resolved_model, caller=caller,
+            success=result is not None, duration=duration,
+        )
+    except Exception:
+        pass
+
+    return result
 
 
 # ── Anthropic Implementation ──
