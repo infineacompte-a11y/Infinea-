@@ -28,7 +28,6 @@ import {
   Medal,
   Shield,
   PlusCircle,
-  Brain,
 } from "lucide-react";
 import InFineaLogo from "@/components/InFineaLogo";
 import { API, authFetch, useAuth } from "@/App";
