@@ -32,47 +32,20 @@ def get_ai_model(user: dict = None) -> str:
 
 
 async def call_ai(session_suffix: str, system_message: str, prompt: str, model: str = None) -> Optional[str]:
-    """Shared AI call wrapper using Anthropic Claude API via httpx.
-    Prompt caching enabled — repeated system prompts are cached for 90% savings."""
-    api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        return None
-    ai_model = model or "claude-haiku-4-5-20251001"
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client_http:
-            resp = await client_http.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json"
-                },
-                json={
-                    "model": ai_model,
-                    "max_tokens": 1000,
-                    "cache_control": {"type": "ephemeral"},
-                    "system": system_message,
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ]
-                }
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            # Track token usage (including cache metrics)
-            usage = data.get("usage", {})
-            await track_ai_usage(
-                model=ai_model,
-                caller=session_suffix,
-                input_tokens=usage.get("input_tokens", 0),
-                output_tokens=usage.get("output_tokens", 0),
-                cache_read_input_tokens=usage.get("cache_read_input_tokens", 0),
-                cache_creation_input_tokens=usage.get("cache_creation_input_tokens", 0),
-            )
-            return data["content"][0]["text"]
-    except Exception as e:
-        logger.error(f"AI call error ({session_suffix}): {e}")
-        return None
+    """Shared AI call wrapper — delegates to llm_provider for correct
+    cache_control placement and provider abstraction.
+
+    Kept for backward compatibility with existing endpoints.
+    New code should use llm_provider.call_llm() directly.
+    """
+    from services.llm_provider import call_llm
+    return await call_llm(
+        system_prompt=system_message,
+        user_prompt=prompt,
+        model=model,
+        caller=session_suffix,
+        cache_system=True,
+    )
 
 
 async def track_ai_usage(

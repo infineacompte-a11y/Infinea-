@@ -13,14 +13,16 @@ from services.feedback_loop import get_user_signals
 logger = logging.getLogger("scoring_engine")
 
 # Scoring weights (sum = 1.0)
-# Feedback signal takes 0.15 from the original budget,
-# other weights scaled down proportionally to preserve relative ordering.
-W_CATEGORY_AFFINITY = 0.25
-W_DURATION_FIT = 0.22
-W_ENERGY_MATCH = 0.17
-W_TIME_PERFORMANCE = 0.13
-W_NOVELTY_BONUS = 0.08
-W_FEEDBACK_SIGNAL = 0.15
+# 8-factor model: original 6 factors rebalanced + 2 new factors
+# (objective_alignment, session_quality) for vertical AI Phase 1.
+W_CATEGORY_AFFINITY = 0.22
+W_DURATION_FIT = 0.19
+W_ENERGY_MATCH = 0.15
+W_TIME_PERFORMANCE = 0.12
+W_NOVELTY_BONUS = 0.07
+W_FEEDBACK_SIGNAL = 0.08
+W_OBJECTIVE_ALIGNMENT = 0.10  # NEW: boost if action matches active objective
+W_SESSION_QUALITY = 0.07       # NEW: boost if action was previously rated highly
 
 # Energy adjacency map (exact=1.0, adjacent=0.5, opposite=0.1)
 _ENERGY_SCORES = {
@@ -121,22 +123,35 @@ def score_action(
     action_id = action.get("action_id", "")
     novelty_bonus = 0.2 if action_id in recent_ids else 1.0
 
-    # --- 6. Feedback signal (0.15) ---
+    # --- 6. Feedback signal (0.08) ---
     # Maps signal score from [-1, +1] to [0, 1] range for weighted sum.
     # Default 0.5 (neutral) when no signal exists for this action.
     feedback_signals = context.get("feedback_signals", {})
     raw_signal = feedback_signals.get(action_id, 0.0)
     feedback_score = (raw_signal + 1.0) / 2.0  # -1→0, 0→0.5, +1→1.0
 
+    # --- 7. Objective alignment (0.10) --- NEW
+    # Boost actions matching the user's active objective categories.
+    active_obj_cats = context.get("active_objective_categories", set())
+    objective_alignment = 1.0 if cat in active_obj_cats else 0.3
+
+    # --- 8. Session quality history (0.07) --- NEW
+    # Boost actions previously rated highly, penalize frequently abandoned ones.
+    # quality_history maps action_id → 0-1 normalized quality score.
+    quality_history = context.get("action_quality_history", {})
+    session_quality = quality_history.get(action_id, 0.5)
+
     # --- Weighted total ---
     # Use per-user adaptive weights if available, otherwise global defaults
     aw = features.get("adaptive_weights")
-    w_cat = aw["category_affinity"] if aw else W_CATEGORY_AFFINITY
-    w_dur = aw["duration_fit"] if aw else W_DURATION_FIT
-    w_ene = aw["energy_match"] if aw else W_ENERGY_MATCH
-    w_tim = aw["time_performance"] if aw else W_TIME_PERFORMANCE
-    w_nov = aw["novelty_bonus"] if aw else W_NOVELTY_BONUS
-    w_fb = aw["feedback_signal"] if aw else W_FEEDBACK_SIGNAL
+    w_cat = aw.get("category_affinity", W_CATEGORY_AFFINITY) if aw else W_CATEGORY_AFFINITY
+    w_dur = aw.get("duration_fit", W_DURATION_FIT) if aw else W_DURATION_FIT
+    w_ene = aw.get("energy_match", W_ENERGY_MATCH) if aw else W_ENERGY_MATCH
+    w_tim = aw.get("time_performance", W_TIME_PERFORMANCE) if aw else W_TIME_PERFORMANCE
+    w_nov = aw.get("novelty_bonus", W_NOVELTY_BONUS) if aw else W_NOVELTY_BONUS
+    w_fb = aw.get("feedback_signal", W_FEEDBACK_SIGNAL) if aw else W_FEEDBACK_SIGNAL
+    w_obj = aw.get("objective_alignment", W_OBJECTIVE_ALIGNMENT) if aw else W_OBJECTIVE_ALIGNMENT
+    w_sq = aw.get("session_quality", W_SESSION_QUALITY) if aw else W_SESSION_QUALITY
 
     total = (
         w_cat * category_affinity
@@ -145,6 +160,8 @@ def score_action(
         + w_tim * time_performance
         + w_nov * novelty_bonus
         + w_fb * feedback_score
+        + w_obj * objective_alignment
+        + w_sq * session_quality
     )
 
     return {
@@ -157,6 +174,8 @@ def score_action(
             "time_performance": round(time_performance, 3),
             "novelty_bonus": round(novelty_bonus, 3),
             "feedback_signal": round(feedback_score, 3),
+            "objective_alignment": round(objective_alignment, 3),
+            "session_quality": round(session_quality, 3),
         },
         "weights_used": {
             "category_affinity": round(w_cat, 4),
@@ -165,6 +184,8 @@ def score_action(
             "time_performance": round(w_tim, 4),
             "novelty_bonus": round(w_nov, 4),
             "feedback_signal": round(w_fb, 4),
+            "objective_alignment": round(w_obj, 4),
+            "session_quality": round(w_sq, 4),
         },
     }
 
