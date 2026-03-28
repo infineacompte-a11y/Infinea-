@@ -19,6 +19,12 @@ from models import AIRequest, CustomActionRequest, DebriefRequest, CoachChatRequ
 from services.scoring_engine import rank_actions_for_user, get_next_best_action
 from services.event_tracker import track_event
 from services.feedback_loop import record_signal
+# Vertical AI Phase 1
+from services.prompt_builder import build_system_prompt, get_prompt_version
+from services.user_model import build_deep_context
+from services.knowledge_engine import get_relevant_fragments
+from services.ai_feedback import record_feedback
+from services.llm_provider import call_llm, get_model_for_user, ModelTier
 
 router = APIRouter()
 
@@ -489,7 +495,10 @@ async def smart_predict(user: dict = Depends(get_current_user)):
 @limiter.limit("10/minute")
 async def get_ai_coach(request: Request, user: dict = Depends(get_current_user)):
     """Get personalized AI coach message for dashboard — context-aware"""
-    user_context = await build_user_context(user)
+    # Build deep user context (injects behavioral features + objectives)
+    deep_ctx = await build_deep_context(db, user, endpoint="coach_dashboard")
+    # Get user's active categories for knowledge selection
+    user_categories = [g for g in (user.get("user_profile") or {}).get("goals", [])]
     now = datetime.now(timezone.utc)
 
     # --- 1. Context detection: what just happened? ---
@@ -641,23 +650,27 @@ async def get_ai_coach(request: Request, user: dict = Depends(get_current_user))
             action_lines.append(f"  {i}: \"{a.get('title', 'Action')}\" ({a.get('category', '')}, {dur}, énergie: {energy})")
         actions_menu = "\n\nActions disponibles (classées par pertinence):\n" + "\n".join(action_lines)
 
-    # --- 4. Build prompt with context ---
-    prompt = f"""{user_context}{recent_info}{engagement_context}{objectives_context}{context_detail}
+    # --- 4. Build prompt with vertical AI system ---
+    system_prompt = build_system_prompt(
+        endpoint="coach_dashboard",
+        user_context=deep_ctx,
+        user_categories=user_categories,
+    )
+
+    prompt = f"""{recent_info}{engagement_context}{context_detail}
 
 Il est actuellement le {time_of_day} ({day_of_week}).
 Le streak actuel est de {user.get('streak_days', 0)} jours.{actions_menu}
 
-Génère un message de coach personnalisé adapté au CONTEXTE ci-dessus.
-Ta suggestion DOIT correspondre à une des actions disponibles (indique son numéro dans chosen_action).
-Réponds en JSON:
-{{
-    "greeting": "Message d'accueil personnalisé, adapté au contexte (1-2 phrases)",
-    "suggestion": "Suggestion basée sur l'action choisie — explique POURQUOI cette action est idéale MAINTENANT vu le contexte (1-2 phrases)",
-    "chosen_action": 0,
-    "context_note": "Note contextuelle courte (1 phrase)"
-}}"""
+Ta suggestion DOIT correspondre a une des actions disponibles (indique son numero dans chosen_action)."""
 
-    ai_response = await call_ai(f"coach_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
+    ai_response = await call_llm(
+        system_prompt=system_prompt,
+        user_prompt=prompt,
+        model=get_model_for_user(user),
+        caller=f"coach_{user['user_id']}",
+        user_id=user["user_id"],
+    )
     ai_result = parse_ai_json(ai_response)
 
     # Resolve suggested_action_id from AI choice
@@ -746,22 +759,12 @@ async def coach_chat(
         "created_at": now,
     })
 
-    # Build context for the AI
-    user_context = await build_user_context(user)
-
-    # Fetch recent sessions for context
-    recent_sessions = await db.user_sessions_history.find(
-        {"user_id": user["user_id"]},
-        {"_id": 0, "action_title": 1, "completed": 1, "started_at": 1, "actual_duration": 1}
-    ).sort("started_at", -1).limit(5).to_list(5)
-
-    sessions_ctx = ""
-    if recent_sessions:
-        lines = []
-        for s in recent_sessions:
-            status = "terminée" if s.get("completed") else "abandonnée"
-            lines.append(f"- {s.get('action_title', '?')} ({status}, {s.get('actual_duration', '?')} min)")
-        sessions_ctx = "\n\nDernières sessions:\n" + "\n".join(lines)
+    # Build deep context with behavioral features + objectives
+    user_categories = [g for g in (user.get("user_profile") or {}).get("goals", [])]
+    deep_ctx = await build_deep_context(
+        db, user, endpoint="coach_chat",
+        include_behavioral=True, include_objectives=True, include_social=True,
+    )
 
     # Fetch available actions for suggestions
     act_query = {}
@@ -771,51 +774,28 @@ async def coach_chat(
     actions_ctx = ""
     if available:
         lines = [f"- \"{a.get('title')}\" ({a.get('category')}, {a.get('duration_min')}-{a.get('duration_max')} min)" for a in available[:8]]
-        actions_ctx = "\n\nActions disponibles que tu peux suggérer:\n" + "\n".join(lines)
+        actions_ctx = "\n\nActions disponibles que tu peux suggerer:\n" + "\n".join(lines)
 
-    # Fetch active objectives for context
-    active_objectives = await db.objectives.find(
-        {"user_id": user["user_id"], "status": "active"},
-        {"_id": 0, "title": 1, "category": 1, "current_day": 1, "target_duration_days": 1,
-         "total_sessions": 1, "total_minutes": 1, "streak_days": 1, "progress_log": {"$slice": -3}}
-    ).to_list(5)
-
-    objectives_ctx = ""
-    if active_objectives:
-        lines = []
-        for o in active_objectives:
-            pct = round((o.get("current_day", 0) / max(o.get("target_duration_days", 1), 1)) * 100)
-            line = f"- \"{o.get('title')}\" (Jour {o.get('current_day', 0)}/{o.get('target_duration_days')}, {pct}%, streak {o.get('streak_days', 0)}j)"
-            # Add last session notes for continuity
-            log = o.get("progress_log", [])
-            if log:
-                last = log[-1]
-                if last.get("notes"):
-                    line += f"\n  Dernière note: \"{last['notes']}\""
-                if last.get("step_title"):
-                    line += f"\n  Dernier focus: {last['step_title']}"
-            lines.append(line)
-        objectives_ctx = "\n\nObjectifs actifs de l'utilisateur (IMPORTANT — réfère-toi à ces parcours):\n" + "\n".join(lines)
-
-    # Fetch micro-instants context (exploitation stats, best slots, trends)
+    # Fetch micro-instants context
     micro_instants_ctx = await _build_micro_instants_context(user["user_id"])
     if micro_instants_ctx:
         micro_instants_ctx = "\n\n" + micro_instants_ctx
 
-    # Build conversation history (last 20 messages for context window)
+    # Build conversation history (last 20 messages)
     history_docs = await db.coach_messages.find(
         {"user_id": user["user_id"]},
         {"_id": 0, "role": 1, "content": 1}
     ).sort("created_at", -1).limit(20).to_list(20)
     history_docs.reverse()
 
-    # Build messages array for Anthropic API (system + history)
-    system_prompt = f"""{COACH_CHAT_SYSTEM}
-
-{user_context}{sessions_ctx}{objectives_ctx}{actions_ctx}{micro_instants_ctx}
-
-Streak actuel: {user.get('streak_days', 0)} jours.
-Temps total investi: {user.get('total_time_invested', 0)} minutes."""
+    # Build system prompt with vertical AI layers
+    system_prompt = build_system_prompt(
+        endpoint="coach_chat",
+        user_context=deep_ctx,
+        user_categories=user_categories,
+    )
+    # Append dynamic context (actions, micro-instants) to system prompt
+    system_prompt += f"{actions_ctx}{micro_instants_ctx}"
 
     api_messages = []
     for msg in history_docs:
@@ -829,42 +809,16 @@ Temps total investi: {user.get('total_time_invested', 0)} minutes."""
         if not api_messages:
             api_messages = [{"role": "user", "content": user_message}]
 
-    # Call AI with full conversation
-    api_key = os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('OPENAI_API_KEY')
-    ai_model = get_ai_model(user)
-    assistant_content = None
-
-    if api_key:
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client_http:
-                resp = await client_http.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "x-api-key": api_key,
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json"
-                    },
-                    json={
-                        "model": ai_model,
-                        "max_tokens": 300,
-                        "system": system_prompt,
-                        "messages": api_messages,
-                    }
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                assistant_content = data["content"][0]["text"]
-                # Track token usage
-                usage = data.get("usage", {})
-                await track_ai_usage(
-                    model=ai_model,
-                    caller="coach_chat",
-                    input_tokens=usage.get("input_tokens", 0),
-                    output_tokens=usage.get("output_tokens", 0),
-                    user_id=user["user_id"],
-                )
-        except Exception as e:
-            logger.error(f"Coach chat AI error: {e}")
+    # Call AI with vertical AI system + full conversation history
+    assistant_content = await call_llm(
+        system_prompt=system_prompt,
+        user_prompt="",
+        model=get_model_for_user(user),
+        max_tokens=300,
+        caller="coach_chat",
+        user_id=user["user_id"],
+        messages=api_messages,
+    )
 
     if not assistant_content:
         assistant_content = "Je suis là pour t'aider ! Malheureusement j'ai un petit souci technique. Réessaie dans un instant."
@@ -896,6 +850,40 @@ async def clear_coach_history(request: Request, user: dict = Depends(get_current
     return {"deleted": result.deleted_count}
 
 
+# ============== AI COACH FEEDBACK (Vertical AI Phase 1) ==============
+
+from pydantic import BaseModel as _BaseModel
+
+
+class CoachFeedbackRequest(_BaseModel):
+    message_id: Optional[str] = None
+    rating: int  # 1 (not helpful) or 5 (very helpful)
+
+
+@router.post("/ai/coach/feedback")
+@limiter.limit("30/minute")
+async def submit_coach_feedback(
+    request: Request,
+    feedback_req: CoachFeedbackRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Submit feedback on an AI coach response (thumbs up/down)."""
+    rating = max(1, min(5, feedback_req.rating))
+    success = await record_feedback(
+        db=db,
+        user_id=user["user_id"],
+        endpoint="coach_chat",
+        rating=rating,
+        prompt_version=get_prompt_version(),
+        message_id=feedback_req.message_id,
+    )
+    await track_event(db, user["user_id"], "coach_response_rated", {
+        "rating": rating,
+        "message_id": feedback_req.message_id,
+    })
+    return {"success": success, "rating": rating}
+
+
 # ============== AI DEBRIEF ROUTE ==============
 
 @router.post("/ai/debrief")
@@ -906,7 +894,8 @@ async def get_ai_debrief(
     user: dict = Depends(get_current_user)
 ):
     """Get AI debrief after completing a session"""
-    user_context = await build_user_context(user)
+    deep_ctx = await build_deep_context(db, user, endpoint="debrief")
+    user_context = deep_ctx["full_text"]
 
     # Support both frontend format (duration_minutes) and legacy (actual_duration)
     duration = debrief_req.duration_minutes or debrief_req.actual_duration or 0
@@ -963,7 +952,18 @@ Réponds en JSON:
     "chosen_action": 0
 }}"""
 
-    ai_response = await call_ai(f"debrief_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
+    debrief_system = build_system_prompt(
+        endpoint="debrief",
+        user_context=deep_ctx,
+        user_categories=[g for g in (user.get("user_profile") or {}).get("goals", [])],
+    )
+    ai_response = await call_llm(
+        system_prompt=debrief_system,
+        user_prompt=prompt,
+        model=get_model_for_user(user),
+        caller=f"debrief_{user['user_id']}",
+        user_id=user["user_id"],
+    )
     ai_result = parse_ai_json(ai_response)
 
     # Resolve next_action_id from AI choice
@@ -1012,7 +1012,8 @@ Réponds en JSON:
 @limiter.limit("10/minute")
 async def get_weekly_analysis(request: Request, user: dict = Depends(get_current_user)):
     """Get AI-powered weekly progress analysis"""
-    user_context = await build_user_context(user)
+    deep_ctx = await build_deep_context(db, user, endpoint="weekly_analysis", include_social=True)
+    user_context = deep_ctx["full_text"]
 
     all_sessions = await db.user_sessions_history.find(
         {"user_id": user["user_id"], "completed": True},
@@ -1061,7 +1062,18 @@ Réponds en JSON:
     "personalized_tips": ["Conseil personnalisé 1", "Conseil personnalisé 2"]
 }}"""
 
-    ai_response = await call_ai(f"analysis_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
+    weekly_system = build_system_prompt(
+        endpoint="weekly_analysis",
+        user_context=deep_ctx,
+        user_categories=[g for g in (user.get("user_profile") or {}).get("goals", [])],
+    )
+    ai_response = await call_llm(
+        system_prompt=weekly_system,
+        user_prompt=prompt,
+        model=get_model_for_user(user),
+        caller=f"analysis_{user['user_id']}",
+        user_id=user["user_id"],
+    )
     ai_result = parse_ai_json(ai_response)
 
     await track_event(db, user["user_id"], "ai_weekly_analysis_generated", {
@@ -1110,14 +1122,22 @@ async def check_streak_risk(request: Request, user: dict = Depends(get_current_u
             return {"at_risk": False, "notification_sent": False, "message": None}
 
         if last_date == today - timedelta(days=1):
-            user_context = await build_user_context(user)
-            prompt = f"""{user_context}
+            deep_ctx = await build_deep_context(db, user, endpoint="streak_check")
+            streak_system = build_system_prompt(
+                endpoint="streak_check",
+                user_context=deep_ctx,
+            )
+            prompt = f"""Le streak de {streak} jours de l'utilisateur est en danger ! Il n'a pas encore fait de session aujourd'hui.
+Genere un message d'alerte motivant et court.
+Reponds en JSON: {{"title": "Titre court", "message": "Message motivant (1-2 phrases)"}}"""
 
-Le streak de {streak} jours de l'utilisateur est en danger ! Il n'a pas encore fait de session aujourd'hui.
-Génère un message d'alerte motivant et court pour l'encourager à maintenir son streak.
-Réponds en JSON: {{"title": "Titre court", "message": "Message motivant (1-2 phrases)"}}"""
-
-            ai_response = await call_ai(f"streak_alert_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
+            ai_response = await call_llm(
+                system_prompt=streak_system,
+                user_prompt=prompt,
+                model=get_model_for_user(user),
+                caller=f"streak_alert_{user['user_id']}",
+                user_id=user["user_id"],
+            )
             ai_result = parse_ai_json(ai_response)
 
             title = ai_result.get("title", f"Streak de {streak}j en danger !") if ai_result else f"Streak de {streak}j en danger !"
@@ -1163,30 +1183,26 @@ async def create_custom_action(
     user: dict = Depends(get_current_user)
 ):
     """Create a custom micro-action using AI"""
-    user_context = await build_user_context(user)
+    deep_ctx = await build_deep_context(db, user, endpoint="create_action", include_objectives=False)
+    cat_hint = f"\nCategorie preferee: {action_req.preferred_category}" if action_req.preferred_category else ""
+    dur_hint = f"\nDuree souhaitee: {action_req.preferred_duration} minutes" if action_req.preferred_duration else ""
 
-    cat_hint = f"\nCatégorie préférée: {action_req.preferred_category}" if action_req.preferred_category else ""
-    dur_hint = f"\nDurée souhaitée: {action_req.preferred_duration} minutes" if action_req.preferred_duration else ""
+    create_system = build_system_prompt(
+        endpoint="create_action",
+        user_context=deep_ctx,
+        user_categories=[action_req.preferred_category] if action_req.preferred_category else None,
+    )
 
-    prompt = f"""{user_context}
+    prompt = f"""L'utilisateur souhaite creer une micro-action personnalisee.
+Sa description: "{action_req.description}"{cat_hint}{dur_hint}"""
 
-L'utilisateur souhaite créer une micro-action personnalisée.
-Sa description: "{action_req.description}"{cat_hint}{dur_hint}
-
-Génère une micro-action complète et structurée.
-Réponds en JSON:
-{{
-    "title": "Titre court et accrocheur",
-    "description": "Description en 1-2 phrases",
-    "category": "learning|productivity|well_being",
-    "duration_min": 2,
-    "duration_max": 10,
-    "energy_level": "low|medium|high",
-    "instructions": ["Étape 1", "Étape 2", "Étape 3", "Étape 4"],
-    "icon": "sparkles"
-}}"""
-
-    ai_response = await call_ai(f"create_action_{user['user_id']}", AI_SYSTEM_MESSAGE, prompt, model=get_ai_model(user))
+    ai_response = await call_llm(
+        system_prompt=create_system,
+        user_prompt=prompt,
+        model=get_model_for_user(user),
+        caller=f"create_action_{user['user_id']}",
+        user_id=user["user_id"],
+    )
     ai_result = parse_ai_json(ai_response)
 
     action_id = f"custom_{uuid.uuid4().hex[:12]}"
