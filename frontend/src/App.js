@@ -49,6 +49,7 @@ const BlockedUsersPage = lazy(() => import("@/pages/BlockedUsersPage"));
 const MessagesPage = lazy(() => import("@/pages/MessagesPage"));
 const ConversationPage = lazy(() => import("@/pages/ConversationPage"));
 const AdminModerationPage = lazy(() => import("@/pages/AdminModerationPage"));
+const AIVerticalDashboard = lazy(() => import("@/pages/AIVerticalDashboard"));
 const SavedPage = lazy(() => import("@/pages/SavedPage"));
 const HashtagFeedPage = lazy(() => import("@/pages/HashtagFeedPage"));
 const NewGroupPage = lazy(() => import("@/pages/NewGroupPage"));
@@ -622,6 +623,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <AdminModerationPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/ai"
+        element={
+          <ProtectedRoute>
+            <AIVerticalDashboard />
           </ProtectedRoute>
         }
       />
