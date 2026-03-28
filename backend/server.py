@@ -194,6 +194,10 @@ async def startup_event():
     # Vertical AI Phase 1 — response feedback tracking
     await db.ai_response_feedback.create_index([("endpoint", 1), ("prompt_version", 1), ("created_at", -1)])
     await db.ai_response_feedback.create_index("user_id")
+    # Vertical AI Phase 2 — persistent AI memories
+    await db.ai_memories.create_index([("user_id", 1), ("category", 1)])
+    await db.ai_memories.create_index([("user_id", 1), ("created_at", -1)])
+    await db.ai_memories.create_index("expires_at", expireAfterSeconds=0)  # TTL auto-cleanup
     await db.user_features.create_index("user_id", unique=True)
     await db.user_features.create_index("computed_at")
     await db.action_signals.create_index([("user_id", 1), ("action_id", 1)], unique=True)
@@ -384,10 +388,12 @@ async def startup_event():
     from services.action_generator import daily_generation_loop
     from services.feature_calculator import feature_computation_loop
     from services.notification_scheduler import notification_scheduler_loop
+    from services.ai_memory import memory_cleanup_loop
     asyncio.create_task(daily_generation_loop(db))
     asyncio.create_task(feature_computation_loop(db))
     asyncio.create_task(notification_scheduler_loop(db))
-    logger.info("Background tasks started")
+    asyncio.create_task(memory_cleanup_loop(db))
+    logger.info("Background tasks started (including AI memory cleanup)")
 
 
 @app.on_event("shutdown")
