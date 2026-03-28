@@ -238,6 +238,26 @@ async def complete_session(
         signal = "completion" if completion.completed else "abandonment"
         await record_signal(db, user["user_id"], action_id, signal)
 
+        # Coach followed: if this action was suggested by coach, record signal
+        if completion.completed:
+            try:
+                last_coach = await db.coach_messages.find_one(
+                    {"user_id": user["user_id"], "role": "assistant", "suggested_action_id": action_id},
+                    sort=[("created_at", -1)],
+                )
+                if last_coach:
+                    await record_signal(db, user["user_id"], action_id, "coach_followed")
+                    await track_event(db, user["user_id"], "coach_suggestion_followed", {"action_id": action_id})
+            except Exception:
+                pass  # Never block session completion
+
+        # Highly rated: if user rated satisfaction 4-5, record signal
+        if completion.completed and hasattr(completion, 'satisfaction_rating') and completion.satisfaction_rating and completion.satisfaction_rating >= 4:
+            try:
+                await record_signal(db, user["user_id"], action_id, "highly_rated")
+            except Exception:
+                pass
+
     if completion.completed:
         # Update user stats
         user_doc = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
