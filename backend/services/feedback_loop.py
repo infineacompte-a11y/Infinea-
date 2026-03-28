@@ -45,17 +45,63 @@ async def record_signal(
     user_id: str,
     action_id: str,
     signal_type: str,
+    session_id: str = None,
 ) -> None:
     """
     Record a behavioral signal for a (user_id, action_id) pair.
 
     signal_type: "impression" | "click" | "completion" | "abandonment"
+                 | "coach_followed" | "highly_rated"
+
+    Server-side validation:
+    - completion/abandonment require a matching session in user_sessions_history
+    - Duplicate signals for same (user, action, type) within 60s are ignored
+    - Unknown signal types are rejected
 
     Fire-and-forget safe: catches all exceptions.
     """
     if signal_type not in SIGNAL_WEIGHTS:
         logger.warning(f"Unknown signal_type: {signal_type}")
         return
+
+    # ── Server-side validation for high-impact signals ──
+    # Prevents signal poisoning from rogue clients or frontend bugs
+    if signal_type in ("completion", "abandonment"):
+        try:
+            # Verify a real session exists for this user + action
+            session_query = {"user_id": user_id, "action_id": action_id}
+            if signal_type == "completion":
+                session_query["completed"] = True
+            recent_session = await db.user_sessions_history.find_one(
+                session_query,
+                {"_id": 1},
+                sort=[("started_at", -1)],
+            )
+            if not recent_session:
+                logger.debug(
+                    f"Signal {signal_type} rejected: no matching session "
+                    f"for user={user_id} action={action_id}"
+                )
+                return
+        except Exception:
+            pass  # On validation error, allow signal through (fail-open)
+
+    # ── Dedup: ignore duplicate signals within 60s ──
+    try:
+        existing = await db.action_signals.find_one(
+            {"user_id": user_id, "action_id": action_id},
+            {"_id": 0, "updated_at": 1, f"last_{signal_type}_at": 1},
+        )
+        if existing:
+            last_signal_at = existing.get(f"last_{signal_type}_at")
+            if last_signal_at:
+                from datetime import timedelta
+                if isinstance(last_signal_at, str):
+                    last_signal_at = datetime.fromisoformat(last_signal_at)
+                if (datetime.now(timezone.utc) - last_signal_at).total_seconds() < 60:
+                    return  # Duplicate within 60s — skip
+    except Exception:
+        pass  # On dedup check error, allow signal through
 
     weight = SIGNAL_WEIGHTS[signal_type]
 
@@ -78,12 +124,14 @@ async def record_signal(
         current_score = doc["score"] if doc else 0.0
         new_score = max(MIN_SCORE, min(MAX_SCORE, current_score + weight))
 
+        now = datetime.now(timezone.utc)
         await db.action_signals.update_one(
             {"user_id": user_id, "action_id": action_id},
             {
                 "$set": {
                     "score": round(new_score, 4),
-                    "updated_at": datetime.now(timezone.utc),
+                    "updated_at": now,
+                    f"last_{signal_type}_at": now,
                 },
                 "$inc": {counter_field: 1},
                 "$setOnInsert": {
