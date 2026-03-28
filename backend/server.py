@@ -191,6 +191,9 @@ async def startup_event():
     # Stripe webhook idempotency — auto-cleanup after 90 days
     await db.webhook_events.create_index("event_id", unique=True)
     await db.webhook_events.create_index("processed_at", expireAfterSeconds=90 * 24 * 3600)
+    # Vertical AI Phase 1 — response feedback tracking
+    await db.ai_response_feedback.create_index([("endpoint", 1), ("prompt_version", 1), ("created_at", -1)])
+    await db.ai_response_feedback.create_index("user_id")
     await db.user_features.create_index("user_id", unique=True)
     await db.user_features.create_index("computed_at")
     await db.action_signals.create_index([("user_id", 1), ("action_id", 1)], unique=True)
