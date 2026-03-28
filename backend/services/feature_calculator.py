@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger("feature_calculator")
 
-FEATURE_VERSION = 3
+FEATURE_VERSION = 4  # v4: added learning_velocity, difficulty_calibration, coaching_stage
 
 
 def _time_of_day_bucket(iso_timestamp: str) -> str:
@@ -308,9 +308,105 @@ async def compute_user_features(db, user_id: str) -> Dict[str, Any]:
         "engagement_trend": engagement["engagement_trend"],
         "session_momentum": engagement["session_momentum"],
         "category_fatigue": engagement["category_fatigue"],
+        # Vertical AI Phase 2 features
+        "learning_velocity": await _compute_learning_velocity(db, user_id),
+        "difficulty_calibration": await _compute_difficulty_calibration(db, user_id, sessions),
+        "coaching_stage": _compute_coaching_stage(completed_count, consistency_index, engagement["engagement_trend"]),
         "computed_at": datetime.now(timezone.utc).isoformat(),
         "feature_version": FEATURE_VERSION,
     }
+
+
+async def _compute_learning_velocity(db, user_id: str) -> dict:
+    """Compute progression speed per active objective.
+
+    Compares current_day vs expected pace (target_duration_days).
+    velocity > 1.0 = faster than planned, < 1.0 = slower.
+    """
+    try:
+        objectives = await db.objectives.find(
+            {"user_id": user_id, "status": "active"},
+            {"_id": 0, "objective_id": 1, "title": 1, "current_day": 1,
+             "target_duration_days": 1, "created_at": 1},
+        ).to_list(10)
+
+        velocities = {}
+        for obj in objectives:
+            target = obj.get("target_duration_days", 30) or 30
+            current = obj.get("current_day", 0) or 0
+            # Calculate expected day based on calendar time since creation
+            try:
+                created = datetime.fromisoformat(obj.get("created_at", ""))
+                if created.tzinfo is None:
+                    created = created.replace(tzinfo=timezone.utc)
+                elapsed_days = max(1, (datetime.now(timezone.utc) - created).days)
+            except (ValueError, TypeError):
+                elapsed_days = max(1, current)
+
+            expected_day = min(target, elapsed_days)
+            velocity = current / expected_day if expected_day > 0 else 1.0
+            velocities[obj.get("objective_id", obj.get("title", "unknown"))] = round(velocity, 2)
+
+        return velocities
+    except Exception:
+        return {}
+
+
+async def _compute_difficulty_calibration(db, user_id: str, sessions: list) -> dict:
+    """Compute completion rate by difficulty level.
+
+    Returns optimal difficulty zone where completion is highest
+    without being trivially easy (> 0.9 = too easy).
+    """
+    try:
+        # Count completion by difficulty rating
+        by_difficulty = {}
+        for s in sessions:
+            diff = s.get("difficulty_rating")
+            if diff and isinstance(diff, (int, float)) and 1 <= diff <= 5:
+                key = str(int(diff))
+                if key not in by_difficulty:
+                    by_difficulty[key] = {"completed": 0, "total": 0}
+                by_difficulty[key]["total"] += 1
+                if s.get("completed"):
+                    by_difficulty[key]["completed"] += 1
+
+        if not by_difficulty:
+            return {"optimal_zone": [2, 3], "completion_by_difficulty": {}}
+
+        rates = {}
+        for diff, counts in by_difficulty.items():
+            rates[diff] = round(counts["completed"] / counts["total"], 2) if counts["total"] > 0 else 0
+
+        # Find optimal zone: highest completion that's not trivially easy (< 0.95)
+        optimal = [int(d) for d, r in rates.items() if 0.4 <= r <= 0.95]
+        if not optimal:
+            optimal = [2, 3]  # Default zone
+
+        return {
+            "optimal_zone": sorted(optimal)[:2],
+            "completion_by_difficulty": rates,
+        }
+    except Exception:
+        return {"optimal_zone": [2, 3], "completion_by_difficulty": {}}
+
+
+def _compute_coaching_stage(total_completed: int, consistency: float, trend: float) -> str:
+    """Determine Prochaska TTM stage from behavioral signals.
+
+    Mirrors coaching_engine.assess_stage() but computed in batch
+    and stored in user_features for injection into prompts.
+    """
+    if total_completed == 0:
+        return "precontemplation"
+    elif total_completed < 10 or consistency < 0.15:
+        return "contemplation"
+    elif total_completed < 30 or consistency < 0.4:
+        return "preparation"
+    elif total_completed < 100 or consistency < 0.7:
+        return "action"
+    else:
+        return "maintenance"
 
 
 def _empty_features(user_id: str) -> Dict[str, Any]:
@@ -335,6 +431,10 @@ def _empty_features(user_id: str) -> Dict[str, Any]:
         "engagement_trend": 0.0,
         "session_momentum": 0,
         "category_fatigue": {},
+        # Vertical AI Phase 2 features
+        "learning_velocity": {},
+        "difficulty_calibration": {"optimal_zone": [2, 3], "completion_by_difficulty": {}},
+        "coaching_stage": "precontemplation",
         "computed_at": datetime.now(timezone.utc).isoformat(),
         "feature_version": FEATURE_VERSION,
     }
