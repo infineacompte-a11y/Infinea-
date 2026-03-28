@@ -17,7 +17,8 @@ Provides real-time KPIs across 8 dimensions:
 
 import os
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Depends, Query
 
 from database import db
 from auth import get_current_user
@@ -324,4 +325,120 @@ async def get_feature_trends(user: dict = Depends(get_current_user)):
             "avg_engagement_trend": round(t["avg_engagement"], 3) if t["avg_engagement"] else None,
             "users_computed": t["user_count"],
         } for t in trends],
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 8. USERS DRILL-DOWN — Individual user AI profiles
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/users")
+async def get_ai_users(
+    user: dict = Depends(get_current_user),
+    sort: str = Query("engagement_trend", description="Sort field"),
+    order: str = Query("asc", description="asc or desc"),
+    stage: Optional[str] = Query(None, description="Filter by coaching stage"),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """List users with their AI features for drill-down analysis."""
+    _require_admin(user)
+
+    query = {}
+    if stage:
+        query["coaching_stage"] = stage
+
+    sort_dir = 1 if order == "asc" else -1
+    users_features = await db.user_features.find(
+        query,
+        {"_id": 0, "user_id": 1, "completion_rate_global": 1, "consistency_index": 1,
+         "engagement_trend": 1, "total_sessions": 1, "total_completed": 1,
+         "abandonment_rate": 1, "session_momentum": 1, "coaching_stage": 1,
+         "active_days_last_30": 1, "preferred_action_duration": 1, "computed_at": 1},
+    ).sort(sort, sort_dir).limit(limit).to_list(limit)
+
+    # Enrich with user names
+    user_ids = [f["user_id"] for f in users_features]
+    users_docs = await db.users.find(
+        {"user_id": {"$in": user_ids}},
+        {"_id": 0, "user_id": 1, "name": 1, "display_name": 1, "email": 1, "streak_days": 1},
+    ).to_list(len(user_ids))
+    user_map = {u["user_id"]: u for u in users_docs}
+
+    # Enrich with memory count
+    memory_pipeline = [
+        {"$match": {"user_id": {"$in": user_ids}, "superseded_by": None}},
+        {"$group": {"_id": "$user_id", "count": {"$sum": 1}}},
+    ]
+    memory_counts = await db.ai_memories.aggregate(memory_pipeline).to_list(len(user_ids))
+    mem_map = {m["_id"]: m["count"] for m in memory_counts}
+
+    result = []
+    for f in users_features:
+        uid = f["user_id"]
+        u = user_map.get(uid, {})
+        result.append({
+            **f,
+            "name": u.get("display_name") or u.get("name", "Inconnu"),
+            "email": u.get("email", ""),
+            "streak_days": u.get("streak_days", 0),
+            "memories_count": mem_map.get(uid, 0),
+        })
+
+    return {"users": result, "total": len(result)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 9. WEEK-OVER-WEEK COMPARISON
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/comparison")
+async def get_weekly_comparison(user: dict = Depends(get_current_user)):
+    """Compare this week vs last week across key metrics."""
+    _require_admin(user)
+
+    now = datetime.now(timezone.utc)
+    this_week_start = (now - timedelta(days=7)).isoformat()
+    last_week_start = (now - timedelta(days=14)).isoformat()
+    last_week_end = (now - timedelta(days=7)).isoformat()
+
+    async def count_events(event_type, start, end=None):
+        q = {"event_type": event_type, "timestamp": {"$gte": start}}
+        if end:
+            q["timestamp"]["$lt"] = end
+        return await db.event_log.count_documents(q)
+
+    async def sum_costs(start, end=None):
+        q = {"created_at": {"$gte": start}}
+        if end:
+            q["created_at"]["$lt"] = end
+        pipeline = [{"$match": q}, {"$group": {"_id": None, "total": {"$sum": "$estimated_cost_usd"}}}]
+        r = await db.ai_usage.aggregate(pipeline).to_list(1)
+        return round(r[0]["total"], 4) if r else 0
+
+    # This week
+    tw_sessions = await count_events("action_completed", this_week_start)
+    tw_coach = await count_events("ai_coach_served", this_week_start)
+    tw_cost = await sum_costs(this_week_start)
+    tw_active = len(await db.user_sessions_history.distinct("user_id", {"started_at": {"$gte": this_week_start}}))
+
+    # Last week
+    lw_sessions = await count_events("action_completed", last_week_start, last_week_end)
+    lw_coach = await count_events("ai_coach_served", last_week_start, last_week_end)
+    lw_cost = await sum_costs(last_week_start, last_week_end)
+    lw_active = len(await db.user_sessions_history.distinct("user_id", {"started_at": {"$gte": last_week_start, "$lt": last_week_end}}))
+
+    def delta(current, previous):
+        if previous == 0:
+            return 100 if current > 0 else 0
+        return round(((current - previous) / previous) * 100, 1)
+
+    return {
+        "this_week": {"sessions": tw_sessions, "coach_served": tw_coach, "cost_usd": tw_cost, "active_users": tw_active},
+        "last_week": {"sessions": lw_sessions, "coach_served": lw_coach, "cost_usd": lw_cost, "active_users": lw_active},
+        "deltas": {
+            "sessions": delta(tw_sessions, lw_sessions),
+            "coach_served": delta(tw_coach, lw_coach),
+            "cost_usd": delta(tw_cost, lw_cost),
+            "active_users": delta(tw_active, lw_active),
+        },
     }
