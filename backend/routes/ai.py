@@ -26,7 +26,7 @@ from services.knowledge_engine import get_relevant_fragments
 from services.ai_feedback import record_feedback
 from services.llm_provider import call_llm, get_model_for_user, ModelTier
 # Vertical AI Phase 2
-from services.coaching_engine import assess_and_get_directives, get_followup_context
+from services.coaching_engine import assess_and_get_directives, get_followup_context, detect_behavioral_drift, format_drift_for_prompt
 from services.ai_memory import extract_memories, get_user_memories, format_memories_for_prompt
 
 router = APIRouter()
@@ -664,10 +664,15 @@ async def get_ai_coach(request: Request, user: dict = Depends(get_current_user))
         actions_menu = "\n\nActions disponibles (classées par pertinence):\n" + "\n".join(action_lines)
 
     # --- 4. Build prompt with vertical AI system ---
-    # Phase 2: coaching stage + memories
+    # Phase 2: coaching stage + memories + drift detection
     _stage, coaching_text = await assess_and_get_directives(db, user["user_id"], user)
     memories = await get_user_memories(db, user["user_id"])
     memories_text = await format_memories_for_prompt(memories)
+    # Detect behavioral drift and inject alert into coaching context
+    drift = await detect_behavioral_drift(db, user["user_id"], deep_ctx.get("coaching_signals", {}))
+    drift_text = format_drift_for_prompt(drift)
+    if drift_text:
+        coaching_text = f"{coaching_text}\n\n{drift_text}"
 
     system_prompt = build_system_prompt(
         endpoint="coach_dashboard",
@@ -808,13 +813,17 @@ async def coach_chat(
     ).sort("created_at", -1).limit(20).to_list(20)
     history_docs.reverse()
 
-    # Phase 2: coaching stage + memories + followup
+    # Phase 2: coaching stage + memories + followup + drift
     _stage, coaching_text = await assess_and_get_directives(db, user["user_id"], user)
     memories = await get_user_memories(db, user["user_id"])
     memories_text = await format_memories_for_prompt(memories)
     followup = await get_followup_context(db, user["user_id"])
     if followup:
         coaching_text = f"{coaching_text}\n\n{followup}"
+    drift = await detect_behavioral_drift(db, user["user_id"], deep_ctx.get("coaching_signals", {}))
+    drift_text = format_drift_for_prompt(drift)
+    if drift_text:
+        coaching_text = f"{coaching_text}\n\n{drift_text}"
 
     # Build system prompt with vertical AI layers
     system_prompt = build_system_prompt(

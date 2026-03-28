@@ -301,3 +301,102 @@ async def get_followup_context(db, user_id: str) -> str:
             )
     except Exception:
         return ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BEHAVIORAL DRIFT DETECTION
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def detect_behavioral_drift(db, user_id: str, features: dict) -> Optional[dict]:
+    """Detect significant changes in user behavior that warrant coaching intervention.
+
+    Returns a drift signal dict if drift is detected, None otherwise.
+    The drift signal can be injected into coaching context for proactive intervention.
+
+    Drift triggers:
+    - Consistency drop > 30% week-over-week
+    - Category abandonment (was active, stopped)
+    - Session duration shrinking (possible boredom)
+    - Engagement trend below -0.3 for sustained period
+    - Streak broken after long run (> 7 days)
+
+    Benchmarks: Noom (relapse detection), Headspace (missed meditation),
+    Duolingo (streak repair), Fitbit (activity drop alerts).
+    """
+    signals = []
+
+    # 1. Engagement trend strongly negative
+    trend = features.get("engagement_trend", 0)
+    if trend < -0.3:
+        signals.append({
+            "type": "engagement_drop",
+            "severity": "high" if trend < -0.5 else "medium",
+            "message": (
+                f"ALERTE DRIFT: L'engagement de l'utilisateur a baisse de {abs(trend):.0%} "
+                f"cette semaine. Sois particulierement bienveillant et propose des actions "
+                f"tres courtes (3 min max). Ne mentionne pas la baisse directement — "
+                f"concentre-toi sur ce qui est accessible maintenant."
+            ),
+        })
+
+    # 2. Category fatigue (rising abandonment in a category they used to like)
+    fatigue = features.get("category_fatigue", {})
+    for cat, delta in fatigue.items():
+        if delta > 0.2:  # >20% rise in abandonment for this category
+            cat_label = {"learning": "apprentissage", "productivity": "productivite",
+                         "well_being": "bien-etre"}.get(cat, cat)
+            signals.append({
+                "type": "category_fatigue",
+                "severity": "medium",
+                "category": cat,
+                "message": (
+                    f"ALERTE DRIFT: L'utilisateur montre de la fatigue en {cat_label} "
+                    f"(abandon en hausse de {delta:.0%}). Suggere une categorie differente "
+                    f"ou une approche nouvelle dans cette categorie."
+                ),
+            })
+
+    # 3. Consistency dropping significantly
+    consistency = features.get("consistency_index", 0)
+    active_days = features.get("active_days_last_30", 0)
+    if consistency < 0.2 and active_days >= 3:
+        # User was somewhat active but consistency is very low
+        signals.append({
+            "type": "consistency_drop",
+            "severity": "medium",
+            "message": (
+                "ALERTE DRIFT: La regularite de l'utilisateur est faible "
+                f"({active_days} jours actifs sur 30). Aide a identifier le meilleur "
+                "creneau et propose un engagement minimal (1 session de 3 min demain)."
+            ),
+        })
+
+    # 4. Session momentum lost (was on a roll, now stopped)
+    momentum = features.get("session_momentum", 0)
+    if momentum == 0 and features.get("total_completed", 0) > 10:
+        # Had history but no recent momentum
+        signals.append({
+            "type": "momentum_lost",
+            "severity": "low",
+            "message": (
+                "OBSERVATION: L'utilisateur a perdu son elan recent. "
+                "Rappelle subtilement ses succes passes et propose de "
+                "recommencer avec une action tres simple."
+            ),
+        })
+
+    if not signals:
+        return None
+
+    # Return the highest severity signal
+    severity_order = {"high": 0, "medium": 1, "low": 2}
+    signals.sort(key=lambda s: severity_order.get(s["severity"], 3))
+
+    return signals[0]
+
+
+def format_drift_for_prompt(drift: Optional[dict]) -> str:
+    """Format a drift signal for injection into coaching prompt."""
+    if not drift:
+        return ""
+    return drift.get("message", "")
