@@ -441,64 +441,108 @@ def _empty_features(user_id: str) -> Dict[str, Any]:
 
 
 async def compute_all_users_features(db) -> Dict[str, Any]:
-    """Compute features for all users who have at least 1 session."""
+    """Compute features for all users who have at least 1 session.
+
+    Optimized for scale:
+    - Concurrent batch processing (10 users in parallel)
+    - asyncio.Semaphore prevents DB connection exhaustion
+    - Prometheus metrics for duration tracking
+    - Slack alert on failure
+
+    Benchmark: Celery worker pools (bounded concurrency),
+    asyncio.gather with Semaphore (no external dependency).
+
+    Performance:
+    - Sequential (old): 100k users × 50ms = ~83 min
+    - Batched (new): 100k users × 50ms / 10 concurrency = ~8.3 min (10x faster)
+    """
+    import time as _time
+
     user_ids = await db.user_sessions_history.distinct("user_id")
     processed = 0
     errors = 0
+    start_time = _time.monotonic()
 
     from services.weight_learner import compute_adaptive_weights
+    from services.cache import cache_set, TTL_USER_FEATURES
 
-    for uid in user_ids:
-        try:
-            features = await compute_user_features(db, uid)
+    # Bounded concurrency: max 10 concurrent user computations
+    # Prevents MongoDB connection pool exhaustion
+    BATCH_CONCURRENCY = 10
+    semaphore = asyncio.Semaphore(BATCH_CONCURRENCY)
+    snapshot_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-            # Learn adaptive weights if enough data
-            adaptive = await compute_adaptive_weights(db, uid, features)
-            if adaptive:
-                features["adaptive_weights"] = adaptive
-            else:
-                features["adaptive_weights"] = None  # signals: use global defaults
-
-            await db.user_features.update_one(
-                {"user_id": uid},
-                {"$set": features},
-                upsert=True,
-            )
-
-            # Cache in Redis for fast reads by scoring engine
-            from services.cache import cache_set, TTL_USER_FEATURES
-            await cache_set(f"user_features:{uid}", features, ttl=TTL_USER_FEATURES)
-
-            # Snapshot to history for trend analysis (daily, deduplicated by date)
-            snapshot_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    async def _process_user(uid: str) -> bool:
+        """Process a single user with semaphore-bounded concurrency."""
+        async with semaphore:
             try:
-                await db.user_features_history.update_one(
-                    {"user_id": uid, "snapshot_date": snapshot_date},
-                    {"$set": {
-                        "user_id": uid,
-                        "snapshot_date": snapshot_date,
-                        "completion_rate_global": features.get("completion_rate_global"),
-                        "consistency_index": features.get("consistency_index"),
-                        "engagement_trend": features.get("engagement_trend"),
-                        "active_days_last_30": features.get("active_days_last_30"),
-                        "total_sessions": features.get("total_sessions"),
-                        "total_completed": features.get("total_completed"),
-                        "abandonment_rate": features.get("abandonment_rate"),
-                        "session_momentum": features.get("session_momentum"),
-                        "coaching_stage": features.get("coaching_stage"),
-                        "learning_velocity": features.get("learning_velocity"),
-                        "feature_version": features.get("feature_version"),
-                        "computed_at": features.get("computed_at"),
-                    }},
-                    upsert=True,
-                )
-            except Exception:
-                pass  # Never block on history
+                features = await compute_user_features(db, uid)
 
+                adaptive = await compute_adaptive_weights(db, uid, features)
+                features["adaptive_weights"] = adaptive
+
+                await db.user_features.update_one(
+                    {"user_id": uid}, {"$set": features}, upsert=True,
+                )
+
+                await cache_set(f"user_features:{uid}", features, ttl=TTL_USER_FEATURES)
+
+                try:
+                    await db.user_features_history.update_one(
+                        {"user_id": uid, "snapshot_date": snapshot_date},
+                        {"$set": {
+                            "user_id": uid,
+                            "snapshot_date": snapshot_date,
+                            "completion_rate_global": features.get("completion_rate_global"),
+                            "consistency_index": features.get("consistency_index"),
+                            "engagement_trend": features.get("engagement_trend"),
+                            "active_days_last_30": features.get("active_days_last_30"),
+                            "total_sessions": features.get("total_sessions"),
+                            "total_completed": features.get("total_completed"),
+                            "abandonment_rate": features.get("abandonment_rate"),
+                            "session_momentum": features.get("session_momentum"),
+                            "coaching_stage": features.get("coaching_stage"),
+                            "learning_velocity": features.get("learning_velocity"),
+                            "feature_version": features.get("feature_version"),
+                            "computed_at": features.get("computed_at"),
+                        }},
+                        upsert=True,
+                    )
+                except Exception:
+                    pass
+
+                return True
+            except Exception as e:
+                logger.error(f"Feature computation failed for user {uid}: {e}")
+                return False
+
+    # Process all users with bounded concurrency
+    results = await asyncio.gather(
+        *[_process_user(uid) for uid in user_ids],
+        return_exceptions=True,
+    )
+
+    for r in results:
+        if r is True:
             processed += 1
-        except Exception as e:
-            logger.error(f"Feature computation failed for user {uid}: {e}")
+        else:
             errors += 1
+
+    duration = _time.monotonic() - start_time
+
+    # Prometheus metrics
+    try:
+        from services.metrics import (
+            FEATURE_COMPUTATION_DURATION, FEATURE_COMPUTATION_USERS,
+            BACKGROUND_JOB_STATUS,
+        )
+        FEATURE_COMPUTATION_DURATION.observe(duration)
+        FEATURE_COMPUTATION_USERS.set(processed)
+        BACKGROUND_JOB_STATUS.labels(job_name="feature_computation").set(
+            datetime.now(timezone.utc).timestamp()
+        )
+    except Exception:
+        pass
 
     # Log the computation run
     today = datetime.now(timezone.utc).date().isoformat()
@@ -506,15 +550,35 @@ async def compute_all_users_features(db) -> Dict[str, Any]:
         "date": today,
         "users_processed": processed,
         "errors": errors,
+        "duration_seconds": round(duration, 1),
+        "concurrency": BATCH_CONCURRENCY,
         "computed_at": datetime.now(timezone.utc).isoformat(),
     })
 
-    logger.info(f"Feature computation complete: {processed} users processed, {errors} errors")
+    logger.info(
+        f"Feature computation complete: {processed}/{len(user_ids)} users "
+        f"in {duration:.1f}s ({errors} errors, concurrency={BATCH_CONCURRENCY})"
+    )
+
+    # Alert on high error rate
+    if errors > 0 and len(user_ids) > 0:
+        error_rate = errors / len(user_ids)
+        if error_rate > 0.1:  # > 10% failure
+            try:
+                from services.alerts import alert_background_job_failed
+                await alert_background_job_failed(
+                    "feature_computation",
+                    f"{errors}/{len(user_ids)} users failed ({error_rate:.0%})"
+                )
+            except Exception:
+                pass
+
     return {
         "status": "completed",
         "date": today,
         "users_processed": processed,
         "errors": errors,
+        "duration_seconds": round(duration, 1),
     }
 
 
@@ -528,6 +592,11 @@ async def feature_computation_loop(db):
             await compute_all_users_features(db)
         except Exception as e:
             logger.error(f"Feature computation loop error: {e}")
+            try:
+                from services.alerts import alert_background_job_failed
+                await alert_background_job_failed("feature_computation_loop", str(e)[:200])
+            except Exception:
+                pass
 
         # Recompute every 6 hours
         await asyncio.sleep(6 * 3600)

@@ -47,13 +47,29 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        duration_ms = round((time.monotonic() - start) * 1000, 1)
+        duration_s = time.monotonic() - start
+        duration_ms = round(duration_s * 1000, 1)
         response.headers["X-Request-ID"] = request_id
 
-        # Log slow requests (> 5s) for performance monitoring
+        # Prometheus metrics (skip /metrics endpoint itself to avoid recursion)
+        path = request.url.path
+        if path != "/metrics":
+            try:
+                from services.metrics import record_http_request
+                record_http_request(request.method, path, response.status_code, duration_s)
+            except Exception:
+                pass
+
+        # Log slow requests (> 5s) + alert on very slow (> 10s)
         if duration_ms > 5000:
-            path = request.url.path
             logger.warning(f"Slow request [{request_id}] {request.method} {path}: {duration_ms}ms")
+        if duration_ms > 10000:
+            try:
+                from services.alerts import alert_slow_request
+                _asyncio_import = __import__("asyncio")
+                _asyncio_import.create_task(alert_slow_request(request.method, path, duration_ms, request_id))
+            except Exception:
+                pass
 
         return response
 
@@ -191,6 +207,20 @@ async def health_check():
 
 # ── Mount router + CORS ──
 app.include_router(api_router)
+
+
+# ── Prometheus /metrics endpoint (outside /api prefix) ──
+from fastapi.responses import Response
+
+@app.get("/metrics", include_in_schema=False)
+async def prometheus_metrics():
+    """Prometheus scrape endpoint. Not behind auth — standard practice."""
+    try:
+        from services.metrics import get_metrics_response
+        body, content_type = get_metrics_response()
+        return Response(content=body, media_type=content_type)
+    except Exception:
+        return Response(content="# metrics unavailable\n", media_type="text/plain")
 
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 
