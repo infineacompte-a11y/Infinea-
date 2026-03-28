@@ -28,6 +28,8 @@ from services.llm_provider import call_llm, get_model_for_user, ModelTier
 # Vertical AI Phase 2
 from services.coaching_engine import assess_and_get_directives, get_followup_context, detect_behavioral_drift, format_drift_for_prompt
 from services.ai_memory import extract_memories, get_user_memories, format_memories_for_prompt
+# Vertical AI Phase 3
+from services.collective_intelligence import get_collective_insights
 
 router = APIRouter()
 
@@ -673,6 +675,13 @@ async def get_ai_coach(request: Request, user: dict = Depends(get_current_user))
     drift_text = format_drift_for_prompt(drift)
     if drift_text:
         coaching_text = f"{coaching_text}\n\n{drift_text}"
+    # Phase 3: collective insights
+    user_segment = deep_ctx.get("coaching_signals", {}).get("coaching_stage", "beginner")
+    segment_map = {"precontemplation": "beginner", "contemplation": "beginner",
+                   "preparation": "intermediate", "action": "intermediate", "maintenance": "advanced"}
+    collective = await get_collective_insights(db, segment_map.get(user_segment, "all"))
+    if collective:
+        memories_text = f"{memories_text}\n\n{collective}" if memories_text else collective
 
     system_prompt = build_system_prompt(
         endpoint="coach_dashboard",
@@ -824,6 +833,13 @@ async def coach_chat(
     drift_text = format_drift_for_prompt(drift)
     if drift_text:
         coaching_text = f"{coaching_text}\n\n{drift_text}"
+    # Phase 3: collective insights
+    user_segment = deep_ctx.get("coaching_signals", {}).get("coaching_stage", "beginner")
+    segment_map = {"precontemplation": "beginner", "contemplation": "beginner",
+                   "preparation": "intermediate", "action": "intermediate", "maintenance": "advanced"}
+    collective = await get_collective_insights(db, segment_map.get(user_segment, "all"))
+    if collective:
+        memories_text = f"{memories_text}\n\n{collective}" if memories_text else collective
 
     # Build system prompt with vertical AI layers
     system_prompt = build_system_prompt(
