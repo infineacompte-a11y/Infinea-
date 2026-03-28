@@ -815,12 +815,36 @@ async def coach_chat(
     if micro_instants_ctx:
         micro_instants_ctx = "\n\n" + micro_instants_ctx
 
-    # Build conversation history (last 20 messages)
+    # ── Sliding window: keep last 10 messages, summarize older context ──
+    # Benchmark: ChatGPT memory (sliding window + summary), Claude Projects
+    # (context compression). We use metadata-based summary (no extra LLM call).
+    WINDOW_SIZE = 10
     history_docs = await db.coach_messages.find(
         {"user_id": user["user_id"]},
-        {"_id": 0, "role": 1, "content": 1}
-    ).sort("created_at", -1).limit(20).to_list(20)
+        {"_id": 0, "role": 1, "content": 1, "created_at": 1}
+    ).sort("created_at", -1).limit(WINDOW_SIZE + 20).to_list(WINDOW_SIZE + 20)
     history_docs.reverse()
+
+    # If history exceeds window, build a compressed summary of older messages
+    older_summary = ""
+    if len(history_docs) > WINDOW_SIZE:
+        older_msgs = history_docs[:-WINDOW_SIZE]
+        # Extract key topics from older messages (no LLM call — metadata only)
+        user_topics = []
+        for m in older_msgs:
+            if m["role"] == "user" and len(m.get("content", "")) > 15:
+                # Take first 80 chars of each user message as topic hint
+                user_topics.append(m["content"][:80].strip())
+        if user_topics:
+            topics_str = " | ".join(user_topics[-5:])  # Last 5 older topics
+            older_summary = (
+                f"CONTEXTE CONVERSATIONS PRECEDENTES "
+                f"(resume des {len(older_msgs)} messages anterieurs):\n"
+                f"Sujets abordes: {topics_str}\n"
+                f"Total echanges precedents: {len(older_msgs)} messages.\n"
+                f"Concentre-toi sur la conversation recente ci-dessous."
+            )
+        history_docs = history_docs[-WINDOW_SIZE:]
 
     # Phase 2: coaching stage + memories + followup + drift
     _stage, coaching_text = await assess_and_get_directives(db, user["user_id"], user)
@@ -849,7 +873,9 @@ async def coach_chat(
         coaching_stage_text=coaching_text,
         memories_text=memories_text,
     )
-    # Append dynamic context (actions, micro-instants) to system prompt
+    # Append dynamic context (actions, micro-instants, older conversation summary)
+    if older_summary:
+        system_prompt += f"\n\n{older_summary}"
     system_prompt += f"{actions_ctx}{micro_instants_ctx}"
 
     api_messages = []
