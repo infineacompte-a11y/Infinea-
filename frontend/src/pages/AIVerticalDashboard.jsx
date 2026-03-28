@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { authFetch } from "@/App";
 import {
   Brain, Activity, MessageCircle, DollarSign, Users, TrendingUp,
@@ -111,6 +112,21 @@ function SectionHeader({ icon: Icon, title, subtitle, action }) {
       </div>
       {action}
     </div>
+  );
+}
+
+// ── CTA Link ──
+function CTALink({ label, to, icon: Icon, onClick }) {
+  const nav = useNavigate();
+  return (
+    <button
+      onClick={() => onClick ? onClick() : nav(to)}
+      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-teal-500/10 border border-teal-200 text-teal-700 hover:bg-teal-500/20 hover:border-teal-300 transition-all text-sm font-medium group cursor-pointer"
+    >
+      {Icon && <Icon size={16} className="text-teal-500 group-hover:text-teal-600" />}
+      {label}
+      <ArrowUpRight size={14} className="text-teal-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+    </button>
   );
 }
 
@@ -396,6 +412,17 @@ export default function AIVerticalDashboard() {
                   ))}
                 </div>
               </div>
+
+              {/* CTAs pertinents */}
+              <div className="flex flex-wrap gap-3">
+                <CTALink label="Voir le feed communautaire" to="/community" icon={Users} />
+                <CTALink label="Leaderboard" to="/leaderboard" icon={Target} />
+                <CTALink label="Moderation" to="/admin/moderation" icon={Shield} />
+                <CTALink label="Coaching Kira" icon={Brain} onClick={() => setActiveTab("coaching")} />
+                {(drift.users_drifting || 0) > 0 && (
+                  <CTALink label="Voir les utilisateurs en drift" icon={AlertTriangle} onClick={() => setActiveTab("drift")} />
+                )}
+              </div>
             </div>
           )}
 
@@ -439,6 +466,12 @@ export default function AIVerticalDashboard() {
                   </div>
                 </div>
               </div>
+
+              <div className="flex flex-wrap gap-3">
+                <CTALink label="Tester le coach Kira" to="/dashboard" icon={Brain} />
+                <CTALink label="Voir les notifications" to="/notifications" icon={MessageCircle} />
+                <CTALink label="Analyser les tendances" icon={TrendingUp} onClick={() => setActiveTab("trends")} />
+              </div>
             </div>
           )}
 
@@ -463,6 +496,15 @@ export default function AIVerticalDashboard() {
                 {!Object.keys(memory.category_distribution || {}).length && (
                   <p className="text-xs text-gray-400 py-4 text-center">Pas encore de memoires</p>
                 )}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                {(memory.total_active_memories || 0) === 0 ? (
+                  <CTALink label="Demarrer une conversation coach pour generer des memoires" to="/dashboard" icon={MessageCircle} />
+                ) : (
+                  <CTALink label="Ouvrir le coach chat" to="/dashboard" icon={Brain} />
+                )}
+                <CTALink label="Voir les profils utilisateurs" to="/community" icon={Users} />
               </div>
             </div>
           )}
@@ -603,6 +645,12 @@ export default function AIVerticalDashboard() {
                     )}
                   </div>
                 )}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <CTALink label="Envoyer des notifications de re-engagement" to="/notifications" icon={MessageCircle} />
+                <CTALink label="Voir le classement" to="/leaderboard" icon={Target} />
+                <CTALink label="Creer un defi motivant" to="/challenges" icon={Zap} />
               </div>
             </div>
           )}
