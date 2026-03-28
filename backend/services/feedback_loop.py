@@ -25,11 +25,14 @@ from typing import Optional
 logger = logging.getLogger("feedback_loop")
 
 # Signal weights — how much each event moves the score
+# 6-signal model: original 4 + 2 new vertical AI signals
 SIGNAL_WEIGHTS = {
     "impression": -0.02,     # shown but no click = mild negative
     "click": +0.05,          # clicked = moderate positive
     "completion": +0.15,     # completed = strong positive
     "abandonment": -0.10,    # started then abandoned = moderate negative
+    "coach_followed": +0.08, # user followed coach's suggestion for this action
+    "highly_rated": +0.10,   # user rated session 4-5/5 satisfaction
 }
 
 # Score bounds
@@ -62,6 +65,8 @@ async def record_signal(
         "click": "clicks",
         "completion": "completions",
         "abandonment": "abandonments",
+        "coach_followed": "coach_follows",
+        "highly_rated": "high_ratings",
     }[signal_type]
 
     try:
@@ -87,7 +92,8 @@ async def record_signal(
                     # Initialize other counters to 0 on first insert
                     **{
                         k: 0 for k in
-                        ["impressions", "clicks", "completions", "abandonments"]
+                        ["impressions", "clicks", "completions", "abandonments",
+                         "coach_follows", "high_ratings"]
                         if k != counter_field
                     },
                 },

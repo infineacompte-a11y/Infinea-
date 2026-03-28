@@ -241,6 +241,34 @@ def _build_behavioral_text(features: dict) -> str:
     if abandon and abandon > 0.3:
         lines.append(f"- Taux d'abandon: {round(abandon*100)}% (eleve — proposer des actions plus courtes et faciles)")
 
+    # Learning velocity (Phase 2)
+    velocity = features.get("learning_velocity", {})
+    if velocity:
+        fast = [f"{k}" for k, v in velocity.items() if v > 1.2]
+        slow = [f"{k}" for k, v in velocity.items() if v < 0.7]
+        if fast:
+            lines.append(f"- Progression rapide sur: {', '.join(fast[:2])}")
+        if slow:
+            lines.append(f"- Progression lente sur: {', '.join(slow[:2])} (adapter le rythme)")
+
+    # Difficulty calibration (Phase 2)
+    diff_cal = features.get("difficulty_calibration", {})
+    optimal = diff_cal.get("optimal_zone", [])
+    if optimal and diff_cal.get("completion_by_difficulty"):
+        lines.append(f"- Zone de difficulte optimale: niveau {'-'.join(str(d) for d in optimal)}")
+
+    # Coaching stage (Phase 2)
+    stage = features.get("coaching_stage", "")
+    stage_labels = {
+        "precontemplation": "decouverte",
+        "contemplation": "exploration",
+        "preparation": "construction",
+        "action": "action",
+        "maintenance": "maitrise",
+    }
+    if stage and stage in stage_labels:
+        lines.append(f"- Stade de coaching: {stage_labels[stage]}")
+
     return "\n".join(lines)
 
 
