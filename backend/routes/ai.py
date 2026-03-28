@@ -236,12 +236,22 @@ Format ta réponse en JSON avec:
 - "reasoning": explication courte (1 phrase) pourquoi c'est le meilleur choix
 - "alternatives": liste de 2 autres titres d'actions adaptées"""
 
-    system_msg = """Tu es l'assistant InFinea, expert en productivité et bien-être.
-Tu aides les utilisateurs à transformer leurs moments perdus en micro-victoires.
-Réponds toujours en français, de manière concise et motivante.
-Suggère les meilleures micro-actions en fonction du temps disponible et du niveau d'énergie."""
+    # Build vertical AI system prompt with knowledge + deep context
+    deep_ctx = await build_deep_context(db, user, endpoint="suggestions")
+    user_categories = [g for g in (user.get("user_profile") or {}).get("goals", [])]
+    suggestions_system = build_system_prompt(
+        endpoint="suggestions",
+        user_context=deep_ctx,
+        user_categories=user_categories,
+    )
 
-    response = await call_ai(f"suggestion_{user['user_id']}", system_msg, prompt, model=get_ai_model(user))
+    response = await call_llm(
+        system_prompt=suggestions_system,
+        user_prompt=prompt,
+        model=get_model_for_user(user),
+        caller=f"suggestion_{user['user_id']}",
+        user_id=user["user_id"],
+    )
     ai_result = parse_ai_json(response)
 
     # 3.5 — Deterministic fallback: use top scored action instead of random first

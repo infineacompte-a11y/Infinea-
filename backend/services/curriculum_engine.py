@@ -18,10 +18,10 @@ Each step includes:
 import os
 import json
 import logging
-import httpx
 from typing import Optional
 
-from helpers import track_ai_usage
+from services.llm_provider import call_llm, get_model_for_user
+from services.knowledge_engine import get_category_expertise
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +34,6 @@ async def generate_curriculum(objective: dict, user: dict) -> list:
     Returns a list of step dicts, each representing one micro-session.
     Generates in weekly batches for quality, then concatenates.
     """
-    api_key = os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('OPENAI_API_KEY')
-    if not api_key:
-        return _fallback_curriculum(objective)
-
     total_days = objective.get("target_duration_days", 30)
     daily_minutes = objective.get("daily_minutes", 10)
     title = objective.get("title", "Objectif")
@@ -49,18 +45,28 @@ async def generate_curriculum(objective: dict, user: dict) -> list:
     energy = profile.get("energy_level", "medium")
     user_name = user.get("name", "l'utilisateur")
 
-    system_prompt = f"""Tu es un expert pédagogue et coach. Tu conçois des parcours d'apprentissage progressifs en micro-sessions.
-Chaque micro-session dure entre {max(2, daily_minutes - 3)} et {daily_minutes + 2} minutes.
-Tu dois créer un curriculum structuré, progressif et motivant.
+    # Inject category-specific expertise from knowledge engine
+    category_expertise = get_category_expertise(category, max_fragments=3)
 
-Règles :
-- Commence par les fondamentaux, augmente progressivement la difficulté
-- Intègre des sessions de révision (spaced repetition) tous les 3-4 jours
-- Chaque session doit être autonome et réalisable en {daily_minutes} minutes
-- Varie les approches (théorie, pratique, révision, mini-défi)
-- Adapte au niveau d'énergie préféré : {energy}
+    system_prompt = f"""Tu es Kira, experte pedagogique d'InFinea. Tu concois des parcours d'apprentissage progressifs en micro-sessions.
+Chaque micro-session dure entre {max(2, daily_minutes - 3)} et {daily_minutes + 2} minutes.
+
+EXPERTISE PEDAGOGIQUE:
+- Zone proximale de developpement (Vygotsky): chaque session doit etre legerement au-dessus du niveau actuel
+- Difficulte desirable (Bjork): une session un peu difficile renforce l'encodage memoire
+- Interleaving: varier les types d'exercices dans une semaine ameliore la retention de 25-40%
+- Repetition espacee: integrer des revisions a J+3, J+7, J+14 combat la courbe de l'oubli
+
+{category_expertise}
+
+Regles :
+- Commence par les fondamentaux, augmente progressivement la difficulte
+- Integre des sessions de revision (spaced repetition) tous les 3-4 jours
+- Chaque session doit etre autonome et realisable en {daily_minutes} minutes
+- Varie les approches (theorie, pratique, revision, mini-defi)
+- Adapte au niveau d'energie prefere : {energy}
 - Sois concret et actionnable (pas de sessions vagues)
-- Réponds UNIQUEMENT en JSON valide, sans markdown"""
+- Reponds UNIQUEMENT en JSON valide, sans markdown"""
 
     all_steps = []
     weeks = max(1, (total_days + 6) // 7)
@@ -107,42 +113,16 @@ Difficulté : 1 (semaine 1) → progressivement jusqu'à {min(5, weeks)} (derni�
 Intègre 1-2 sessions de révision par semaine (review: true) à partir de la semaine 2."""
 
         try:
-            ai_model = "claude-haiku-4-5-20251001"
-            if user.get("subscription_tier") == "premium":
-                ai_model = "claude-sonnet-4-20250514"
+            text = await call_llm(
+                system_prompt=system_prompt,
+                user_prompt=prompt,
+                model=get_model_for_user(user),
+                max_tokens=2000,
+                caller="curriculum_engine",
+                user_id=user.get("user_id"),
+            )
 
-            async with httpx.AsyncClient(timeout=45.0) as client:
-                resp = await client.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "x-api-key": api_key,
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json"
-                    },
-                    json={
-                        "model": ai_model,
-                        "max_tokens": 2000,
-                        "cache_control": {"type": "ephemeral"},
-                        "system": system_prompt,
-                        "messages": [{"role": "user", "content": prompt}],
-                    }
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                text = data["content"][0]["text"]
-
-                # Track token usage (including cache metrics)
-                usage = data.get("usage", {})
-                await track_ai_usage(
-                    model=ai_model,
-                    caller="curriculum_engine",
-                    input_tokens=usage.get("input_tokens", 0),
-                    output_tokens=usage.get("output_tokens", 0),
-                    user_id=user.get("user_id"),
-                    cache_read_input_tokens=usage.get("cache_read_input_tokens", 0),
-                    cache_creation_input_tokens=usage.get("cache_creation_input_tokens", 0),
-                )
-
+            if text:
                 # Parse JSON from response
                 steps = _parse_curriculum_json(text)
                 if steps:
