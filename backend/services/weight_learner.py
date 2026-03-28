@@ -15,21 +15,27 @@ Algorithm:
     global default weights are used.
 """
 
+import math
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List
 
 logger = logging.getLogger("weight_learner")
 
-# Global defaults (same as scoring_engine constants)
+# Global defaults — 8-factor model (must match scoring_engine.py)
 DEFAULT_WEIGHTS = {
-    "category_affinity": 0.25,
-    "duration_fit": 0.22,
-    "energy_match": 0.17,
-    "time_performance": 0.13,
-    "novelty_bonus": 0.08,
-    "feedback_signal": 0.15,
+    "category_affinity": 0.22,
+    "duration_fit": 0.19,
+    "energy_match": 0.15,
+    "time_performance": 0.12,
+    "novelty_bonus": 0.07,
+    "feedback_signal": 0.08,
+    "objective_alignment": 0.10,
+    "session_quality": 0.07,
 }
+
+# Temporal decay: half-life ~35 days (lambda = ln(2)/35 ≈ 0.0198)
+DECAY_LAMBDA = 0.02
 
 # Minimum sessions before we start adapting weights
 MIN_SESSIONS_FOR_LEARNING = 20
@@ -110,14 +116,28 @@ async def compute_adaptive_weights(
     signal_map = {d["action_id"]: d["score"] for d in signals_docs}
 
     # For each session, compute what each factor's score would have been,
-    # and track whether the session was completed
+    # and track whether the session was completed.
+    # Temporal decay: recent sessions weighted exponentially higher (half-life ~35 days).
     factor_scores = {k: [] for k in DEFAULT_WEIGHTS}
     outcomes = []
+    temporal_weights = []  # decay weight per session
 
     cat_rates = features.get("completion_rate_by_category", {})
     global_rate = features.get("completion_rate_global", 0.5)
     tod_rates = features.get("completion_rate_by_time_of_day", {})
     preferred_duration = features.get("preferred_action_duration", 5.0)
+    now = datetime.now(timezone.utc)
+
+    # Fetch active objective categories for alignment factor
+    active_obj_cats = set()
+    try:
+        objectives = await db.objectives.find(
+            {"user_id": user_id, "status": "active"},
+            {"_id": 0, "category": 1},
+        ).to_list(10)
+        active_obj_cats = {o["category"] for o in objectives if o.get("category")}
+    except Exception:
+        pass
 
     recent_ids = set()  # rolling window for novelty
 
@@ -129,6 +149,16 @@ async def compute_adaptive_weights(
 
         completed = 1.0 if s.get("completed") else 0.0
         outcomes.append(completed)
+
+        # Compute temporal decay weight (recent sessions count more)
+        try:
+            session_dt = datetime.fromisoformat(s["started_at"])
+            if session_dt.tzinfo is None:
+                session_dt = session_dt.replace(tzinfo=timezone.utc)
+            days_ago = max(0, (now - session_dt).days)
+        except (ValueError, TypeError):
+            days_ago = 45  # fallback to middle of window
+        temporal_weights.append(math.exp(-DECAY_LAMBDA * days_ago))
 
         # 1. Category affinity
         cat = action.get("category", s.get("category", "unknown"))
@@ -168,32 +198,49 @@ async def compute_adaptive_weights(
         raw = signal_map.get(aid, 0.0)
         factor_scores["feedback_signal"].append((raw + 1.0) / 2.0)
 
+        # 7. Objective alignment (NEW)
+        factor_scores["objective_alignment"].append(1.0 if cat in active_obj_cats else 0.3)
+
+        # 8. Session quality (NEW)
+        satisfaction = s.get("satisfaction_rating")
+        factor_scores["session_quality"].append(satisfaction / 5.0 if satisfaction else 0.5)
+
     if len(outcomes) < MIN_SESSIONS_FOR_LEARNING:
         return None
 
-    # Compute correlation between each factor and outcomes
-    # Using simple Pearson-like correlation: mean(factor * outcome) - mean(factor) * mean(outcome)
-    mean_outcome = sum(outcomes) / len(outcomes)
+    # Compute WEIGHTED correlation between each factor and outcomes.
+    # Temporal decay: recent sessions have exponentially higher weight.
+    # Weighted Pearson correlation: uses temporal_weights to emphasize recent behavior.
+    total_w = sum(temporal_weights)
+    if total_w < 0.01:
+        return None
+
+    # Weighted means
+    w_mean_outcome = sum(temporal_weights[i] * outcomes[i] for i in range(len(outcomes))) / total_w
     correlations = {}
 
     for factor_name, scores in factor_scores.items():
-        if not scores:
+        if not scores or len(scores) != len(outcomes):
             correlations[factor_name] = 0.0
             continue
-        mean_score = sum(scores) / len(scores)
         n = len(scores)
-        cov = sum(
-            (scores[i] - mean_score) * (outcomes[i] - mean_outcome)
+        w_mean_score = sum(temporal_weights[i] * scores[i] for i in range(n)) / total_w
+
+        # Weighted covariance
+        w_cov = sum(
+            temporal_weights[i] * (scores[i] - w_mean_score) * (outcomes[i] - w_mean_outcome)
             for i in range(n)
-        ) / n
-        # Normalize by std devs (with safety floor)
-        var_s = sum((x - mean_score) ** 2 for x in scores) / n
-        var_o = sum((x - mean_outcome) ** 2 for x in outcomes) / n
-        std_prod = (var_s ** 0.5) * (var_o ** 0.5)
+        ) / total_w
+
+        # Weighted variances
+        w_var_s = sum(temporal_weights[i] * (scores[i] - w_mean_score) ** 2 for i in range(n)) / total_w
+        w_var_o = sum(temporal_weights[i] * (outcomes[i] - w_mean_outcome) ** 2 for i in range(n)) / total_w
+
+        std_prod = (w_var_s ** 0.5) * (w_var_o ** 0.5)
         if std_prod < 0.001:
             correlations[factor_name] = 0.0
         else:
-            correlations[factor_name] = max(0.0, cov / std_prod)  # only positive correlations
+            correlations[factor_name] = max(0.0, w_cov / std_prod)  # only positive correlations
 
     # Convert correlations to weights (normalize to sum=1)
     total_corr = sum(correlations.values())
