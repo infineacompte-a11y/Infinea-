@@ -529,3 +529,176 @@ async def get_ai_health(user: dict = Depends(get_current_user)):
         "checks": checks,
         "timestamp": now.isoformat(),
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 11. MEMORY ANALYTICS — Deep analysis of AI memory effectiveness
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/memory-analytics")
+async def get_memory_analytics(user: dict = Depends(get_current_user)):
+    """Deep analytics on AI memory system effectiveness.
+
+    Aggregates:
+    - Category distribution + extraction frequency
+    - Correlation between memory usage and coaching outcomes
+    - Most common fact patterns
+    - Memory lifecycle (creation → usage → expiry)
+    """
+    _require_admin(user)
+
+    now = datetime.now(timezone.utc)
+    month_ago = (now - timedelta(days=30)).isoformat()
+    week_ago = (now - timedelta(days=7)).isoformat()
+
+    # 1. Category distribution with extraction frequency
+    cat_pipeline = [
+        {"$match": {"superseded_by": None}},
+        {"$group": {
+            "_id": "$category",
+            "count": {"$sum": 1},
+            "avg_confidence": {"$avg": "$confidence"},
+            "oldest": {"$min": "$created_at"},
+            "newest": {"$max": "$created_at"},
+        }},
+        {"$sort": {"count": -1}},
+    ]
+    categories = await db.ai_memories.aggregate(cat_pipeline).to_list(10)
+
+    # 2. Extraction rate over time (daily for last 30 days)
+    daily_pipeline = [
+        {"$match": {"created_at": {"$gte": month_ago}}},
+        {"$group": {
+            "_id": {"$substr": ["$created_at", 0, 10]},  # YYYY-MM-DD
+            "extracted": {"$sum": 1},
+        }},
+        {"$sort": {"_id": 1}},
+    ]
+    daily_extractions = await db.ai_memories.aggregate(daily_pipeline).to_list(31)
+
+    # 3. Users with most memories (top 10)
+    top_users_pipeline = [
+        {"$match": {"superseded_by": None}},
+        {"$group": {
+            "_id": "$user_id",
+            "memory_count": {"$sum": 1},
+            "categories": {"$addToSet": "$category"},
+            "avg_confidence": {"$avg": "$confidence"},
+        }},
+        {"$sort": {"memory_count": -1}},
+        {"$limit": 10},
+    ]
+    top_users = await db.ai_memories.aggregate(top_users_pipeline).to_list(10)
+
+    # Enrich top users with names
+    for u in top_users:
+        user_doc = await db.users.find_one(
+            {"user_id": u["_id"]}, {"_id": 0, "name": 1}
+        )
+        u["name"] = user_doc.get("name", "Inconnu") if user_doc else "Inconnu"
+
+    # 4. Superseded memories stats (memory evolution)
+    superseded_count = await db.ai_memories.count_documents({
+        "superseded_by": {"$ne": None},
+    })
+    active_count = await db.ai_memories.count_documents({
+        "superseded_by": None,
+    })
+
+    # 5. Memory usage correlation with coaching feedback
+    # Users with memories vs without: compare coaching thumbs up rates
+    users_with_mem = await db.ai_memories.distinct("user_id", {"superseded_by": None})
+
+    feedback_with_mem = {"positive": 0, "negative": 0, "total": 0}
+    feedback_without_mem = {"positive": 0, "negative": 0, "total": 0}
+
+    try:
+        # Get recent feedback
+        recent_feedback = await db.ai_response_feedback.find(
+            {"created_at": {"$gte": month_ago}},
+            {"_id": 0, "user_id": 1, "rating": 1},
+        ).to_list(500)
+
+        for fb in recent_feedback:
+            bucket = feedback_with_mem if fb.get("user_id") in users_with_mem else feedback_without_mem
+            bucket["total"] += 1
+            if fb.get("rating") == "up":
+                bucket["positive"] += 1
+            elif fb.get("rating") == "down":
+                bucket["negative"] += 1
+    except Exception:
+        pass
+
+    # 6. Most common fact patterns (word frequency in facts)
+    # Simple top keywords from recent memories
+    recent_facts = await db.ai_memories.find(
+        {"superseded_by": None, "created_at": {"$gte": month_ago}},
+        {"_id": 0, "fact": 1},
+    ).to_list(200)
+
+    word_freq = {}
+    stop_words = {"le", "la", "les", "de", "du", "des", "un", "une", "a", "et",
+                  "en", "est", "il", "elle", "que", "qui", "pour", "pas", "son",
+                  "sa", "ses", "ce", "cette", "se", "ne", "au", "aux", "par"}
+    for mem in recent_facts:
+        words = mem.get("fact", "").lower().split()
+        for w in words:
+            w = w.strip(".,;:!?()[]")
+            if len(w) > 2 and w not in stop_words:
+                word_freq[w] = word_freq.get(w, 0) + 1
+
+    top_keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:20]
+
+    # 7. Extraction rate by source
+    source_pipeline = [
+        {"$match": {"created_at": {"$gte": week_ago}}},
+        {"$group": {"_id": "$source", "count": {"$sum": 1}}},
+    ]
+    by_source = await db.ai_memories.aggregate(source_pipeline).to_list(5)
+
+    return {
+        "category_distribution": [
+            {
+                "category": c["_id"],
+                "count": c["count"],
+                "avg_confidence": round(c["avg_confidence"], 2),
+                "oldest": c["oldest"],
+                "newest": c["newest"],
+            }
+            for c in categories
+        ],
+        "daily_extractions": [
+            {"date": d["_id"], "count": d["extracted"]}
+            for d in daily_extractions
+        ],
+        "top_users": [
+            {
+                "user_id": u["_id"],
+                "name": u["name"],
+                "memory_count": u["memory_count"],
+                "categories": u["categories"],
+                "avg_confidence": round(u["avg_confidence"], 2),
+            }
+            for u in top_users
+        ],
+        "lifecycle": {
+            "active": active_count,
+            "superseded": superseded_count,
+            "evolution_rate": round(superseded_count / max(active_count + superseded_count, 1), 2),
+        },
+        "correlation_with_feedback": {
+            "users_with_memories": feedback_with_mem,
+            "users_without_memories": feedback_without_mem,
+            "satisfaction_lift": (
+                round(
+                    (feedback_with_mem["positive"] / max(feedback_with_mem["total"], 1))
+                    - (feedback_without_mem["positive"] / max(feedback_without_mem["total"], 1)),
+                    3,
+                )
+                if feedback_with_mem["total"] > 0
+                else None
+            ),
+        },
+        "top_keywords": [{"word": w, "count": c} for w, c in top_keywords],
+        "extraction_by_source": {s["_id"]: s["count"] for s in by_source},
+    }
