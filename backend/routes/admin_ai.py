@@ -702,3 +702,132 @@ async def get_memory_analytics(user: dict = Depends(get_current_user)):
         "top_keywords": [{"word": w, "count": c} for w, c in top_keywords],
         "extraction_by_source": {s["_id"]: s["count"] for s in by_source},
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 12. LIVE METRICS — Real-time Prometheus metrics for admin dashboard
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/live-metrics")
+async def get_live_metrics(user: dict = Depends(get_current_user)):
+    """Real-time system metrics from Prometheus collectors.
+
+    Returns current values of all InFinea-specific metrics for display
+    in the admin dashboard. No external service needed — reads directly
+    from the in-process prometheus_client registry.
+    """
+    _require_admin(user)
+
+    result = {
+        "http": {},
+        "llm": {},
+        "circuit_breaker": {},
+        "business": {},
+        "jobs": {},
+    }
+
+    try:
+        from services.metrics import (
+            HTTP_REQUEST_COUNT, HTTP_REQUEST_DURATION,
+            LLM_CALL_COUNT, LLM_CALL_DURATION, LLM_TOKENS, LLM_COST_USD, LLM_RETRIES,
+            CIRCUIT_BREAKER_STATE,
+            ACTIVE_USERS_DAILY, ACTIVE_USERS_WEEKLY,
+            MEMORY_EXTRACTIONS, COACHING_SESSIONS,
+            FEATURE_COMPUTATION_DURATION, FEATURE_COMPUTATION_USERS,
+            BACKGROUND_JOB_STATUS,
+        )
+
+        # HTTP metrics — aggregate by endpoint
+        http_by_endpoint = {}
+        for sample in HTTP_REQUEST_COUNT.collect()[0].samples:
+            endpoint = sample.labels.get("endpoint", "unknown")
+            status = sample.labels.get("status_code", "0")
+            if endpoint not in http_by_endpoint:
+                http_by_endpoint[endpoint] = {"total": 0, "errors": 0}
+            http_by_endpoint[endpoint]["total"] += int(sample.value)
+            if status.startswith(("4", "5")):
+                http_by_endpoint[endpoint]["errors"] += int(sample.value)
+        result["http"]["by_endpoint"] = http_by_endpoint
+        result["http"]["total_requests"] = sum(e["total"] for e in http_by_endpoint.values())
+
+        # LLM metrics
+        llm_by_model = {}
+        for sample in LLM_CALL_COUNT.collect()[0].samples:
+            model = sample.labels.get("model", "unknown")
+            success = sample.labels.get("success", "True")
+            if model not in llm_by_model:
+                llm_by_model[model] = {"calls": 0, "failures": 0}
+            llm_by_model[model]["calls"] += int(sample.value)
+            if success == "False":
+                llm_by_model[model]["failures"] += int(sample.value)
+        result["llm"]["by_model"] = llm_by_model
+
+        # LLM tokens
+        total_tokens = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
+        for sample in LLM_TOKENS.collect()[0].samples:
+            token_type = sample.labels.get("token_type", "input")
+            total_tokens[token_type] = int(sample.value)
+        result["llm"]["tokens"] = total_tokens
+
+        # LLM cost
+        total_cost = 0
+        for sample in LLM_COST_USD.collect()[0].samples:
+            total_cost += sample.value
+        result["llm"]["total_cost_usd"] = round(total_cost, 4)
+
+        # LLM retries
+        total_retries = 0
+        for sample in LLM_RETRIES.collect()[0].samples:
+            total_retries += int(sample.value)
+        result["llm"]["total_retries"] = total_retries
+
+        # Circuit breaker
+        for sample in CIRCUIT_BREAKER_STATE.collect()[0].samples:
+            provider = sample.labels.get("provider", "unknown")
+            state_val = int(sample.value)
+            state_name = {0: "closed", 1: "open", 2: "half_open"}.get(state_val, "unknown")
+            result["circuit_breaker"][provider] = state_name
+
+        # Also get detailed CB status from llm_provider
+        try:
+            from services.llm_provider import get_circuit_breaker_status
+            result["circuit_breaker_detail"] = get_circuit_breaker_status()
+        except Exception:
+            pass
+
+        # Business metrics
+        result["business"]["active_users_daily"] = ACTIVE_USERS_DAILY._value.get()
+        result["business"]["active_users_weekly"] = ACTIVE_USERS_WEEKLY._value.get()
+
+        # Coaching sessions by endpoint
+        coaching_by_endpoint = {}
+        for sample in COACHING_SESSIONS.collect()[0].samples:
+            ep = sample.labels.get("endpoint", "unknown")
+            coaching_by_endpoint[ep] = int(sample.value)
+        result["business"]["coaching_sessions"] = coaching_by_endpoint
+
+        # Memory extractions by category
+        memory_by_cat = {}
+        for sample in MEMORY_EXTRACTIONS.collect()[0].samples:
+            cat = sample.labels.get("category", "unknown")
+            memory_by_cat[cat] = int(sample.value)
+        result["business"]["memory_extractions"] = memory_by_cat
+
+        # Background jobs
+        result["jobs"]["feature_computation"] = {
+            "users_processed": FEATURE_COMPUTATION_USERS._value.get(),
+        }
+        job_last_success = {}
+        for sample in BACKGROUND_JOB_STATUS.collect()[0].samples:
+            job_name = sample.labels.get("job_name", "unknown")
+            ts = sample.value
+            if ts > 0:
+                job_last_success[job_name] = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        result["jobs"]["last_success"] = job_last_success
+
+    except ImportError:
+        result["error"] = "prometheus_client not available"
+    except Exception as e:
+        result["error"] = str(e)[:200]
+
+    return result
