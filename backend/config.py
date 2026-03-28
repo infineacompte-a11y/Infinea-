@@ -33,8 +33,9 @@ VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_CLAIMS_EMAIL", "mailto:contact@infine
 # ── Stripe ──
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
-# ── Anthropic (AI) ──
+# ── AI / LLM ──
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic")  # anthropic | openai
 
 # ── Production safety checks ──
 _is_prod = bool(os.environ.get("RENDER") or os.environ.get("PRODUCTION"))

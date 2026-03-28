@@ -40,6 +40,17 @@ EVENT_TYPES = {
     # Premium
     "premium_activated",
     "premium_checkout_started",
+    # Coach interaction quality (vertical AI)
+    "coach_response_rated",
+    "coach_suggestion_followed",
+    # Learning journey
+    "objective_milestone_reached",
+    "sr_review_completed",
+    "curriculum_step_completed",
+    # Content engagement
+    "action_saved_to_routine",
+    "action_shared",
+    "action_instructions_viewed",
 }
 
 
