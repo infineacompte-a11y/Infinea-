@@ -230,13 +230,14 @@ export default function AIVerticalDashboard() {
     { id: "collective", label: "Intelligence", icon: Users },
     { id: "drift", label: "Drift & Alertes", icon: AlertTriangle },
     { id: "trends", label: "Tendances", icon: TrendingUp },
+    { id: "users", label: "Utilisateurs", icon: Eye },
   ];
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const endpoints = ["overview", "coaching", "memory", "costs", "collective", "drift", "feature-trends"];
+      const endpoints = ["overview", "coaching", "memory", "costs", "collective", "drift", "feature-trends", "users"];
       const results = await Promise.allSettled(
         endpoints.map(e => authFetch(`${API}/api/admin/ai/${e}`).then(r => r.ok ? r.json() : null))
       );
@@ -738,6 +739,238 @@ export default function AIVerticalDashboard() {
               </div>
             </div>
           )}
+
+          {/* ═══ USERS DRILL-DOWN ═══ */}
+          {activeTab === "users" && <UsersTab data={data.users} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Users Tab Component ──
+function UsersTab({ data }) {
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [userDetail, setUserDetail] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [sortField, setSortField] = useState("engagement_trend");
+  const [sortDir, setSortDir] = useState("asc");
+  const [stageFilter, setStageFilter] = useState("");
+
+  const users = data?.users || [];
+
+  const stageLabels = {
+    precontemplation: "Decouverte",
+    contemplation: "Exploration",
+    preparation: "Construction",
+    action: "Action",
+    maintenance: "Maitrise",
+  };
+  const stageColors = {
+    precontemplation: "bg-gray-100 text-gray-600",
+    contemplation: "bg-blue-100 text-blue-700",
+    preparation: "bg-yellow-100 text-yellow-700",
+    action: "bg-green-100 text-green-700",
+    maintenance: "bg-purple-100 text-purple-700",
+  };
+
+  // Sort + filter
+  const filtered = users
+    .filter(u => !stageFilter || u.coaching_stage === stageFilter)
+    .sort((a, b) => {
+      const va = a[sortField] ?? 0;
+      const vb = b[sortField] ?? 0;
+      return sortDir === "asc" ? va - vb : vb - va;
+    });
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir("desc");
+    }
+  };
+
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) return null;
+    return sortDir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
+  };
+
+  const selectUser = async (userId) => {
+    if (selectedUser === userId) {
+      setSelectedUser(null);
+      setUserDetail(null);
+      return;
+    }
+    setSelectedUser(userId);
+    setLoadingDetail(true);
+    try {
+      // Fetch full features from user_features
+      const featRes = await authFetch(`${API}/api/admin/ai/users?limit=100`);
+      if (featRes.ok) {
+        const allUsers = await featRes.json();
+        const detail = (allUsers.users || []).find(u => u.user_id === userId);
+        setUserDetail(detail || null);
+      }
+    } catch {
+      setUserDetail(null);
+    }
+    setLoadingDetail(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        icon={Eye}
+        title="Utilisateurs"
+        subtitle={`${users.length} utilisateurs avec features IA`}
+        action={
+          <select
+            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-600"
+            value={stageFilter}
+            onChange={e => setStageFilter(e.target.value)}
+          >
+            <option value="">Tous les stades</option>
+            {Object.entries(stageLabels).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+        }
+      />
+
+      {/* Table */}
+      <div className="rounded-2xl border border-gray-200 bg-white/80 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50/80 border-b border-gray-200">
+                {[
+                  { key: "name", label: "Utilisateur" },
+                  { key: "coaching_stage", label: "Stade" },
+                  { key: "completion_rate_global", label: "Completion" },
+                  { key: "consistency_index", label: "Regularite" },
+                  { key: "engagement_trend", label: "Tendance" },
+                  { key: "streak_days", label: "Streak" },
+                  { key: "memories_count", label: "Memoires" },
+                  { key: "total_sessions", label: "Sessions" },
+                ].map(col => (
+                  <th
+                    key={col.key}
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                    onClick={() => handleSort(col.key)}
+                  >
+                    <span className="flex items-center gap-1">
+                      {col.label} <SortIcon field={col.key} />
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filtered.length === 0 && (
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Aucun utilisateur</td></tr>
+              )}
+              {filtered.map(u => {
+                const trend = u.engagement_trend || 0;
+                const TrendIcon = trend > 0.05 ? ArrowUpRight : trend < -0.05 ? ArrowDownRight : Minus;
+                const trendColor = trend > 0.05 ? "text-green-600" : trend < -0.05 ? "text-red-600" : "text-gray-400";
+                const isSelected = selectedUser === u.user_id;
+
+                return (
+                  <React.Fragment key={u.user_id}>
+                    <tr
+                      className={`hover:bg-teal-50/30 cursor-pointer transition-colors ${isSelected ? "bg-teal-50/50" : ""}`}
+                      onClick={() => selectUser(u.user_id)}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-800">{u.name || "Inconnu"}</div>
+                        <div className="text-xs text-gray-400">{u.email}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs px-2 py-1 rounded-full ${stageColors[u.coaching_stage] || "bg-gray-100"}`}>
+                          {stageLabels[u.coaching_stage] || u.coaching_stage || "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-gray-700">
+                        {u.completion_rate_global != null ? `${Math.round(u.completion_rate_global * 100)}%` : "—"}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-gray-700">
+                        {u.consistency_index != null ? `${Math.round(u.consistency_index * 100)}%` : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`flex items-center gap-1 ${trendColor}`}>
+                          <TrendIcon size={14} />
+                          {trend > 0 ? "+" : ""}{Math.round(trend * 100)}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-gray-700">{u.streak_days ?? "—"}</td>
+                      <td className="px-4 py-3 font-mono text-gray-700">{u.memories_count ?? 0}</td>
+                      <td className="px-4 py-3 font-mono text-gray-700">{u.total_sessions ?? 0}</td>
+                    </tr>
+
+                    {/* Drill-down row */}
+                    {isSelected && (
+                      <tr>
+                        <td colSpan={8} className="px-6 py-4 bg-teal-50/30 border-t border-teal-100">
+                          {loadingDetail ? (
+                            <div className="flex items-center gap-2 text-gray-400">
+                              <Loader2 size={16} className="animate-spin" /> Chargement...
+                            </div>
+                          ) : userDetail ? (
+                            <UserDetailPanel user={userDetail} stageLabels={stageLabels} />
+                          ) : (
+                            <div className="text-gray-400">Pas de donnees detaillees</div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── User Detail Panel (drill-down) ──
+function UserDetailPanel({ user, stageLabels }) {
+  const features = [
+    { label: "Sessions totales", value: user.total_sessions, icon: Activity },
+    { label: "Sessions completees", value: user.total_completed, icon: CheckCircle },
+    { label: "Jours actifs (30j)", value: user.active_days_last_30, icon: Clock },
+    { label: "Taux d'abandon", value: user.abandonment_rate != null ? `${Math.round(user.abandonment_rate * 100)}%` : "—", icon: XCircle },
+    { label: "Momentum", value: user.session_momentum ?? 0, icon: Zap },
+    { label: "Duree preferee", value: user.preferred_action_duration ? `${Math.round(user.preferred_action_duration)} min` : "—", icon: Timer },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 mb-2">
+        <h3 className="text-sm font-semibold text-gray-800">
+          {user.name || "Inconnu"} — Profil detaille
+        </h3>
+        <span className="text-xs text-gray-400">
+          Stade: {stageLabels[user.coaching_stage] || user.coaching_stage || "—"}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+        {features.map(f => (
+          <div key={f.label} className="rounded-xl bg-white border border-gray-100 p-3 text-center">
+            <f.icon size={14} className="text-teal-500 mx-auto mb-1" />
+            <div className="text-lg font-bold text-gray-800">{f.value ?? "—"}</div>
+            <div className="text-[10px] text-gray-400">{f.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {user.computed_at && (
+        <div className="text-[10px] text-gray-300 text-right">
+          Features calculees le {new Date(user.computed_at).toLocaleDateString("fr-FR")}
         </div>
       )}
     </div>
