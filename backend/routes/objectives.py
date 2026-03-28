@@ -381,12 +381,83 @@ async def complete_objective_step(request: Request, objective_id: str, user: dic
     total_steps = len(curriculum)
     is_finished = completed_steps >= total_steps
 
-    # Adaptive hint for frontend
+    # ── Adaptive curriculum: generate next week if current week is done ──
     adaptive_hint = None
-    if performance == "fast":
-        adaptive_hint = "Tu progresses vite ! Les prochaines sessions seront plus stimulantes."
-    elif performance == "abandoned":
-        adaptive_hint = "Pas de souci. La prochaine session sera un peu plus douce."
+    total_target_days = obj.get("target_duration_days", 30)
+    if completed and new_day > 0 and new_day % 7 == 0 and new_day < total_target_days:
+        # End of a week — trigger adaptive generation for next week
+        try:
+            from services.curriculum_engine import analyze_week_performance, generate_adaptive_week
+            # Re-read objective to get updated curriculum with performance data
+            fresh_obj = await db.objectives.find_one({"objective_id": objective_id})
+            if fresh_obj:
+                fresh_curriculum = fresh_obj.get("curriculum", [])
+                analysis = analyze_week_performance(fresh_curriculum, new_day)
+                next_week_num = (new_day // 7) + 1
+
+                # Store analysis on the objective
+                await db.objectives.update_one(
+                    {"objective_id": objective_id},
+                    {"$push": {"weekly_analyses": {
+                        "week": new_day // 7,
+                        "analysis": analysis,
+                        "date": datetime.now(timezone.utc).isoformat(),
+                    }}}
+                )
+
+                # Generate next week in background — replaces existing steps for that week
+                async def _gen_next_week():
+                    try:
+                        new_steps = await generate_adaptive_week(
+                            fresh_obj, user, next_week_num, analysis
+                        )
+                        if new_steps:
+                            # Replace next week's steps (not yet completed)
+                            next_week_start = next_week_num * 7 - 6  # day range for next week
+                            next_week_end = next_week_start + 6
+
+                            # Build updated curriculum: keep all steps outside next week range,
+                            # replace next week's uncompleted steps with adaptive ones
+                            updated_curriculum = []
+                            for s in fresh_curriculum:
+                                s_day = s.get("day", 0)
+                                if next_week_start <= s_day <= next_week_end and not s.get("completed"):
+                                    continue  # Skip — will be replaced
+                                updated_curriculum.append(s)
+                            # Insert new steps at the right position
+                            insert_idx = len([s for s in updated_curriculum if s.get("day", 0) < next_week_start])
+                            for i, step in enumerate(new_steps):
+                                updated_curriculum.insert(insert_idx + i, step)
+
+                            await db.objectives.update_one(
+                                {"objective_id": objective_id},
+                                {"$set": {"curriculum": updated_curriculum}}
+                            )
+                            logger.info(
+                                f"Adaptive week {next_week_num} generated for {objective_id}: "
+                                f"{len(new_steps)} steps, adjustment={analysis.get('adjustment')}"
+                            )
+                    except Exception as e:
+                        logger.error(f"Adaptive curriculum error: {e}")
+
+                asyncio.create_task(_gen_next_week())
+
+                # Adaptive hint based on analysis
+                adj = analysis.get("adjustment", "maintain")
+                if adj == "increase":
+                    adaptive_hint = "Tu progresses vite ! Les prochaines sessions seront plus stimulantes."
+                elif adj == "decrease":
+                    adaptive_hint = "On adapte le rythme pour toi. Les prochaines sessions seront plus accessibles."
+                elif adj == "simplify":
+                    adaptive_hint = "Les prochaines sessions seront plus ciblées et concises."
+        except Exception as e:
+            logger.debug(f"Adaptive curriculum check error: {e}")
+
+    if adaptive_hint is None:
+        if performance == "fast":
+            adaptive_hint = "Tu progresses vite ! Les prochaines sessions seront plus stimulantes."
+        elif performance == "abandoned":
+            adaptive_hint = "Pas de souci. La prochaine session sera un peu plus douce."
 
     # Email milestone — day milestones (7, 14, 30, 60, 90) + progress milestones (25%, 50%, 75%)
     try:
