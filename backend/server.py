@@ -18,6 +18,46 @@ from config import limiter, logger
 from database import db, client
 
 
+import uuid
+import time
+import contextvars
+
+# ── Request ID context (accessible from any service via get_request_id()) ──
+_request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="")
+
+
+def get_request_id() -> str:
+    """Get current request ID from context. Available in any service."""
+    return _request_id_var.get("")
+
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    """Generate a unique request ID per request for distributed tracing.
+
+    Benchmark: AWS X-Ray, Datadog APM, Stripe request IDs.
+    - Sets X-Request-ID header on response
+    - Stores in contextvars for access in any service
+    - Logs request duration for latency tracking
+    """
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        request_id = request.headers.get("X-Request-ID") or f"req_{uuid.uuid4().hex[:12]}"
+        _request_id_var.set(request_id)
+        start = time.monotonic()
+
+        response = await call_next(request)
+
+        duration_ms = round((time.monotonic() - start) * 1000, 1)
+        response.headers["X-Request-ID"] = request_id
+
+        # Log slow requests (> 5s) for performance monitoring
+        if duration_ms > 5000:
+            path = request.url.path
+            logger.warning(f"Slow request [{request_id}] {request.method} {path}: {duration_ms}ms")
+
+        return response
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses (OWASP best practices)."""
 
@@ -43,6 +83,7 @@ api_router = APIRouter(prefix="/api")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIDMiddleware)
 
 # ── Route Modules ──
 from routes.auth_routes import router as auth_router

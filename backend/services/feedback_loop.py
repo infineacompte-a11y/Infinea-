@@ -3,6 +3,13 @@ Feedback loop service for InFinea.
 Accumulates positive/negative signals per (user_id, action_id) pair
 based on user behavior (ignored, clicked, completed, abandoned).
 
+Features:
+- 6-signal model with calibrated weights
+- Temporal decay: old signals decay toward neutral (half-life 30 days)
+- Server-side validation: completion/abandonment require matching sessions
+- Dedup: identical signals within 60s are ignored
+- Score clamping: bounded [-1, +1]
+
 Stored in the `action_signals` collection:
 {
     "user_id": str,
@@ -16,8 +23,12 @@ Stored in the `action_signals` collection:
 }
 
 The scoring_engine reads `score` to adjust action ranking per user.
+
+Benchmark: Spotify Discover Weekly (implicit feedback decay),
+YouTube recommendations (watch time decay), Netflix (temporal weighting).
 """
 
+import math
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -38,6 +49,32 @@ SIGNAL_WEIGHTS = {
 # Score bounds
 MIN_SCORE = -1.0
 MAX_SCORE = 1.0
+
+# Temporal decay: scores decay toward 0 over time (half-life in days)
+# Benchmark: Spotify (14-day decay), YouTube (28-day decay)
+# InFinea uses 30 days — preferences evolve but not as fast as music taste
+DECAY_HALF_LIFE_DAYS = 30
+DECAY_LAMBDA = math.log(2) / DECAY_HALF_LIFE_DAYS  # ~0.0231
+
+
+def _apply_decay(current_score: float, last_updated: datetime) -> float:
+    """Apply exponential decay to a score based on time since last update.
+
+    score(t) = score_0 * e^(-lambda * days_elapsed)
+    At half-life (30 days), score is halved. At 60 days, quartered.
+    """
+    if not last_updated or current_score == 0:
+        return current_score
+    try:
+        if isinstance(last_updated, str):
+            last_updated = datetime.fromisoformat(last_updated)
+        days_elapsed = (datetime.now(timezone.utc) - last_updated).total_seconds() / 86400
+        if days_elapsed < 1:
+            return current_score  # No decay within a day
+        decay_factor = math.exp(-DECAY_LAMBDA * days_elapsed)
+        return current_score * decay_factor
+    except Exception:
+        return current_score
 
 
 async def record_signal(
@@ -116,12 +153,15 @@ async def record_signal(
     }[signal_type]
 
     try:
-        # Fetch current signal doc (or default)
+        # Fetch current signal doc, apply temporal decay before adding new signal
         doc = await db.action_signals.find_one(
             {"user_id": user_id, "action_id": action_id},
-            {"_id": 0, "score": 1},
+            {"_id": 0, "score": 1, "updated_at": 1},
         )
         current_score = doc["score"] if doc else 0.0
+        # Apply decay: old signals fade toward 0 (half-life 30 days)
+        if doc and doc.get("updated_at"):
+            current_score = _apply_decay(current_score, doc["updated_at"])
         new_score = max(MIN_SCORE, min(MAX_SCORE, current_score + weight))
 
         now = datetime.now(timezone.utc)
