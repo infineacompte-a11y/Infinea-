@@ -28,6 +28,7 @@ import {
   Medal,
   Shield,
   PlusCircle,
+  Brain,
 } from "lucide-react";
 import InFineaLogo from "@/components/InFineaLogo";
 import { API, authFetch, useAuth } from "@/App";
@@ -254,6 +255,15 @@ function GroupedNav({ mobile = false, onNavigate, unreadCount = 0, unreadMessage
             label="Modération"
             icon={Shield}
             isActive={location.pathname === "/admin/moderation"}
+            mobile={mobile}
+            onNavigate={onNavigate}
+            animDelay={mobile ? null : (globalIndex++) * 25}
+          />
+          <NavItem
+            to="/admin/ai"
+            label="IA Verticale"
+            icon={Brain}
+            isActive={location.pathname === "/admin/ai"}
             mobile={mobile}
             onNavigate={onNavigate}
             animDelay={mobile ? null : (globalIndex++) * 25}
