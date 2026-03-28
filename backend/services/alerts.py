@@ -1,7 +1,7 @@
 """
 InFinea — Alert Service.
 
-Sends structured alerts to Slack via Incoming Webhooks.
+Sends structured alerts via Discord or Slack Incoming Webhooks.
 Designed for ops monitoring — not user-facing notifications.
 
 Alert types:
@@ -12,8 +12,9 @@ Alert types:
 - High memory extraction failure rate
 - Background job stale (missed scheduled run)
 
-Config: SLACK_ALERTS_WEBHOOK_URL env var.
-Free: Slack Incoming Webhooks are free for any workspace.
+Config: ALERTS_WEBHOOK_URL env var (Discord or Slack webhook URL).
+Auto-detects Discord vs Slack from URL pattern.
+Free: Discord webhooks are free. Slack Incoming Webhooks are free.
 
 Benchmark: PagerDuty (severity levels), Stripe (structured alerts),
 Netflix (circuit breaker alerts with context).
@@ -28,7 +29,16 @@ import httpx
 
 logger = logging.getLogger("infinea")
 
-SLACK_WEBHOOK_URL = os.environ.get("SLACK_ALERTS_WEBHOOK_URL", "")
+# Support both env var names for backward compat
+WEBHOOK_URL = (
+    os.environ.get("ALERTS_WEBHOOK_URL")
+    or os.environ.get("DISCORD_ALERTS_WEBHOOK_URL")
+    or os.environ.get("SLACK_ALERTS_WEBHOOK_URL")
+    or ""
+)
+
+# Auto-detect provider from URL
+_IS_DISCORD = "discord.com" in WEBHOOK_URL or "discordapp.com" in WEBHOOK_URL
 
 # Dedup: don't send same alert more than once per cooldown period
 _alert_cooldowns: dict[str, float] = {}
@@ -71,7 +81,7 @@ async def send_alert(
         context: Optional dict of key-value pairs for context
         alert_key: Dedup key — if same key sent within COOLDOWN_SECONDS, suppressed
     """
-    if not SLACK_WEBHOOK_URL:
+    if not WEBHOOK_URL:
         logger.debug(f"Alert suppressed (no webhook): {title}")
         return False
 
@@ -84,44 +94,68 @@ async def send_alert(
             return False
         _alert_cooldowns[alert_key] = now
 
-    # Build Slack payload (Block Kit format)
     color = _SEVERITY_COLORS.get(severity, "#cccccc")
     emoji = _SEVERITY_EMOJI.get(severity, "")
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
+    # Build payload based on provider
+    if _IS_DISCORD:
+        payload = _build_discord_payload(title, message, severity, context, color, emoji, timestamp)
+    else:
+        payload = _build_slack_payload(title, message, context, color, emoji, timestamp)
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(WEBHOOK_URL, json=payload)
+            if resp.status_code in (200, 204):
+                return True
+            logger.warning(f"Alert webhook failed ({resp.status_code}): {resp.text[:100]}")
+    except Exception as e:
+        logger.debug(f"Alert webhook error: {e}")
+
+    return False
+
+
+def _build_discord_payload(title, message, severity, context, color, emoji, timestamp):
+    """Build Discord webhook payload with rich embed."""
+    # Discord color is int, not hex string
+    color_int = int(color.lstrip("#"), 16)
+
+    fields = []
+    if context:
+        for k, v in context.items():
+            fields.append({"name": k, "value": str(v), "inline": True})
+
+    return {
+        "content": f"{emoji} **InFinea Alert** — {severity.value.upper()}",
+        "embeds": [{
+            "title": title,
+            "description": message,
+            "color": color_int,
+            "fields": fields,
+            "footer": {"text": f"InFinea Alerts • {timestamp}"},
+        }],
+    }
+
+
+def _build_slack_payload(title, message, context, color, emoji, timestamp):
+    """Build Slack webhook payload with Block Kit."""
     fields = []
     if context:
         for k, v in context.items():
             fields.append({"title": k, "value": str(v), "short": True})
 
-    payload = {
+    return {
         "attachments": [{
             "color": color,
             "blocks": [
-                {
-                    "type": "header",
-                    "text": {"type": "plain_text", "text": f"{emoji} {title}"}
-                },
-                {
-                    "type": "section",
-                    "text": {"type": "mrkdwn", "text": message}
-                },
+                {"type": "header", "text": {"type": "plain_text", "text": f"{emoji} {title}"}},
+                {"type": "section", "text": {"type": "mrkdwn", "text": message}},
             ],
             "fields": fields,
             "footer": f"InFinea Alerts • {timestamp}",
         }]
     }
-
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(SLACK_WEBHOOK_URL, json=payload)
-            if resp.status_code == 200:
-                return True
-            logger.warning(f"Slack alert failed ({resp.status_code}): {resp.text[:100]}")
-    except Exception as e:
-        logger.debug(f"Slack alert error: {e}")
-
-    return False
 
 
 # ═══════════════════════════════════════════════════════════════════════════
