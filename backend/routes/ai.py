@@ -25,6 +25,9 @@ from services.user_model import build_deep_context
 from services.knowledge_engine import get_relevant_fragments
 from services.ai_feedback import record_feedback
 from services.llm_provider import call_llm, get_model_for_user, ModelTier
+# Vertical AI Phase 2
+from services.coaching_engine import assess_and_get_directives, get_followup_context
+from services.ai_memory import extract_memories, get_user_memories, format_memories_for_prompt
 
 router = APIRouter()
 
@@ -661,10 +664,17 @@ async def get_ai_coach(request: Request, user: dict = Depends(get_current_user))
         actions_menu = "\n\nActions disponibles (classées par pertinence):\n" + "\n".join(action_lines)
 
     # --- 4. Build prompt with vertical AI system ---
+    # Phase 2: coaching stage + memories
+    _stage, coaching_text = await assess_and_get_directives(db, user["user_id"], user)
+    memories = await get_user_memories(db, user["user_id"])
+    memories_text = await format_memories_for_prompt(memories)
+
     system_prompt = build_system_prompt(
         endpoint="coach_dashboard",
         user_context=deep_ctx,
         user_categories=user_categories,
+        coaching_stage_text=coaching_text,
+        memories_text=memories_text,
     )
 
     prompt = f"""{recent_info}{engagement_context}{context_detail}
@@ -798,11 +808,21 @@ async def coach_chat(
     ).sort("created_at", -1).limit(20).to_list(20)
     history_docs.reverse()
 
+    # Phase 2: coaching stage + memories + followup
+    _stage, coaching_text = await assess_and_get_directives(db, user["user_id"], user)
+    memories = await get_user_memories(db, user["user_id"])
+    memories_text = await format_memories_for_prompt(memories)
+    followup = await get_followup_context(db, user["user_id"])
+    if followup:
+        coaching_text = f"{coaching_text}\n\n{followup}"
+
     # Build system prompt with vertical AI layers
     system_prompt = build_system_prompt(
         endpoint="coach_chat",
         user_context=deep_ctx,
         user_categories=user_categories,
+        coaching_stage_text=coaching_text,
+        memories_text=memories_text,
     )
     # Append dynamic context (actions, micro-instants) to system prompt
     system_prompt += f"{actions_ctx}{micro_instants_ctx}"
@@ -844,6 +864,10 @@ async def coach_chat(
     await track_event(db, user["user_id"], "coach_chat_message", {
         "message_length": len(user_message),
     })
+
+    # Phase 2: fire-and-forget memory extraction from this exchange
+    import asyncio as _asyncio
+    _asyncio.create_task(extract_memories(db, user["user_id"], user_message, assistant_content))
 
     return {
         "role": "assistant",
@@ -962,10 +986,16 @@ Réponds en JSON:
     "chosen_action": 0
 }}"""
 
+    _stage, coaching_text = await assess_and_get_directives(db, user["user_id"], user)
+    memories = await get_user_memories(db, user["user_id"])
+    memories_text = await format_memories_for_prompt(memories)
+
     debrief_system = build_system_prompt(
         endpoint="debrief",
         user_context=deep_ctx,
         user_categories=[g for g in (user.get("user_profile") or {}).get("goals", [])],
+        coaching_stage_text=coaching_text,
+        memories_text=memories_text,
     )
     ai_response = await call_llm(
         system_prompt=debrief_system,
