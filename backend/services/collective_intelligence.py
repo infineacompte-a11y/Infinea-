@@ -283,13 +283,22 @@ async def _compute_difficulty_sweet_spots(db) -> list:
 
 
 async def _store_pattern(db, pattern: dict, computed_at: datetime):
-    """Store or update a collective pattern."""
+    """Store a collective pattern: upsert current + append to history."""
     try:
+        pattern_doc = {**pattern, "computed_at": computed_at.isoformat()}
+
+        # Upsert current (for fast reads by get_collective_insights)
         await db.collective_patterns.update_one(
             {"pattern_type": pattern["pattern_type"], "segment": pattern["segment"]},
-            {"$set": {**pattern, "computed_at": computed_at.isoformat()}},
+            {"$set": pattern_doc},
             upsert=True,
         )
+
+        # Append to history (for trend analysis — never overwrite)
+        await db.collective_patterns_history.insert_one({
+            **pattern_doc,
+            "week": computed_at.strftime("%Y-W%W"),
+        })
     except Exception as e:
         logger.debug(f"Pattern store error: {e}")
 

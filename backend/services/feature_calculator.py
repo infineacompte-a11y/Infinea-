@@ -469,6 +469,32 @@ async def compute_all_users_features(db) -> Dict[str, Any]:
             from services.cache import cache_set, TTL_USER_FEATURES
             await cache_set(f"user_features:{uid}", features, ttl=TTL_USER_FEATURES)
 
+            # Snapshot to history for trend analysis (daily, deduplicated by date)
+            snapshot_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            try:
+                await db.user_features_history.update_one(
+                    {"user_id": uid, "snapshot_date": snapshot_date},
+                    {"$set": {
+                        "user_id": uid,
+                        "snapshot_date": snapshot_date,
+                        "completion_rate_global": features.get("completion_rate_global"),
+                        "consistency_index": features.get("consistency_index"),
+                        "engagement_trend": features.get("engagement_trend"),
+                        "active_days_last_30": features.get("active_days_last_30"),
+                        "total_sessions": features.get("total_sessions"),
+                        "total_completed": features.get("total_completed"),
+                        "abandonment_rate": features.get("abandonment_rate"),
+                        "session_momentum": features.get("session_momentum"),
+                        "coaching_stage": features.get("coaching_stage"),
+                        "learning_velocity": features.get("learning_velocity"),
+                        "feature_version": features.get("feature_version"),
+                        "computed_at": features.get("computed_at"),
+                    }},
+                    upsert=True,
+                )
+            except Exception:
+                pass  # Never block on history
+
             processed += 1
         except Exception as e:
             logger.error(f"Feature computation failed for user {uid}: {e}")
