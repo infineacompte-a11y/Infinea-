@@ -1,0 +1,49 @@
+name: Tests Backend (pytest)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+
+jobs:
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio mongomock-motor httpx
+
+      - name: Run unit tests
+        run: |
+          python -m pytest tests/unit/test_scoring_engine.py \
+                           tests/unit/test_coaching_engine.py \
+                           tests/unit/test_knowledge_engine.py \
+                           tests/unit/test_user_model.py \
+                           tests/unit/test_ai_memory.py \
+                           tests/unit/test_curriculum_adaptive.py \
+                           -v --tb=short
+        env:
+          JWT_SECRET: test-secret-for-ci
+          MONGO_URL: mongodb://localhost:27017/infinea_test
+          DB_NAME: infinea_test
+          ANTHROPIC_API_KEY: ""
