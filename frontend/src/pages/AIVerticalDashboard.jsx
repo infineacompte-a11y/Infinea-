@@ -1,16 +1,67 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { authFetch } from "@/App";
 import {
   Brain, Activity, MessageCircle, DollarSign, Users, TrendingUp,
   AlertTriangle, Zap, BarChart3, PieChart, Target, Clock, Shield,
   RefreshCw, ChevronDown, ChevronUp, Sparkles, Heart, Eye,
-  ArrowUpRight, ArrowDownRight, Minus, Loader2
+  ArrowUpRight, ArrowDownRight, Minus, Loader2, Download, Info,
+  CheckCircle, XCircle, Timer, Gauge
 } from "lucide-react";
 
 const API = process.env.REACT_APP_API_URL || "";
+const AUTO_REFRESH_OPTIONS = [
+  { label: "Off", value: 0 },
+  { label: "30s", value: 30 },
+  { label: "1min", value: 60 },
+  { label: "5min", value: 300 },
+];
+
+// ── Health Score Calculator ──
+function computeHealthScore(overview, coaching, drift) {
+  let score = 70; // Base
+  if (overview?.active_users_7d > 0) score += 5;
+  if (overview?.ai_calls_today > 0) score += 5;
+  if ((coaching?.suggestion_follow_rate || 0) > 0.3) score += 10;
+  if ((drift?.users_drifting || 0) === 0) score += 5;
+  if ((drift?.users_high_abandonment || 0) === 0) score += 5;
+  const feedbacks = Object.values(coaching?.feedback_by_endpoint || {});
+  if (feedbacks.length && feedbacks.some(f => f.avg_rating >= 3.5)) score += 5;
+  return Math.min(100, Math.max(0, score));
+}
+
+function getHealthLabel(score) {
+  if (score >= 85) return { text: "Excellent", color: "text-green-400", bg: "bg-green-500/20" };
+  if (score >= 70) return { text: "Bon", color: "text-teal-400", bg: "bg-teal-500/20" };
+  if (score >= 50) return { text: "Attention", color: "text-orange-400", bg: "bg-orange-500/20" };
+  return { text: "Critique", color: "text-red-400", bg: "bg-red-500/20" };
+}
+
+// ── Tooltip ──
+function Tooltip({ text, children }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-flex" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      {children}
+      {show && (
+        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 rounded-lg bg-gray-900 border border-white/10 text-xs text-white/80 whitespace-nowrap z-50 shadow-xl">
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ── Export Data ──
+function exportToJSON(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `${filename}-${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(url);
+}
 
 // ── KPI Card ──
-function KPICard({ label, value, icon: Icon, trend, trendLabel, color = "teal", subtitle }) {
+function KPICard({ label, value, icon: Icon, trend, trendLabel, color = "teal", subtitle, tooltip }) {
   const colors = {
     teal: "from-teal-500/20 to-teal-600/10 border-teal-500/30",
     orange: "from-orange-500/20 to-orange-600/10 border-orange-500/30",
@@ -36,7 +87,10 @@ function KPICard({ label, value, icon: Icon, trend, trendLabel, color = "teal", 
         )}
       </div>
       <div className="text-2xl font-bold text-white">{value}</div>
-      <div className="text-sm text-white/60 mt-1">{label}</div>
+      <div className="text-sm text-white/60 mt-1 flex items-center gap-1">
+        {label}
+        {tooltip && <Tooltip text={tooltip}><Info size={12} className="text-white/30 cursor-help" /></Tooltip>}
+      </div>
       {subtitle && <div className="text-xs text-white/40 mt-1">{subtitle}</div>}
     </div>
   );
@@ -120,6 +174,8 @@ export default function AIVerticalDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [data, setData] = useState({});
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [autoRefresh, setAutoRefresh] = useState(0);
+  const autoRefreshRef = useRef(null);
 
   const tabs = [
     { id: "overview", label: "Vue d'ensemble", icon: BarChart3 },
@@ -154,6 +210,15 @@ export default function AIVerticalDashboard() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // Auto-refresh
+  useEffect(() => {
+    if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+    if (autoRefresh > 0) {
+      autoRefreshRef.current = setInterval(fetchAll, autoRefresh * 1000);
+    }
+    return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current); };
+  }, [autoRefresh, fetchAll]);
+
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -174,34 +239,83 @@ export default function AIVerticalDashboard() {
   const drift = data.drift || {};
   const trends = data.feature_trends || {};
 
+  const healthScore = computeHealthScore(overview, coaching, drift);
+  const health = getHealthLabel(healthScore);
+
   return (
     <div className="min-h-screen pb-20">
       {/* Header */}
       <div className="px-6 pt-6 pb-4">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-              <Brain className="text-teal-400" size={28} />
-              IA Verticale — Cockpit
-            </h1>
-            <p className="text-sm text-white/50 mt-1">
-              Pilotage en temps reel de Kira et de l'intelligence InFinea
-            </p>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+                <Brain className="text-teal-400" size={28} />
+                IA Verticale — Cockpit
+              </h1>
+              <p className="text-sm text-white/50 mt-1">
+                Pilotage en temps reel de Kira et de l'intelligence InFinea
+              </p>
+            </div>
+            {/* Health Score Badge */}
+            {!loading && (
+              <Tooltip text={`Score de sante global calcule sur ${Object.keys(data).filter(k => data[k]).length} sources`}>
+                <div className={`flex items-center gap-2 px-4 py-2 rounded-2xl ${health.bg} border border-white/10`}>
+                  <Gauge size={18} className={health.color} />
+                  <span className={`text-xl font-bold ${health.color}`}>{healthScore}</span>
+                  <span className="text-xs text-white/50">/100</span>
+                  <span className={`text-xs ${health.color}`}>{health.text}</span>
+                </div>
+              </Tooltip>
+            )}
           </div>
-          <button
-            onClick={fetchAll}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-500/20 border border-teal-500/30 text-teal-400 hover:bg-teal-500/30 transition-all text-sm"
-          >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            {loading ? "Chargement..." : "Actualiser"}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Auto-refresh selector */}
+            <div className="flex items-center gap-1 bg-white/5 rounded-xl border border-white/10 p-1">
+              <Timer size={14} className="text-white/40 ml-2" />
+              {AUTO_REFRESH_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setAutoRefresh(opt.value)}
+                  className={`px-2 py-1 rounded-lg text-xs transition-all ${
+                    autoRefresh === opt.value ? "bg-teal-500/30 text-teal-300" : "text-white/40 hover:text-white/70"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {/* Export */}
+            <Tooltip text="Exporter les donnees en JSON">
+              <button
+                onClick={() => exportToJSON(data, "infinea-ai-dashboard")}
+                className="p-2 rounded-xl bg-white/5 border border-white/10 text-white/40 hover:text-white/80 transition-all"
+              >
+                <Download size={16} />
+              </button>
+            </Tooltip>
+            {/* Refresh */}
+            <button
+              onClick={fetchAll}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-teal-500/20 border border-teal-500/30 text-teal-400 hover:bg-teal-500/30 transition-all text-sm"
+            >
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+              {loading ? "..." : "Actualiser"}
+            </button>
+          </div>
         </div>
 
         {lastRefresh && (
-          <p className="text-xs text-white/30 mb-4">
-            Derniere mise a jour : {lastRefresh.toLocaleTimeString("fr-FR")}
-          </p>
+          <div className="flex items-center gap-3 text-xs text-white/30 mb-4">
+            <span>Derniere MAJ : {lastRefresh.toLocaleTimeString("fr-FR")}</span>
+            {autoRefresh > 0 && (
+              <span className="flex items-center gap-1 text-teal-400/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+                Auto-refresh {AUTO_REFRESH_OPTIONS.find(o => o.value === autoRefresh)?.label}
+              </span>
+            )}
+          </div>
         )}
 
         {/* Tabs */}
@@ -232,17 +346,55 @@ export default function AIVerticalDashboard() {
           {/* ═══ OVERVIEW ═══ */}
           {activeTab === "overview" && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <KPICard label="Utilisateurs actifs (7j)" value={overview.active_users_7d || 0} icon={Users} color="teal" />
-                <KPICard label="Appels IA aujourd'hui" value={overview.ai_calls_today || 0} icon={Zap} color="blue" />
-                <KPICard label="Cout IA aujourd'hui" value={`$${overview.ai_cost_today_usd || 0}`} icon={DollarSign} color="orange" />
-                <KPICard label="Memoires IA actives" value={overview.total_ai_memories || 0} icon={Brain} color="purple" />
+              {/* AI Summary — Kira's interpretation */}
+              <div className="rounded-2xl border border-teal-500/20 bg-gradient-to-r from-teal-500/10 to-transparent p-5">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-teal-500/20 shrink-0">
+                    <Brain size={20} className="text-teal-400" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-teal-300 mb-1">Resume Kira</div>
+                    <p className="text-sm text-white/70">
+                      {(drift.users_drifting || 0) > 0
+                        ? `Attention : ${drift.users_drifting} utilisateur(s) en drift. Le taux de suivi des suggestions est de ${Math.round((coaching.suggestion_follow_rate || 0) * 100)}%. ${overview.total_ai_memories || 0} memoires actives alimentent la personnalisation.`
+                        : `Systeme stable. ${overview.active_users_7d || 0} utilisateurs actifs cette semaine, ${overview.ai_calls_today || 0} appels IA aujourd'hui pour un cout de $${overview.ai_cost_today_usd || 0}. ${overview.total_ai_memories || 0} memoires actives. Aucun signal de risque detecte.`
+                      }
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                <SectionHeader icon={Activity} title="Sante du systeme" subtitle="Derniere computation de features" />
-                <StatRow label="Derniere computation" value={overview.last_feature_computation ? new Date(overview.last_feature_computation).toLocaleString("fr-FR") : "N/A"} icon={Clock} />
-                <StatRow label="Utilisateurs traites" value={overview.last_feature_users_processed || 0} icon={Users} />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <KPICard label="Utilisateurs actifs (7j)" value={overview.active_users_7d || 0} icon={Users} color="teal" tooltip="Users avec au moins 1 session dans les 7 derniers jours" />
+                <KPICard label="Appels IA aujourd'hui" value={overview.ai_calls_today || 0} icon={Zap} color="blue" tooltip="Nombre total d'appels a Claude (toutes les endpoints)" />
+                <KPICard label="Cout IA aujourd'hui" value={`$${overview.ai_cost_today_usd || 0}`} icon={DollarSign} color="orange" tooltip="Cout cumule des appels Anthropic (Haiku + Sonnet)" />
+                <KPICard label="Memoires IA actives" value={overview.total_ai_memories || 0} icon={Brain} color="purple" tooltip="Faits persistants extraits des conversations coach" />
+              </div>
+
+              {/* System health details */}
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                  <SectionHeader icon={Activity} title="Sante du systeme" subtitle="Derniere computation de features" />
+                  <StatRow label="Derniere computation" value={overview.last_feature_computation ? new Date(overview.last_feature_computation).toLocaleString("fr-FR") : "N/A"} icon={Clock} />
+                  <StatRow label="Utilisateurs traites" value={overview.last_feature_users_processed || 0} icon={Users} />
+                  <StatRow label="Score de sante" value={`${healthScore}/100 — ${health.text}`} icon={Gauge} />
+                </div>
+
+                {/* Quick alerts */}
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                  <SectionHeader icon={AlertTriangle} title="Alertes rapides" subtitle="Signaux a surveiller" />
+                  {[
+                    { ok: (drift.users_drifting || 0) === 0, label: "Aucun utilisateur en drift", bad: `${drift.users_drifting} utilisateur(s) en drift` },
+                    { ok: (drift.users_high_abandonment || 0) === 0, label: "Taux d'abandon normal", bad: `${drift.users_high_abandonment} utilisateur(s) abandon eleve` },
+                    { ok: (overview.ai_cost_today_usd || 0) < 1, label: "Couts IA sous controle", bad: `Cout eleve: $${overview.ai_cost_today_usd}` },
+                    { ok: overview.last_feature_computation != null, label: "Feature computation active", bad: "Feature computation inactive" },
+                  ].map((alert, i) => (
+                    <div key={i} className="flex items-center gap-2 py-1.5">
+                      {alert.ok ? <CheckCircle size={14} className="text-green-400" /> : <XCircle size={14} className="text-red-400" />}
+                      <span className={`text-xs ${alert.ok ? "text-white/50" : "text-red-300"}`}>{alert.ok ? alert.label : alert.bad}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
