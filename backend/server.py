@@ -62,6 +62,7 @@ from routes.profiles import public_router as profiles_public_router
 from routes.profiles import router as profiles_router
 from routes.feed import router as feed_router
 from routes.objectives import router as objectives_router
+from routes.admin_ai import router as admin_ai_router
 from routes.routines import router as routines_router
 from routes.micro_instants import router as micro_instants_router
 from routes.profiles import router as profiles_router
@@ -76,6 +77,7 @@ api_router.include_router(auth_router)
 api_router.include_router(onboarding_router)
 api_router.include_router(actions_router)
 api_router.include_router(ai_router)
+api_router.include_router(admin_ai_router)
 api_router.include_router(sessions_router)
 api_router.include_router(billing_router)
 api_router.include_router(integrations_router)
@@ -187,7 +189,7 @@ async def startup_event():
     # Create indexes (idempotent — safe to run every startup)
     await db.event_log.create_index("user_id")
     await db.event_log.create_index([("event_type", 1), ("timestamp", -1)])
-    await db.event_log.create_index("timestamp", expireAfterSeconds=90 * 24 * 3600)
+    await db.event_log.create_index("timestamp", expireAfterSeconds=365 * 24 * 3600)  # 12 months for long-term learning
     # Stripe webhook idempotency — auto-cleanup after 90 days
     await db.webhook_events.create_index("event_id", unique=True)
     await db.webhook_events.create_index("processed_at", expireAfterSeconds=90 * 24 * 3600)
@@ -200,12 +202,21 @@ async def startup_event():
     await db.ai_memories.create_index("expires_at", expireAfterSeconds=0)  # TTL auto-cleanup
     # Vertical AI Phase 3 — collective intelligence patterns
     await db.collective_patterns.create_index([("pattern_type", 1), ("segment", 1)])
+    # Collective patterns history (append, never overwrite — trend analysis)
+    await db.collective_patterns_history.create_index([("pattern_type", 1), ("week", -1)])
+    await db.collective_patterns_history.create_index("computed_at", expireAfterSeconds=365 * 24 * 3600)
+    # Data enrichment layer — feature history for trend analysis
+    await db.user_features_history.create_index([("user_id", 1), ("snapshot_date", -1)])
+    await db.user_features_history.create_index("snapshot_date", expireAfterSeconds=365 * 24 * 3600)  # 12 months
+    # Analytics indexes
+    await db.ai_usage.create_index([("user_id", 1), ("created_at", -1)])
+    await db.ai_usage.create_index([("model", 1), ("created_at", -1)])
     await db.user_features.create_index("user_id", unique=True)
     await db.user_features.create_index("computed_at")
     await db.action_signals.create_index([("user_id", 1), ("action_id", 1)], unique=True)
     await db.action_signals.create_index("updated_at")
     await db.coach_messages.create_index([("user_id", 1), ("created_at", 1)])
-    await db.coach_messages.create_index("created_at", expireAfterSeconds=30 * 24 * 3600)
+    await db.coach_messages.create_index("created_at", expireAfterSeconds=180 * 24 * 3600)  # 6 months for coaching quality analysis
     await db.objectives.create_index([("user_id", 1), ("status", 1)])
     await db.objectives.create_index("objective_id", unique=True)
     await db.routines.create_index([("user_id", 1), ("is_active", 1)])
