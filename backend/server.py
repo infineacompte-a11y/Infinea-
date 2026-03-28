@@ -189,6 +189,11 @@ async def startup_event():
     # Create indexes (idempotent — safe to run every startup)
     await db.event_log.create_index("user_id")
     await db.event_log.create_index([("event_type", 1), ("timestamp", -1)])
+    # Migrate TTL: drop old 90-day index, create 365-day index
+    try:
+        await db.event_log.drop_index("timestamp_1")
+    except Exception:
+        pass  # Index may not exist yet
     await db.event_log.create_index("timestamp", expireAfterSeconds=365 * 24 * 3600)  # 12 months for long-term learning
     # Stripe webhook idempotency — auto-cleanup after 90 days
     await db.webhook_events.create_index("event_id", unique=True)
@@ -216,6 +221,11 @@ async def startup_event():
     await db.action_signals.create_index([("user_id", 1), ("action_id", 1)], unique=True)
     await db.action_signals.create_index("updated_at")
     await db.coach_messages.create_index([("user_id", 1), ("created_at", 1)])
+    # Migrate TTL: drop old 30-day index, create 180-day index
+    try:
+        await db.coach_messages.drop_index("created_at_1")
+    except Exception:
+        pass
     await db.coach_messages.create_index("created_at", expireAfterSeconds=180 * 24 * 3600)  # 6 months for coaching quality analysis
     await db.objectives.create_index([("user_id", 1), ("status", 1)])
     await db.objectives.create_index("objective_id", unique=True)
