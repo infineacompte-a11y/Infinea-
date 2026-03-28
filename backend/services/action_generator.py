@@ -12,9 +12,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-import httpx
-
-from helpers import track_ai_usage
+from services.llm_provider import call_llm, ModelTier
+from services.knowledge_engine import get_category_expertise
 
 logger = logging.getLogger("action_generator")
 
@@ -93,45 +92,14 @@ BATCH_SIZE = 10  # Generate 10 actions per AI call (3 calls per category)
 
 
 async def _call_generation_ai(system_message: str, prompt: str) -> Optional[str]:
-    """Call Anthropic API for action generation. Uses Haiku to minimize costs."""
-    api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        logger.warning("No API key available for action generation")
-        return None
-
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": "claude-haiku-4-5-20251001",
-                    "max_tokens": 4000,
-                    "cache_control": {"type": "ephemeral"},
-                    "system": system_message,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            # Track token usage (including cache metrics)
-            usage = data.get("usage", {})
-            await track_ai_usage(
-                model="claude-haiku-4-5-20251001",
-                caller="action_generator",
-                input_tokens=usage.get("input_tokens", 0),
-                output_tokens=usage.get("output_tokens", 0),
-                cache_read_input_tokens=usage.get("cache_read_input_tokens", 0),
-                cache_creation_input_tokens=usage.get("cache_creation_input_tokens", 0),
-            )
-            return data["content"][0]["text"]
-    except Exception as e:
-        logger.error(f"AI generation call failed: {e}")
-        return None
+    """Call LLM for action generation via provider abstraction. Uses FAST tier (Haiku)."""
+    return await call_llm(
+        system_prompt=system_message,
+        user_prompt=prompt,
+        model_tier=ModelTier.FAST,
+        max_tokens=4000,
+        caller="action_generator",
+    )
 
 
 def _parse_actions_json(response: Optional[str]) -> list:
@@ -163,10 +131,17 @@ async def generate_actions_for_category(
     if not cat_info:
         return []
 
-    system_message = """Tu es un expert en développement personnel et micro-actions.
-Tu génères des micro-actions concrètes, variées et réalisables en 2 à 15 minutes.
-Chaque action doit être unique, précise et immédiatement actionnable.
-Tu réponds UNIQUEMENT en JSON valide, sans texte autour."""
+    # Inject category-specific expertise from knowledge engine
+    category_expertise = get_category_expertise(category, max_fragments=2)
+
+    system_message = f"""Tu es Kira, experte en micro-apprentissage d'InFinea.
+Tu generes des micro-actions concretes, variees et realisables en 2 a 15 minutes.
+Chaque action doit etre unique, precise et immediatement actionnable.
+Tu t'appuies sur la science de l'apprentissage (pratique deliberee, interleaving, difficulte desirable).
+
+{category_expertise}
+
+Tu reponds UNIQUEMENT en JSON valide, sans texte autour."""
 
     # Sample some existing titles for diversity
     sample_titles = list(existing_titles)[:20]

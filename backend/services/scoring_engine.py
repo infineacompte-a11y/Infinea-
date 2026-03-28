@@ -231,6 +231,36 @@ async def rank_actions_for_user(
     candidate_ids = [a.get("action_id", "") for a in actions if a.get("action_id")]
     feedback_signals = await get_user_signals(db, user_id, candidate_ids)
 
+    # Fetch active objective categories for alignment scoring
+    active_obj_cats = set()
+    try:
+        objectives = await db.objectives.find(
+            {"user_id": user_id, "status": "active"},
+            {"_id": 0, "category": 1},
+        ).to_list(10)
+        active_obj_cats = {o["category"] for o in objectives if o.get("category")}
+    except Exception:
+        pass
+
+    # Compute action quality history from session ratings/completion patterns
+    action_quality = {}
+    try:
+        quality_sessions = await db.user_sessions_history.find(
+            {"user_id": user_id, "completed": True},
+            {"_id": 0, "action_id": 1, "satisfaction_rating": 1},
+        ).sort("started_at", -1).limit(200).to_list(200)
+        # Group by action_id: avg satisfaction or completion-based score
+        from collections import defaultdict
+        quality_scores = defaultdict(list)
+        for s in quality_sessions:
+            aid = s.get("action_id")
+            if aid:
+                rating = s.get("satisfaction_rating")
+                quality_scores[aid].append(rating / 5.0 if rating else 0.7)
+        action_quality = {aid: sum(scores) / len(scores) for aid, scores in quality_scores.items()}
+    except Exception:
+        pass
+
     # Build context
     context = {
         "energy_level": energy_level,
@@ -238,6 +268,8 @@ async def rank_actions_for_user(
         "time_bucket": _current_time_bucket(),
         "recent_action_ids": recent_action_ids,
         "feedback_signals": feedback_signals,
+        "active_objective_categories": active_obj_cats,
+        "action_quality_history": action_quality,
     }
 
     # Score each action
