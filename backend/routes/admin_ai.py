@@ -442,3 +442,90 @@ async def get_weekly_comparison(user: dict = Depends(get_current_user)):
             "active_users": delta(tw_active, lw_active),
         },
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 10. HEALTH CHECK — AI system status
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/health")
+async def get_ai_health(user: dict = Depends(get_current_user)):
+    """Comprehensive health check for the AI vertical system."""
+    _require_admin(user)
+
+    checks = {}
+    now = datetime.now(timezone.utc)
+
+    # 1. MongoDB connection
+    try:
+        await db.command("ping")
+        checks["mongodb"] = {"status": "ok", "latency_ms": 0}
+    except Exception as e:
+        checks["mongodb"] = {"status": "error", "error": str(e)}
+
+    # 2. Redis cache
+    try:
+        from services.cache import cache_ping
+        redis_ok = await cache_ping()
+        checks["redis"] = {"status": "ok" if redis_ok else "unavailable"}
+    except Exception:
+        checks["redis"] = {"status": "unavailable"}
+
+    # 3. Claude API (check last successful call)
+    try:
+        last_ai = await db.ai_usage.find_one(
+            {}, {"_id": 0, "created_at": 1, "model": 1},
+            sort=[("created_at", -1)],
+        )
+        if last_ai:
+            last_call_age = (now - datetime.fromisoformat(last_ai["created_at"])).total_seconds()
+            checks["claude_api"] = {
+                "status": "ok" if last_call_age < 3600 else "stale",
+                "last_call_ago_seconds": int(last_call_age),
+                "last_model": last_ai.get("model"),
+            }
+        else:
+            checks["claude_api"] = {"status": "no_data"}
+    except Exception:
+        checks["claude_api"] = {"status": "error"}
+
+    # 4. Feature computation
+    try:
+        last_run = await db.feature_computation_logs.find_one(
+            {}, sort=[("computed_at", -1)]
+        )
+        if last_run:
+            age = (now - datetime.fromisoformat(last_run["computed_at"])).total_seconds()
+            checks["feature_computation"] = {
+                "status": "ok" if age < 7 * 3600 else "overdue",
+                "last_run_ago_hours": round(age / 3600, 1),
+                "users_processed": last_run.get("users_processed", 0),
+            }
+        else:
+            checks["feature_computation"] = {"status": "never_run"}
+    except Exception:
+        checks["feature_computation"] = {"status": "error"}
+
+    # 5. AI memory system
+    try:
+        total_memories = await db.ai_memories.count_documents({"superseded_by": None})
+        checks["ai_memory"] = {"status": "ok", "total_active": total_memories}
+    except Exception:
+        checks["ai_memory"] = {"status": "error"}
+
+    # 6. Collective intelligence
+    try:
+        patterns = await db.collective_patterns.count_documents({})
+        checks["collective_intelligence"] = {"status": "ok" if patterns > 0 else "no_patterns", "patterns": patterns}
+    except Exception:
+        checks["collective_intelligence"] = {"status": "error"}
+
+    # Overall status
+    all_ok = all(c.get("status") in ("ok", "unavailable", "no_patterns", "no_data") for c in checks.values())
+    overall = "healthy" if all_ok else "degraded"
+
+    return {
+        "status": overall,
+        "checks": checks,
+        "timestamp": now.isoformat(),
+    }
